@@ -1,4 +1,5 @@
 /* A 입력 화면 — 사무실 PC 전체 화면용. 엑셀처럼 낯설지 않게: 흰 칸 · 파란 단추 · 큰 글자 */
+/* 사무실 화면은 늘 밝은 화면 하나로 (엑셀 같은 흰 바탕) */
 :root {
   color-scheme: light;
   --page: #eef1f5;
@@ -59,6 +60,7 @@ h3 {
   top: 0;
   z-index: 5;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -430,6 +432,7 @@ select {
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
@@ -438,7 +441,7 @@ select {
   box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.06);
 }
 .foot-msg {
-  flex: 1;
+  flex: 1 1 240px;
   font-size: 15px;
   color: var(--ink-2);
 }

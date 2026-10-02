@@ -34,6 +34,8 @@ import { ImportPast } from "./ImportPast";
 const empty = () => NAVER_SLOTS.map(() => "");
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 const longDate = (d: string) => `${d.slice(0, 4)}년 ${shortLabel(d)}`;
+/** 확인 창 — 체험판(Artifact 화면)은 confirm 창이 안 떠서 그대로 진행 */
+const sure = (msg: string) => (__DEMO__ ? true : window.confirm(msg));
 
 type Msg = { kind: "ok" | "bad" | "info"; text: string } | null;
 
@@ -141,7 +143,7 @@ export function App() {
 
   const changeDate = (d: string) => {
     if (d === date) return;
-    if (dirty && !window.confirm("임시저장하지 않은 입력이 있습니다. 날짜를 바꾸면 지금 입력한 것은 사라집니다. 바꿀까요?")) return;
+    if (dirty && !sure("임시저장하지 않은 입력이 있습니다. 날짜를 바꾸면 지금 입력한 것은 사라집니다. 바꿀까요?")) return;
     setDate(d);
   };
 
@@ -272,10 +274,11 @@ export function App() {
           <button className="ghost" onClick={() => setAskMe(true)} title="입력자 바꾸기">
             👤 {me.name || "입력자?"}
           </button>
+          {!__DEMO__ && (
           <button
             className="ghost"
             onClick={() => {
-              if (dirty && !window.confirm("임시저장하지 않은 입력이 있습니다. 그래도 끝낼까요?")) return;
+              if (dirty && !sure("임시저장하지 않은 입력이 있습니다. 그래도 끝낼까요?")) return;
               setDirty(false);
               window.close();
               setTimeout(() => setMsg({ kind: "info", text: "창이 닫히지 않으면 키보드 Alt + F4 를 눌러 주세요." }), 300);
@@ -283,6 +286,7 @@ export function App() {
           >
             끝내기
           </button>
+          )}
         </div>
       </header>
 
