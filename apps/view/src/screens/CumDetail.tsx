@@ -1,127 +1,168 @@
-/* 누계 상세 — 당월 누계(날마다 쌓은 선: 이번 달 · 지난달 · 작년 같은 달) / 올해 누계(달마다 쌓은 선: 올해 · 작년) */
-import { addMonths, comparable, cumulative, monthCumulative, monthOf, sameDayYearsAgo, won, wonShort, yearCumulative, type Board } from "@report/core";
+/* ============================================================
+   누계 상세 (분석 글 없음)
+   당월누계 (11-5): 작년 같은 달 같은 기간 누계 · 날마다 쌓은 선 (작년 같은 달 한 달 전체 = 회색, 이번 달 마감일까지 = 빨강)
+                   · 방문자 (마감일 · 당월 누적 · 작년 동월 동기간) · 1인 평균 (마감일 · 누적)
+   올해누계 (11-6): 작년 같은 기간 누계 · 달마다 쌓은 선 (작년 12달 = 회색, 올해 = 빨강) · 12월에 연말 예상 점
+                   · 방문자 (마감월 누적 · 작년 같은 달 · 1/1~마감일 · 작년 1/1~같은 날)
+   ============================================================ */
+import { comparable, count, monthView, sameDayYearsAgo, won, wonShort, yearView, type Board, type Metrics } from "@report/core";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
-import { DetailHeader } from "./Detail";
-import { Delta } from "./Home";
+import { Delta, partial } from "./Home";
+import { DetailHeader, Stat, type Nav } from "./parts";
 
-export function CumDetail(props: { board: Board; kind: "month" | "year"; date: string; minDate: string; maxDate: string; onDate: (d: string) => void; onBack: () => void }) {
-  const { board, kind, date } = props;
-  const v = cumulative(board, kind, date);
+const visitors = (m: Metrics) => (m.has.cafe ? count(m.visitors, "명") : "자료 없음");
+const money = (m: Metrics) => (m.has.cafe + m.has.kids ? won(m.total) : "자료 없음");
+const dot = (d: string) => d.replaceAll("-", ".");
+
+export function MonthDetail(props: { board: Board } & Nav) {
+  const { board, date } = props;
+  const v = monthView(board, date);
   const ly = sameDayYearsAgo(date);
   const m = Number(date.slice(5, 7));
-  const lyHas = comparable(v.ly);
-  const lyDays = Math.max(v.ly.has.cafe, v.ly.has.kids);
-
-  let xs: string[];
-  let series: Line[];
-  let xTick: (i: number) => string | null;
-  let tipTitle: (i: number) => string;
-  let selected: number;
-  if (kind === "month") {
-    const c = monthCumulative(board, date);
-    const pm = addMonths(monthOf(date), -1);
-    xs = c.days.map(String);
-    series = [
-      { label: `이번 달 (${m}월)`, color: "var(--series-1)", values: c.cur },
-      { label: `지난달 (${Number(pm.slice(5))}월)`, color: "var(--series-2)", values: c.prev, weight: 1.5 },
-      { label: `작년 ${Number(ly.slice(5, 7))}월`, color: "var(--ref)", values: c.ly, weight: 1.5 },
-    ];
-    xTick = (i) => (i === 0 || (i + 1) % 5 === 0 ? `${i + 1}일` : null);
-    tipTitle = (i) => `${i + 1}일까지 누계`;
-    selected = Number(date.slice(8)) - 1;
-  } else {
-    const c = yearCumulative(board, date);
-    xs = c.months.map(String);
-    series = [
-      { label: `올해 (${date.slice(0, 4)})`, color: "var(--series-1)", values: c.cur },
-      { label: `작년 (${ly.slice(0, 4)})`, color: "var(--ref)", values: c.ly, weight: 1.5 },
-    ];
-    xTick = (i) => (i % 2 === 0 || i === 11 ? `${i + 1}월` : null);
-    tipTitle = (i) => `${i + 1}월까지 누계${i === m - 1 ? ` (올해는 ${Number(date.slice(8))}일까지)` : ""}`;
-    selected = m - 1;
-  }
-
+  const lm = Number(ly.slice(5, 7));
+  const d = Number(date.slice(8, 10));
+  const series: Line[] = [
+    { label: `작년 ${lm}월 (${ly.slice(0, 4)})`, color: "var(--ly)", values: v.ly, weight: 2 },
+    { label: `올해 ${m}월`, color: "var(--cur)", values: v.cur, weight: 3 },
+  ];
   return (
     <>
-      <DetailHeader title={kind === "month" ? "당월 누계" : "올해 누계"} date={date} onBack={props.onBack} onDate={props.onDate} minDate={props.minDate} maxDate={props.maxDate} />
+      <DetailHeader title="당월누계" {...props} />
       <main className="content">
         <section className="card hero">
-          <div className="stat-label">{kind === "month" ? `${m}월 1일 ~ ${Number(date.slice(8))}일` : `1월 1일 ~ ${m}월 ${Number(date.slice(8))}일`} 누계</div>
-          <div className="hero-value">{won(v.cur.total)}</div>
-          <Delta now={v.cur.total} before={lyHas ? v.ly.total : null} label="작년 같은 기간" money={false} missing={lyDays ? `작년 자료 ${lyDays}일치뿐 · 비교 안 함` : undefined} />
+          <div className="stat-label">
+            {m}월 1일 ~ {d}일 누계
+          </div>
+          <div className="hero-value">{won(v.month.total)}</div>
+          <Delta now={v.month.total} before={comparable(v.lyMonth) ? v.lyMonth.total : null} label="작년 같은 달 같은 기간" money={false} missing={partial(v.lyMonth)} />
         </section>
-
         <div className="stats">
-          <div className="stat">
-            <div className="stat-label">작년 같은 기간</div>
-            <div className="stat-value">{lyDays ? won(v.ly.total) : "자료 없음"}</div>
-            {lyDays > 0 && !lyHas && <span className="note">{lyDays}일치만 있음</span>}
-          </div>
-          <div className="stat">
-            <div className="stat-label">{kind === "month" ? `작년 ${Number(ly.slice(5, 7))}월 전체` : `작년 한 해 전체`}</div>
-            <div className="stat-value">{comparable(v.lyFull) ? won(v.lyFull.total) : "자료 부족"}</div>
-          </div>
-          {v.prev && (
-            <div className="stat">
-              <div className="stat-label">지난달 같은 기간</div>
-              <div className="stat-value">{comparable(v.prev) ? won(v.prev.total) : "자료 부족"}</div>
-              <Delta now={v.cur.total} before={comparable(v.prev) ? v.prev.total : null} label="이달" money={false} />
-            </div>
-          )}
-          <div className="stat">
-            <div className="stat-label">추정 방문자 · 1인 평균</div>
-            <div className="stat-value">{v.cur.visitors.toLocaleString("ko-KR")}명</div>
-            <span className="note">1인 {v.cur.avgSpend == null ? "—" : won(v.cur.avgSpend)}</span>
-          </div>
+          <Stat label="작년 같은 달 같은 기간 누계" value={money(v.lyMonth)} note={`${dot(v.lyMonth.from)} ~ ${ly.slice(5).replace("-", ".")}`} />
+          <Stat label={`작년 ${lm}월 한 달 전체`} value={money(v.lyFull)} note={v.lyFull.total > 0 && comparable(v.lyFull) ? `올해 ${((v.month.total / v.lyFull.total) * 100).toFixed(1)}% 채움` : undefined} />
         </div>
 
         <ChartCard
           title="누계 흐름"
-          sub={kind === "month" ? "날마다 쌓은 매출" : "달마다 쌓은 매출"}
+          sub="날마다 쌓은 매출 · 회색 = 작년 같은 달 전체 · 빨강 = 올해 마감일까지"
           legend={<Legend items={series.map((s) => ({ label: s.label, color: s.color }))} />}
-          table={
-            <table>
-              <thead>
-                <tr>
-                  <th>{kind === "month" ? "일" : "월"}</th>
-                  {series.map((s) => (
-                    <th key={s.label} className="num">
-                      {s.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {xs.map((x, i) => (
-                  <tr key={x} className={i === selected ? "sel" : ""}>
-                    <td>
-                      {x}
-                      {kind === "month" ? "일" : "월"}
-                    </td>
-                    {series.map((s) => (
-                      <td key={s.label} className="num">
-                        {s.values[i] == null ? "—" : won(s.values[i]!)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          }
+          table={<CumTable xs={v.days.map((x) => `${x}일`)} series={series} sel={d - 1} />}
         >
-          <LineChart xs={xs} series={series} xTick={xTick} tipTitle={tipTitle} fmt={won} axisFmt={wonShort} selected={selected} label="누계 흐름" />
+          <LineChart
+            xs={v.days.map(String)}
+            series={series}
+            xTick={(i) => (i === 0 || (i + 1) % 5 === 0 ? `${i + 1}일` : null)}
+            tipTitle={(i) => `${i + 1}일까지 누계`}
+            fmt={won}
+            axisFmt={wonShort}
+            selected={d - 1}
+            label="당월 누계 흐름"
+            height={220}
+          />
         </ChartCard>
 
-        <section className="card">
-          <h2>분석</h2>
-          <ul className="analysis">
-            {v.lines.map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
-        </section>
+        <h3 className="group">방문 · 1인 평균소비</h3>
+        <div className="stats">
+          <Stat label="마감일 방문자 수" value={visitors(v.day)} />
+          <Stat label="당월 누적 방문자 수" value={visitors(v.month)} />
+          <Stat label="작년 동월 동기간 누적 방문자 수" value={visitors(v.lyMonth)} note={v.lyMonth.has.cafe ? <Delta now={v.month.visitors} before={comparable(v.lyMonth) ? v.lyMonth.visitors : null} label="올해" money={false} missing="비교 안 함" /> : undefined} />
+          <Stat label="마감일 1인 평균 소비금액" value={v.day.avgSpend == null ? "—" : won(v.day.avgSpend)} />
+          <Stat label="누적 1인 평균 소비금액" value={v.month.avgSpend == null ? "—" : won(v.month.avgSpend)} note={`${m}/1 ~ ${m}/${d}`} />
+        </div>
       </main>
     </>
+  );
+}
+
+export function YearDetail(props: { board: Board } & Nav) {
+  const { board, date } = props;
+  const v = yearView(board, date);
+  const y = date.slice(0, 4);
+  const ly = sameDayYearsAgo(date);
+  const m = Number(date.slice(5, 7));
+  const lm = Number(ly.slice(5, 7));
+  const series: Line[] = [
+    { label: `작년 (${ly.slice(0, 4)})`, color: "var(--ly)", values: v.ly, weight: 2 },
+    { label: `올해 (${y})`, color: "var(--cur)", values: v.cur, weight: 3 },
+  ];
+  // 마감월 점 → 12월 연말 예상 점을 잇는 점선
+  const start = v.cur[m - 1];
+  if (v.estimate && m < 12 && start != null)
+    series.push({ label: "연말 예상", color: "var(--cur)", values: v.months.map((mo) => (mo < m ? null : start + ((v.estimate!.value - start) * (mo - m)) / (12 - m))), weight: 1.5, dash: true, noDot: true });
+  const marks = v.estimate ? [{ i: 11, v: v.estimate.value, color: "var(--cur)", label: `연말 예상 ${wonShort(v.estimate.value)}` }] : [];
+  return (
+    <>
+      <DetailHeader title="올해누계" {...props} />
+      <main className="content">
+        <section className="card hero">
+          <div className="stat-label">
+            1월 1일 ~ {m}월 {Number(date.slice(8, 10))}일 누계
+          </div>
+          <div className="hero-value">{won(v.year.total)}</div>
+          <Delta now={v.year.total} before={comparable(v.lyYear) ? v.lyYear.total : null} label="작년 같은 기간" money={false} missing={partial(v.lyYear)} />
+        </section>
+        <div className="stats">
+          <Stat label="작년 같은 기간 누계" value={money(v.lyYear)} note={`${dot(v.lyYear.from)} ~ ${ly.slice(5).replace("-", ".")}`} />
+          <Stat label="연말 예상 (12월 31일)" value={v.estimate ? won(v.estimate.value) : "—"} note={v.estimate ? v.estimate.how : "자료가 쌓이면 나옵니다"} />
+        </div>
+
+        <ChartCard
+          title="누계 흐름"
+          sub="달마다 쌓은 매출 · 회색 = 작년 12달 · 빨강 = 올해 마감일까지 · 12월의 빨간 점 = 연말 예상"
+          legend={<Legend items={series.filter((s) => !s.dash).map((s) => ({ label: s.label, color: s.color }))} />}
+          table={<CumTable xs={v.months.map((x) => `${x}월`)} series={series.filter((s) => !s.dash)} sel={m - 1} />}
+        >
+          <LineChart
+            xs={v.months.map(String)}
+            series={series}
+            marks={marks}
+            xTick={(i) => ((i % 2 === 0 && i !== 10) || i === 11 ? `${i + 1}월` : null)}
+            tipTitle={(i) => `${i + 1}월까지 누계${i === m - 1 ? ` (올해는 ${Number(date.slice(8))}일까지)` : ""}`}
+            fmt={won}
+            axisFmt={wonShort}
+            selected={m - 1}
+            label="올해 누계 흐름"
+            height={230}
+          />
+        </ChartCard>
+
+        <h3 className="group">방문</h3>
+        <div className="stats">
+          <Stat label={`${m}월 누적 방문자 수`} value={visitors(v.month)} note={`${m}/1 ~ 마감일`} />
+          <Stat label={`작년 ${lm}월 방문자 수`} value={visitors(v.lyMonthFull)} note={`${ly.slice(0, 4)}년 ${lm}월 한 달`} />
+          <Stat label="1월 1일 ~ 마감일 방문자 수" value={visitors(v.year)} />
+          <Stat label="작년 1월 1일 ~ 같은 날 방문자 수" value={visitors(v.lyYear)} note={v.lyYear.has.cafe ? <Delta now={v.year.visitors} before={comparable(v.lyYear) ? v.lyYear.visitors : null} label="올해" money={false} missing="비교 안 함" /> : undefined} />
+        </div>
+      </main>
+    </>
+  );
+}
+
+function CumTable({ xs, series, sel }: { xs: string[]; series: Line[]; sel: number }) {
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th />
+          {series.map((s) => (
+            <th key={s.label} className="num">
+              {s.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {xs.map((x, i) => (
+          <tr key={x} className={i === sel ? "sel" : ""}>
+            <td>{x}</td>
+            {series.map((s) => (
+              <td key={s.label} className="num">
+                {s.values[i] == null ? "—" : won(s.values[i]!)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

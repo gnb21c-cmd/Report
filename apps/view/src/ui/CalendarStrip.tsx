@@ -5,7 +5,7 @@
    - 일요일·공휴일은 빨강, 토요일은 파랑. 오늘 뒤 날짜는 누를 수 없음
    ============================================================ */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { addDays, dayRange, holidayName, weekday, WEEKDAY_KO, type PosId } from "@report/core";
+import { addDays, dayRange, holidayName, weekday, WEEKDAY_KO } from "@report/core";
 
 const CELL = 52;
 
@@ -15,7 +15,7 @@ export interface StripProps {
   to: string;
   selected: string;
   /** 날짜 → 자료가 온 POS */
-  present: Map<string, Set<PosId>>;
+  present: Map<string, Set<string>>;
   /** 자료가 있는 가장 늦은 날 (최근 버튼) */
   latest: string | null;
   onSelect: (date: string) => void;
@@ -101,7 +101,8 @@ export function CalendarStrip({ from, to, selected, present, latest, onSelect, o
           const w = weekday(d);
           const hol = holidayName(d);
           const p = present.get(d);
-          const both = p?.has("cafe") && p?.has("kids");
+          // 꽉 찬 점 = 카페 · 키즈 · 네이버 모두 입력, 빈 점 = 일부만
+          const both = p?.has("cafe") && p?.has("kids") && p?.has("naver");
           const day = Number(d.slice(8));
           const cls = ["day", d === selected ? "sel" : "", w === 0 || hol ? "sun" : w === 6 ? "sat" : ""].join(" ");
           return (
@@ -121,7 +122,7 @@ export function CalendarStrip({ from, to, selected, present, latest, onSelect, o
 }
 
 /** 몇 년 몇 월로 바로 — 고른 달에서 자료가 있는 마지막 날(없으면 1일)로 */
-function MonthPicker({ current, from, to, present, onClose, onPick }: { current: string; from: string; to: string; present: Map<string, Set<PosId>>; onClose: () => void; onPick: (d: string) => void }) {
+function MonthPicker({ current, from, to, present, onClose, onPick }: { current: string; from: string; to: string; present: Map<string, Set<string>>; onClose: () => void; onPick: (d: string) => void }) {
   const [year, setYear] = useState(Number(current.slice(0, 4)));
   const minY = Number(from.slice(0, 4));
   const maxY = Number(to.slice(0, 4));

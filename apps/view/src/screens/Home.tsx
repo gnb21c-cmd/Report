@@ -1,16 +1,23 @@
 /* ============================================================
-   대시보드 — 달력에서 고른 날의 숫자
-   ① 총 매출 + 지난주 같은 요일 대비 (상자 하나)
-   ② 바리스타 · 베이커리 · 키친 · 키즈 입장료 · 기타 (한 줄씩 각각 상자)
-   ③ 당월 누계 · 올해 누계 / 작년 같은 달 누계 · 작년 같은 기간 누계
-   ④ 추정 방문자 · 1인 평균 소비
-   ⑤ 키즈 입장권: 네이버 예약(= 입장 발행 − 현장, 고칠 수 있음) · 현장 구매 · 이벤트 무료입장
-   상자를 누르면 그 숫자의 추세 그래프 · 분석 설명 화면으로
+   대시보드 — 달력에서 고른 마감일의 숫자
+   ① 마감일 총 매출 + 날씨 (상세 없음)
+   ② 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 (한 줄 상자 다섯 개 → 섹터 상세)
+   ③ 당월누계 · 올해누계 (→ 누계 상세)
+   ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
+   ⑤ 네이버 입장권 판매수 · 현장 입장권 판매수 · 이벤트 무료입장팀 수 (→ 각 상세)
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { BOXES, changePct, comparable, count, holidayName, pct, POS_LABEL, shortLabel, won, wonMan, type Board, type Dashboard, type DayWeather, type MetricKey, type Metrics } from "@report/core";
+import { BOXES, changePct, comparable, count, holidayName, pct, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type Dashboard, type DayWeather, type Metrics } from "@report/core";
 
-export type Open = (v: { name: "metric"; key: MetricKey } | { name: "cum"; kind: "month" | "year" }) => void;
+export type View =
+  | { name: "home" }
+  | { name: "sector"; box: BoxKey }
+  | { name: "month" }
+  | { name: "year" }
+  | { name: "naver" }
+  | { name: "kids"; key: "walkIn" | "eventFree" }
+  | { name: "settings" };
+export type Open = (v: View) => void;
 
 export function Delta({ now, before, label, money = true, missing }: { now: number | null; before: number | null; label: string; money?: boolean; missing?: string }) {
   const p = changePct(now, before);
@@ -29,18 +36,20 @@ export function Delta({ now, before, label, money = true, missing }: { now: numb
 }
 
 /** 작년 자료가 일부만 있을 때 안내 */
-function partial(m: Metrics): string | undefined {
+export function partial(m: Metrics): string | undefined {
   const n = Math.max(m.has.cafe, m.has.kids);
   return n ? `작년 자료 ${n}일치뿐 · 비교 안 함` : undefined;
 }
 
-const Chevron = () => (
+export const Chevron = () => (
   <svg className="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden>
     <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
-export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: Open; weather?: DayWeather }) {
+export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타", 베이커리: "베이커리", 키친: "키친", 키즈입장료: "키즈입장", 기타: "기타" };
+
+export function Home({ d, open, weather }: { d: Dashboard; open: Open; weather?: DayWeather }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -48,11 +57,11 @@ export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: O
   return (
     <>
       {nothing ? (
-        <div className="banner">{shortLabel(d.date)} 자료가 없습니다 — 휴무이거나 아직 마감 송부 전입니다.</div>
+        <div className="banner">{shortLabel(d.date)} 자료가 없습니다 — 휴무이거나 아직 사무실에서 입력 전입니다.</div>
       ) : (
         (day.has.cafe === 0 || day.has.kids === 0) && (
           <div className="banner" role="alert">
-            <span aria-hidden>⚠</span> {day.has.cafe === 0 ? POS_LABEL.cafe : POS_LABEL.kids} POS 자료가 아직 없습니다 (마감 송부 전이거나 휴무).
+            <span aria-hidden>⚠</span> {day.has.cafe === 0 ? STORE_LABEL.cafe : STORE_LABEL.kids} 엑셀이 아직 입력되지 않았습니다.
           </div>
         )
       )}
@@ -60,23 +69,22 @@ export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: O
       <HeroBox
         label={
           <>
-            {shortLabel(d.date)}
-            {hol ? ` · ${hol}` : ""} 총 매출 <Chevron />
+            마감일 총 매출 · {shortLabel(d.date)}
+            {hol ? ` ${hol}` : ""}
           </>
         }
         value={won(day.total)}
         date={d.date}
         w={weather}
-        onClick={() => open({ name: "metric", key: "total" })}
       >
         <Delta now={day.total} before={d.prevWeek.m.total} label={`지난주 ${d.weekday}요일`} />
       </HeroBox>
 
-      {/* 팀별 섹터 버튼 — 다섯 개가 한 화면 폭에 (금액은 만 단위, 정확한 금액은 눌러서 상세에서) */}
+      {/* 섹터 상자 — 다섯 개가 한 화면 폭에 (금액은 만 단위, 정확한 금액은 눌러서 상세에서) */}
       <div className="sectors" role="list">
         {BOXES.map((b) => (
-          <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "metric", key: b })} aria-label={`${b} ${won(day.box[b])}`}>
-            <span className="sec-label">{b === "키즈입장료" ? "키즈입장" : b}</span>
+          <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "sector", box: b })} aria-label={`${b} ${won(day.box[b])}`}>
+            <span className="sec-label">{BOX_LABEL[b]}</span>
             <span className="sec-line">
               <span className="sec-value">{wonMan(day.box[b])}</span>
               <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : ""}</span>
@@ -86,68 +94,54 @@ export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: O
       </div>
 
       <div className="stats">
-        <button className="stat tap" onClick={() => open({ name: "cum", kind: "month" })}>
-          <div className="stat-label">당월 누계 ({d.month.from.slice(5).replace("-", "/")}~)</div>
+        <button className="stat tap" onClick={() => open({ name: "month" })}>
+          <div className="stat-label">
+            당월누계 ({Number(d.date.slice(5, 7))}/1~) <Chevron />
+          </div>
           <div className="stat-value">{won(d.month.total)}</div>
-          <Delta now={d.month.total} before={comparable(d.lyMonth) ? d.lyMonth.total : null} label="작년 같은 달" money={false} missing={partial(d.lyMonth)} />
+          <Delta now={d.month.total} before={comparable(d.lyMonth) ? d.lyMonth.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyMonth)} />
         </button>
-        <button className="stat tap" onClick={() => open({ name: "cum", kind: "year" })}>
-          <div className="stat-label">올해 누계 (1/1~)</div>
+        <button className="stat tap" onClick={() => open({ name: "year" })}>
+          <div className="stat-label">
+            올해누계 (1/1~마감일) <Chevron />
+          </div>
           <div className="stat-value">{won(d.year.total)}</div>
           <Delta now={d.year.total} before={comparable(d.lyYear) ? d.lyYear.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyYear)} />
         </button>
-        <button className="stat tap" onClick={() => open({ name: "cum", kind: "month" })}>
-          <div className="stat-label">작년 같은 달 누계</div>
-          <div className="stat-value">{d.lyMonth.has.cafe + d.lyMonth.has.kids ? won(d.lyMonth.total) : "자료 없음"}</div>
-          <span className="note">
-            {d.lyMonth.from.replaceAll("-", ".")} ~ {d.lyDate.slice(5).replace("-", ".")}
-          </span>
-        </button>
-        <button className="stat tap" onClick={() => open({ name: "cum", kind: "year" })}>
-          <div className="stat-label">작년 같은 기간 누계</div>
-          <div className="stat-value">{d.lyYear.has.cafe + d.lyYear.has.kids ? won(d.lyYear.total) : "자료 없음"}</div>
-          <span className="note">
-            {d.lyYear.from.replaceAll("-", ".")} ~ {d.lyDate.slice(5).replace("-", ".")}
-          </span>
-        </button>
       </div>
 
-      <h3 className="group">방문 · 소비 (추정)</h3>
       <div className="stats">
-        <button className="stat tap" onClick={() => open({ name: "metric", key: "visitors" })}>
-          <div className="stat-label">추정 방문자</div>
+        <div className="stat">
+          <div className="stat-label">카페아스타나 방문인원</div>
           <div className="stat-value">{count(day.visitors, "명")}</div>
           <span className="note">음료·맥주 {count(day.cups, "잔")} × 0.96</span>
-        </button>
-        <button className="stat tap" onClick={() => open({ name: "metric", key: "avgSpend" })}>
-          <div className="stat-label">1인 평균 소비</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">1인 평균소비</div>
           <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
-          <span className="note">총 매출 ÷ 추정 방문자</span>
-        </button>
+          <span className="note">총 매출 ÷ 방문인원</span>
+        </div>
       </div>
 
-      <h3 className="group">키즈 입장권 (입장 발행 {count(day.issued, "장")})</h3>
       <div className="stats three">
-        <button className="stat tap" onClick={() => open({ name: "metric", key: "naver" })}>
-          <div className="stat-label">
-            네이버 예약 {day.naverAdjusted ? <span className="tag">수정됨</span> : <span className="tag ghost">✎</span>}
-          </div>
+        <button className="stat tap" onClick={() => open({ name: "naver" })}>
+          <div className="stat-label">네이버 입장권 판매수</div>
           <div className="stat-value">{count(day.naver, "장")}</div>
-          <span className="note">발행 − 현장</span>
+          <span className="note">{day.naverInput ? `신규 ${count(day.newVisitors, "명")}` : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}</span>
         </button>
-        <button className="stat tap" onClick={() => open({ name: "metric", key: "walkIn" })}>
-          <div className="stat-label">현장 구매</div>
+        <button className="stat tap" onClick={() => open({ name: "kids", key: "walkIn" })}>
+          <div className="stat-label">현장 입장권 판매수</div>
           <div className="stat-value">{count(day.walkIn, "장")}</div>
           <span className="note">입장료 결제</span>
         </button>
-        <button className="stat tap" onClick={() => open({ name: "metric", key: "eventFree" })}>
-          <div className="stat-label">이벤트 무료</div>
+        <button className="stat tap" onClick={() => open({ name: "kids", key: "eventFree" })}>
+          <div className="stat-label">이벤트 무료입장팀 수</div>
           <div className="stat-value">{count(day.eventFree, "팀")}</div>
           <span className="note">쿠폰 입장</span>
         </button>
       </div>
       <p className="note center-note">
-        {d.price.kind} 단가 {won(d.price.price)} × 입장권 {count(day.naver + day.walkIn, "장")} = 키즈 입장료 {won(day.box.키즈입장료)}
+        {d.price.kind} 단가 {won(d.price.price)} × 입장권 {count(day.naver + day.walkIn, "장")} = 키즈입장 {won(day.box.키즈입장료)}
       </p>
     </>
   );

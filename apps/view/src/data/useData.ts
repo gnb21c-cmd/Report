@@ -1,7 +1,9 @@
-/* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 → 폰 저장소 → 새로 온 것만 받기 */
-import { useCallback, useEffect, useState } from "react";
-import { addDays, sampleUntilYesterday, todayKst, type Adjusts, type DayBatch, type KidsAdjust, type PosId, type WeatherKey, type WeatherMap } from "@report/core";
-import { boardKey, fetchAdjusts, fetchDays, fetchDevices, fetchWeather, firebaseConfig, saveAdjust, type DeviceStatus } from "./firebase";
+/* 자료 받기 상태 — 체험판이면 가짜 자료, 사무실 PC(C)에서 열면 C 에서, 아니면 설치 주소의 열쇠로 클라우드에서
+   → 폰 저장소 → 새로 온 것만 받기 */
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { sampleUntilYesterday, todayKst, type DayReport, type WeatherKey, type WeatherMap } from "@report/core";
+import { boardKey, firebaseConfig, firebaseSource } from "./firebase";
+import { officeSource, type OfficeStatus, type Source } from "./source";
 import demoWeatherRaw from "./demoWeather.json";
 import { clearCached, loadCached, local, saveCached } from "./cache";
 
@@ -9,22 +11,19 @@ export type Phase = "setup" | "nokey" | "loading" | "ready";
 
 export interface DataState {
   phase: Phase;
-  batches: DayBatch[];
-  adjusts: Adjusts;
+  reports: DayReport[];
   /** 날짜별 날씨 (쌓아 두고 지난 날도 봄) */
   weather: WeatherMap;
-  devices: DeviceStatus[];
+  status: OfficeStatus | null;
   /** 마지막으로 새 자료를 확인한 시각 */
   syncedAt: string | null;
   syncing: boolean;
   error: string | null;
-  demo: boolean;
+  source: Source["kind"];
 }
 
 const SYNCED = "report.syncedAt";
-const CURSOR = "report.cursor";
-const ADJUSTS = "report.adjusts";
-const DEMO_ADJUSTS = "report.demoAdjusts";
+const CURSOR = "report.reportCursor";
 const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
 
@@ -37,50 +36,48 @@ function demoWeather(): WeatherMap {
   return out;
 }
 
-function demoDevices(today: string): DeviceStatus[] {
-  const y = addDays(today, -1);
-  return (["cafe", "kids"] as PosId[]).map((pos) => ({
-    pos,
-    at: `${y}T${pos === "cafe" ? "13:08" : "12:41"}:00.000Z`,
-    lastDate: y,
-    pending: 0,
-    lastError: "",
-    source: "엑셀 폴더 (C:\\PosReport\\엑셀)",
-    version: "0.1.0",
-  }));
+/** 이 화면이 어디서 자료를 받는지 */
+function pickSource(): { source: Source | null; phase: Phase; kind: Source["kind"] } {
+  if (__DEMO__) return { source: null, phase: "ready", kind: "demo" };
+  if (__OFFICE__) return { source: officeSource(), phase: "loading", kind: "office" };
+  const cfg = firebaseConfig();
+  if (!cfg) return { source: null, phase: "setup", kind: "cloud" };
+  const board = boardKey();
+  if (!board) return { source: null, phase: "nokey", kind: "cloud" };
+  return { source: firebaseSource(cfg, board), phase: "loading", kind: "cloud" };
 }
 
+const byDate = (list: DayReport[]) => {
+  const m = new Map<string, DayReport>();
+  for (const r of list) m.set(r.date, r);
+  return [...m.values()];
+};
+
 export function useData() {
-  const cfg = firebaseConfig();
-  const board = __DEMO__ ? null : boardKey();
+  const picked = useMemo(pickSource, []);
   const [s, set] = useState<DataState>(() => ({
-    phase: __DEMO__ ? "ready" : !cfg ? "setup" : !board ? "nokey" : "loading",
-    batches: __DEMO__ ? sampleUntilYesterday(todayKst()) : [],
-    adjusts: (__DEMO__ ? local.get<Adjusts>(DEMO_ADJUSTS) : local.get<Adjusts>(ADJUSTS)) || {},
+    phase: picked.phase,
+    reports: __DEMO__ ? sampleUntilYesterday(todayKst()) : [],
     weather: __DEMO__ ? demoWeather() : local.get<WeatherMap>(WEATHER) || {},
-    devices: __DEMO__ ? demoDevices(todayKst()) : [],
+    status: __DEMO__ ? { at: new Date().toISOString(), version: "체험판", lastDate: "", pending: 0, lastError: "" } : null,
     syncedAt: __DEMO__ ? new Date().toISOString() : local.get<string>(SYNCED),
     syncing: false,
     error: null,
-    demo: __DEMO__,
+    source: picked.kind,
   }));
 
   const sync = useCallback(async () => {
-    if (__DEMO__ || !cfg || !board) return;
+    const src = picked.source;
+    if (!src) return;
     set((p) => ({ ...p, syncing: true, error: null }));
     // 폰에 저장된 자료부터 바로 보여 줌
     const cached = await loadCached();
-    set((p) => ({ ...p, batches: cached.length ? cached : p.batches, phase: "ready" }));
+    set((p) => ({ ...p, reports: cached.length ? byDate([...p.reports, ...cached]) : p.reports, phase: "ready" }));
     try {
-      const got = await fetchDays(cfg, board, local.get<string>(CURSOR));
-      await saveCached(got);
-      if (got.length) local.set(CURSOR, got[got.length - 1].sentAt);
-      const [adjusts, devices, wx] = await Promise.all([
-        fetchAdjusts(cfg, board),
-        fetchDevices(cfg, board).catch(() => [] as DeviceStatus[]),
-        fetchWeather(cfg, board, local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })),
-      ]);
-      local.set(ADJUSTS, adjusts);
+      const got = await src.reports(local.get<string>(CURSOR));
+      await saveCached(got.reports);
+      if (got.last) local.set(CURSOR, got.last);
+      const [status, wx] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null }))]);
       let weather = local.get<WeatherMap>(WEATHER) || {};
       if (wx.days.length) {
         weather = { ...weather };
@@ -90,39 +87,11 @@ export function useData() {
       }
       const now = new Date().toISOString();
       local.set(SYNCED, now);
-      set((p) => ({ ...p, batches: got.length ? [...p.batches, ...got] : p.batches, adjusts, devices, weather, syncedAt: now, syncing: false }));
+      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false }));
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }
-  }, [cfg, board]);
-
-  /** 네이버 입장권 수 고치기 (null = POS 값으로 되돌림) */
-  const setAdjust = useCallback(
-    async (date: string, adj: KidsAdjust | null) => {
-      const apply = (p: DataState) => {
-        const next = { ...p.adjusts };
-        if (adj) next[date] = { ...adj, at: new Date().toISOString() };
-        else delete next[date];
-        return next;
-      };
-      if (__DEMO__) {
-        set((p) => {
-          const adjusts = apply(p);
-          local.set(DEMO_ADJUSTS, adjusts);
-          return { ...p, adjusts };
-        });
-        return;
-      }
-      if (!cfg || !board) return;
-      await saveAdjust(cfg, board, date, adj);
-      set((p) => {
-        const adjusts = apply(p);
-        local.set(ADJUSTS, adjusts);
-        return { ...p, adjusts };
-      });
-    },
-    [cfg, board],
-  );
+  }, [picked]);
 
   /** 저장된 자료를 지우고 처음부터 다시 받음 */
   const reload = useCallback(async () => {
@@ -130,7 +99,7 @@ export function useData() {
     local.set(WEATHER_CURSOR, null);
     local.set(WEATHER, null);
     await clearCached();
-    set((p) => ({ ...p, batches: [] }));
+    set((p) => ({ ...p, reports: [], weather: {} }));
     await sync();
   }, [sync]);
 
@@ -143,5 +112,5 @@ export function useData() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { ...s, sync, reload, setAdjust };
+  return { ...s, sync, reload };
 }

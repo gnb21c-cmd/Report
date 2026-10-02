@@ -1,24 +1,29 @@
-/* 폰 안 저장소 (IndexedDB) — 받은 하루치를 쌓아 두어 인터넷 없이도 지난 보고를 봄. 실패하면 메모리만 씀 */
-import type { DayBatch } from "@report/core";
+/* 폰 안 저장소 (IndexedDB) — 받은 보고 자료를 쌓아 두어 인터넷 없이도 지난 보고를 봄. 실패하면 메모리만 씀 */
+import type { DayReport } from "@report/core";
 
 const DB = "pos-report";
-const STORE = "days";
+const STORE = "reports";
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    const req = indexedDB.open(DB, 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      // 예전 판(상품별 하루치 'days')은 버림
+      if (db.objectStoreNames.contains("days")) db.deleteObjectStore("days");
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function loadCached(): Promise<DayBatch[]> {
+export async function loadCached(): Promise<DayReport[]> {
   try {
     const db = await open();
     return await new Promise((resolve, reject) => {
       const req = db.transaction(STORE).objectStore(STORE).getAll();
-      req.onsuccess = () => resolve((req.result as DayBatch[]) || []);
+      req.onsuccess = () => resolve((req.result as DayReport[]) || []);
       req.onerror = () => reject(req.error);
     });
   } catch {
@@ -26,14 +31,14 @@ export async function loadCached(): Promise<DayBatch[]> {
   }
 }
 
-export async function saveCached(batches: DayBatch[]): Promise<void> {
-  if (!batches.length) return;
+export async function saveCached(reports: DayReport[]): Promise<void> {
+  if (!reports.length) return;
   try {
     const db = await open();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       const st = tx.objectStore(STORE);
-      for (const b of batches) st.put(b, `${b.pos}_${b.date}`);
+      for (const r of reports) st.put(r, r.date);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -56,7 +61,7 @@ export async function clearCached(): Promise<void> {
   }
 }
 
-/** 작은 설정값 (로그인 정보 등) */
+/** 작은 설정값 */
 export const local = {
   get<T>(key: string): T | null {
     try {

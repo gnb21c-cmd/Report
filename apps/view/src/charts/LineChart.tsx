@@ -8,6 +8,18 @@ export interface Line {
   values: (number | null)[];
   /** 굵게(주 선) · 가늘게(비교 선) */
   weight?: number;
+  /** 점선 (예상) */
+  dash?: boolean;
+  /** 끝점 동그라미를 그리지 않음 */
+  noDot?: boolean;
+}
+
+/** 따로 찍는 점 (예: 연말 예상) */
+export interface Mark {
+  i: number;
+  v: number;
+  color: string;
+  label: string;
 }
 
 export function LineChart(props: {
@@ -21,6 +33,7 @@ export function LineChart(props: {
   onPick?: (i: number) => void;
   height?: number;
   label: string;
+  marks?: Mark[];
 }) {
   const { xs, series } = props;
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -29,7 +42,7 @@ export function LineChart(props: {
   const pad = { l: 46, r: 14, t: 10, b: 24 };
   const iw = width - pad.l - pad.r;
   const ih = h - pad.t - pad.b;
-  const all = series.flatMap((s) => s.values.filter((v): v is number => v != null));
+  const all = series.flatMap((s) => s.values.filter((v): v is number => v != null)).concat((props.marks || []).map((m) => m.v));
   const lo = Math.min(0, ...all);
   const ticks = niceTicks(Math.max(1, ...all));
   const top = ticks[ticks.length - 1] || 1;
@@ -70,12 +83,21 @@ export function LineChart(props: {
         {sel != null && sel >= 0 && sel < n && <line x1={x(sel)} x2={x(sel)} y1={pad.t} y2={pad.t + ih} className="sel-line" />}
         {hover != null && <line x1={x(hover)} x2={x(hover)} y1={pad.t} y2={pad.t + ih} className="crosshair" />}
         {[...series].reverse().map((s) => (
-          <path key={s.label} d={path(s.values)} fill="none" stroke={s.color} strokeWidth={s.weight ?? 2} strokeLinejoin="round" strokeLinecap="round" />
+          <path key={s.label} d={path(s.values)} fill="none" stroke={s.color} strokeWidth={s.weight ?? 2} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={s.dash ? "5 5" : undefined} />
         ))}
         {series.map((s) => {
+          if (s.noDot) return null;
           const i = sel != null && s.values[sel] != null ? sel : lastIdx(s.values);
           return i >= 0 ? <circle key={s.label} cx={x(i)} cy={y(s.values[i]!)} r={4} fill={s.color} stroke="var(--surface-1)" strokeWidth={2} /> : null;
         })}
+        {(props.marks || []).map((m) => (
+          <g key={m.label}>
+            <circle cx={x(m.i)} cy={y(m.v)} r={6} fill={m.color} stroke="var(--surface-1)" strokeWidth={2} />
+            <text x={x(m.i) - 8} y={y(m.v) - 10} className="mark-label" textAnchor="end" style={{ fill: m.color }}>
+              {m.label}
+            </text>
+          </g>
+        ))}
         {hover != null &&
           series.map((s) => (s.values[hover] != null ? <circle key={s.label} cx={x(hover)} cy={y(s.values[hover]!)} r={4} fill={s.color} stroke="var(--surface-1)" strokeWidth={2} /> : null))}
         <rect
@@ -96,7 +118,10 @@ export function LineChart(props: {
           y={4}
           width={width}
           title={props.tipTitle(hover)}
-          rows={series.map((s) => ({ color: s.color, label: s.label, value: s.values[hover] == null ? "자료 없음" : props.fmt(s.values[hover]!) }))}
+          rows={series
+            .filter((s) => !s.noDot || s.values[hover] != null)
+            .map((s) => ({ color: s.color, label: s.label, value: s.values[hover] == null ? "자료 없음" : props.fmt(s.values[hover]!) }))
+            .concat((props.marks || []).filter((m) => m.i === hover).map((m) => ({ color: m.color, label: m.label, value: props.fmt(m.v) })))}
         />
       )}
     </div>

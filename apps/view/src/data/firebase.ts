@@ -1,26 +1,19 @@
 /* ============================================================
-   클라우드 보관함(Firebase) 읽기·쓰기 — 로그인 없음
+   클라우드 보관함(Firebase) 읽기 — 로그인 없음, 읽기만
    - 설치 주소 https://<프로젝트>.web.app/b/<열쇠>/ 의 '열쇠'로 그 매장 자료(boards/<열쇠>)를 읽음
      → 이 주소로 설치한 폰은 누구나 봄 (주소를 밖에 퍼뜨리지 않기. 새면 열쇠를 바꿈 — docs/SETUP.md)
-   - 받기: days 중 마지막으로 받은 뒤 새로 온 것만 (sentAt 기준) → 폰 안(IndexedDB)에 쌓아 둠
-   - 쓰기: 네이버 입장권 고친 값(adjust/<날짜>)만. 매출(days)은 POS PC 계정만 쓸 수 있음 (firebase/firestore.rules)
-   A 가 쓰는 모양: apps/sender/src/report_sender/relay.py day_doc
+   - reports/<날짜>: 사무실 PC(C)가 그날 조각(카페 · 키즈 · 네이버)을 합쳐 올린 보고 자료 (report = JSON 글자)
+     마지막으로 받은 뒤 새로 올라온 것만 (at 기준) → 폰 안(IndexedDB)에 쌓아 둠
+   - weather/<날짜>: C 가 기상청에서 받아 올린 날씨
+   - devices/office: C 상태 (마지막으로 올린 시각 · 판 · 오류)
+   C 가 쓰는 모양: apps/office/src/report_office/relay.py report_doc
    ============================================================ */
-import type { Adjusts, DayBatch, DayWeather, KidsAdjust, PosId, SaleLine, WeatherKey } from "@report/core";
+import type { DayReport, DayWeather, WeatherKey } from "@report/core";
+import type { OfficeStatus, Source } from "./source";
 
 export interface FirebaseConfig {
   apiKey: string;
   projectId: string;
-}
-
-export interface DeviceStatus {
-  pos: PosId;
-  at: string;
-  lastDate: string;
-  pending: number;
-  lastError: string;
-  source: string;
-  version: string;
 }
 
 export function firebaseConfig(): FirebaseConfig | null {
@@ -78,113 +71,60 @@ function fieldsOf(doc: any): Record<string, any> {
   for (const [k, v] of Object.entries(doc?.fields || {})) out[k] = plain(v);
   return out;
 }
-const idOf = (doc: any) => String(doc?.name || "").split("/").pop() || "";
 
-export function toBatch(doc: any): DayBatch | null {
-  const f = fieldsOf(doc);
-  if ((f.pos !== "cafe" && f.pos !== "kids") || !/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) return null;
-  let rows: SaleLine[] = [];
+/** reports 문서 → 보고 자료 */
+export function toReport(f: Record<string, any>): DayReport | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) return null;
   try {
-    rows = JSON.parse(f.rows || "[]");
+    const r = JSON.parse(f.report || "{}");
+    return r && r.date === f.date ? { ...r, at: f.at || r.at } : null;
   } catch {
-    rows = [];
+    return null;
   }
-  return { pos: f.pos, date: f.date, rows, sentAt: f.sentAt || "", source: f.source || "" };
 }
 
-/** after(ISO) 뒤에 보낸 하루치들 (처음이면 전부) — 오래된 것부터 */
-export async function fetchDays(cfg: FirebaseConfig, board: string, after: string | null): Promise<DayBatch[]> {
-  const out: DayBatch[] = [];
+/** at(올린 시각) 이 after 뒤인 문서들 — 오래된 것부터 */
+async function since(cfg: FirebaseConfig, board: string, coll: string, after: string | null): Promise<{ docs: Record<string, any>[]; last: string | null }> {
+  const docs: Record<string, any>[] = [];
   let cursor = after;
-  for (let page = 0; page < 30; page++) {
-    const query: any = {
-      structuredQuery: {
-        from: [{ collectionId: "days" }],
-        orderBy: [{ field: { fieldPath: "sentAt" }, direction: "ASCENDING" }],
-        limit: 300,
-      },
-    };
-    if (cursor) query.structuredQuery.where = { fieldFilter: { field: { fieldPath: "sentAt" }, op: "GREATER_THAN", value: { timestampValue: cursor } } };
-    const res = await call(`${base(cfg, board)}:runQuery?key=${cfg.apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query),
-    });
-    const got = (Array.isArray(res) ? res : []).map((r: any) => r.document).filter(Boolean);
-    for (const d of got) {
-      const b = toBatch(d);
-      if (b) out.push(b);
-    }
-    if (got.length < 300) break;
-    cursor = out[out.length - 1].sentAt;
-  }
-  return out;
-}
-
-async function list(cfg: FirebaseConfig, board: string, coll: string): Promise<any[]> {
-  const out: any[] = [];
-  let token = "";
-  for (let page = 0; page < 20; page++) {
-    const res = await call(`${base(cfg, board)}/${coll}?key=${cfg.apiKey}&pageSize=300${token ? `&pageToken=${token}` : ""}`);
-    out.push(...(res.documents || []));
-    token = res.nextPageToken || "";
-    if (!token) break;
-  }
-  return out;
-}
-
-export async function fetchDevices(cfg: FirebaseConfig, board: string): Promise<DeviceStatus[]> {
-  return (await list(cfg, board, "devices")).map((d) => {
-    const f = fieldsOf(d);
-    return { pos: idOf(d) as PosId, at: f.at || "", lastDate: f.lastDate || "", pending: f.pending || 0, lastError: f.lastError || "", source: f.source || "", version: f.version || "" };
-  });
-}
-
-export async function fetchAdjusts(cfg: FirebaseConfig, board: string): Promise<Adjusts> {
-  const out: Adjusts = {};
-  for (const d of await list(cfg, board, "adjust")) {
-    const f = fieldsOf(d);
-    if (Number.isFinite(f.naver)) out[idOf(d)] = { naver: f.naver, by: f.by || "", at: f.at || "" };
-  }
-  return out;
-}
-
-/** 네이버 입장권 고친 값 저장 (null 이면 POS 값으로 되돌림) */
-export async function saveAdjust(cfg: FirebaseConfig, board: string, date: string, adj: KidsAdjust | null): Promise<void> {
-  const url = `${base(cfg, board)}/adjust/${date}?key=${cfg.apiKey}`;
-  if (!adj) {
-    await call(url, { method: "DELETE" });
-    return;
-  }
-  await call(url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fields: {
-        naver: { integerValue: String(Math.max(0, Math.round(adj.naver))) },
-        by: { stringValue: (adj.by || "").slice(0, 20) },
-        at: { timestampValue: new Date().toISOString() },
-      },
-    }),
-  });
-}
-
-/** 날씨 — at(올린 시각) 이 after 뒤인 것만 (처음이면 전부). A 가 기상청에서 받아 쌓아 둔 값 */
-export async function fetchWeather(cfg: FirebaseConfig, board: string, after: string | null): Promise<{ days: DayWeather[]; last: string | null }> {
-  const days: DayWeather[] = [];
-  let cursor = after;
-  for (let page = 0; page < 20; page++) {
-    const query: any = { structuredQuery: { from: [{ collectionId: "weather" }], orderBy: [{ field: { fieldPath: "at" }, direction: "ASCENDING" }], limit: 300 } };
+  for (let page = 0; page < 40; page++) {
+    const query: any = { structuredQuery: { from: [{ collectionId: coll }], orderBy: [{ field: { fieldPath: "at" }, direction: "ASCENDING" }], limit: 300 } };
     if (cursor) query.structuredQuery.where = { fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN", value: { timestampValue: cursor } } };
     const res = await call(`${base(cfg, board)}:runQuery?key=${cfg.apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(query) });
     const got = (Array.isArray(res) ? res : []).map((r: any) => r.document).filter(Boolean);
     for (const d of got) {
       const f = fieldsOf(d);
       cursor = f.at || cursor;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) continue;
-      days.push({ date: f.date, key: f.key as WeatherKey, label: f.label, icon: f.icon, tempMax: f.tempMax ?? null, tempMin: f.tempMin ?? null, rainMm: f.rainMm ?? null, source: f.source === "observed" ? "observed" : "forecast" });
+      docs.push(f);
     }
     if (got.length < 300) break;
   }
-  return { days, last: cursor };
+  return { docs, last: cursor };
+}
+
+export function weatherOf(f: Record<string, any>): DayWeather | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) return null;
+  return { date: f.date, key: f.key as WeatherKey, label: f.label, icon: f.icon, tempMax: f.tempMax ?? null, tempMin: f.tempMin ?? null, rainMm: f.rainMm ?? null, source: f.source === "observed" ? "observed" : "forecast" };
+}
+
+export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
+  return {
+    kind: "cloud",
+    async reports(after) {
+      const { docs, last } = await since(cfg, board, "reports", after);
+      return { reports: docs.map(toReport).filter((r): r is DayReport => !!r), last };
+    },
+    async weather(after) {
+      const { docs, last } = await since(cfg, board, "weather", after);
+      return { days: docs.map(weatherOf).filter((w): w is DayWeather => !!w), last };
+    },
+    async status() {
+      try {
+        const doc = await call(`${base(cfg, board)}/devices/office?key=${cfg.apiKey}`);
+        return fieldsOf(doc) as OfficeStatus;
+      } catch {
+        return null;
+      }
+    },
+  };
 }

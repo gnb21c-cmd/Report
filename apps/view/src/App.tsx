@@ -1,15 +1,14 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
-   첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세(추세 · 분석) → 뒤로(폰의 뒤로 버튼도 됨) */
+   첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, dashboard, latestBatches, reportDate, salesOf, SalesIndex, todayKst, type MetricKey } from "@report/core";
+import { addDays, Board, dashboard, todayKst } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
-import { Home } from "./screens/Home";
-import { Detail } from "./screens/Detail";
-import { CumDetail } from "./screens/CumDetail";
+import { Home, type View } from "./screens/Home";
+import { SectorDetail } from "./screens/SectorDetail";
+import { MonthDetail, YearDetail } from "./screens/CumDetail";
+import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { Settings } from "./screens/Settings";
-
-type View = { name: "home" } | { name: "metric"; key: MetricKey } | { name: "cum"; kind: "month" | "year" } | { name: "settings" };
 
 function Notice({ title, text }: { title: string; text: string }) {
   return (
@@ -24,9 +23,13 @@ function Notice({ title, text }: { title: string; text: string }) {
 
 export function App() {
   const d = useData();
-  const idx = useMemo(() => new SalesIndex(salesOf(d.batches), latestBatches(d.batches).map((b) => ({ pos: b.pos, date: b.date }))), [d.batches]);
-  const board = useMemo(() => new Board(idx, d.adjusts), [idx, d.adjusts]);
-  const latest = useMemo(() => reportDate(d.batches), [d.batches]);
+  const board = useMemo(() => new Board(d.reports), [d.reports]);
+  const present = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const [date, r] of board.byDate) m.set(date, new Set([r.cafe && "cafe", r.kids && "kids", r.naver && "naver"].filter(Boolean) as string[]));
+    return m;
+  }, [board]);
+  const latest = useMemo(() => board.latest(), [board]);
   const today = todayKst();
   const [date, setDate] = useState<string>(latest || addDays(today, -1));
   const [view, setView] = useState<View>({ name: "home" });
@@ -62,37 +65,29 @@ export function App() {
   if (d.phase === "nokey") return <Notice title="설치 주소로 열어 주세요" text="받으신 설치 주소(…/b/열쇠/)로 열어야 매장 자료가 보입니다. 주소를 다시 확인해 주세요." />;
 
   const to = latest && latest > today ? latest : today;
-  const from = idx.first && idx.first < addDays(to, -60) ? idx.first : addDays(to, -60);
+  const from = board.first && board.first < addDays(to, -60) ? board.first : addDays(to, -60);
   const nav = { date, minDate: from, maxDate: to, onDate: setDate, onBack: back };
 
-  if (view.name === "metric")
-    return (
-      <div className="app">
-        <Detail board={board} k={view.key} adjust={d.adjusts[date]} onSaveAdjust={d.setAdjust} weather={d.weather} {...nav} />
-      </div>
-    );
-  if (view.name === "cum")
-    return (
-      <div className="app">
-        <CumDetail board={board} kind={view.kind} {...nav} />
-      </div>
-    );
-  if (view.name === "settings")
-    return (
-      <div className="app">
-        <Settings batches={d.batches} devices={d.devices} demo={d.demo} syncedAt={d.syncedAt} syncing={d.syncing} onSync={d.sync} onReload={d.reload} onBack={back} />
-      </div>
-    );
+  let body: JSX.Element | null = null;
+  if (view.name === "sector") body = <SectorDetail board={board} box={view.box} weather={d.weather} {...nav} />;
+  else if (view.name === "month") body = <MonthDetail board={board} {...nav} />;
+  else if (view.name === "year") body = <YearDetail board={board} {...nav} />;
+  else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
+  else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
+  else if (view.name === "settings")
+    body = <Settings board={board} status={d.status} source={d.source} latest={latest} syncedAt={d.syncedAt} syncing={d.syncing} onSync={d.sync} onReload={d.reload} onBack={back} />;
+  if (body) return <div className="app">{body}</div>;
 
   return (
     <div className="app">
       <header className="top">
-        <CalendarStrip from={from} to={to} selected={date} present={idx.present} latest={latest} onSelect={setDate} onSettings={() => open({ name: "settings" })} />
-        {d.demo && <div className="demo-tag">체험판 · 가짜 자료</div>}
+        <CalendarStrip from={from} to={to} selected={date} present={present} latest={latest} onSelect={setDate} onSettings={() => open({ name: "settings" })} />
+        {d.source === "demo" && <div className="demo-tag">체험판 · 가짜 자료</div>}
+        {d.source === "office" && <div className="demo-tag">사무실 PC(C)에서 바로 보는 중</div>}
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.batches.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home board={board} d={dashboard(board, date)} open={open} weather={d.weather[date]} />}
+        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} />}
       </main>
     </div>
   );

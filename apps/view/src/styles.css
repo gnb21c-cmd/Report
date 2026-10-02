@@ -24,6 +24,16 @@
   --warn-bg: #fff4dc;
   --warn-ink: #6b4a00;
   --press: rgba(11, 11, 11, 0.04);
+  /* 시간대 막대(핑크) · 추세 선(옅음 → 진함) · 작년(회색) / 올해(빨강) */
+  --pink: #e0679a;
+  --pink-soft: #f0aecb;
+  --pink-strong: #c2185b;
+  --trend-4: #f6d3e1;
+  --trend-3: #eeb0c8;
+  --trend-2: #e48aae;
+  --trend-1: #d96894;
+  --cur: #d63a3a;
+  --ly: #b4b3ab;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -50,6 +60,15 @@
     --warn-bg: #3a2d0c;
     --warn-ink: #fad27a;
     --press: rgba(255, 255, 255, 0.05);
+    --pink: #ee7fab;
+    --pink-soft: #8a4964;
+    --pink-strong: #ff8fbd;
+    --trend-4: #4a2a37;
+    --trend-3: #6e3a50;
+    --trend-2: #9a4e6e;
+    --trend-1: #c9638d;
+    --cur: #ef6b6b;
+    --ly: #6b6a65;
   }
 }
 :root[data-theme="dark"] {
@@ -76,6 +95,15 @@
   --warn-bg: #3a2d0c;
   --warn-ink: #fad27a;
   --press: rgba(255, 255, 255, 0.05);
+  --pink: #ee7fab;
+  --pink-soft: #8a4964;
+  --pink-strong: #ff8fbd;
+  --trend-4: #4a2a37;
+  --trend-3: #6e3a50;
+  --trend-2: #9a4e6e;
+  --trend-1: #c9638d;
+  --cur: #ef6b6b;
+  --ly: #6b6a65;
 }
 
 * {
@@ -578,6 +606,7 @@ button.stat {
 .stat-label {
   color: var(--text-secondary);
   font-size: 13px;
+  word-break: keep-all;
 }
 .stat-value {
   font-size: 18px;
@@ -876,6 +905,40 @@ tr.sum td {
   vertical-align: -1px;
   margin-right: 6px;
 }
+.bar-top {
+  fill: var(--text-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.below {
+  font-size: 12px;
+  font-weight: 700;
+}
+.hover-band {
+  fill: var(--press);
+}
+.mark-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+/* 시간마다 ▲ ▼ (추세 선 아래, 그래프 칸과 같은 폭) */
+.arrows {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  margin: 2px 14px 0 46px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.up-text {
+  color: var(--good);
+}
+.down-text {
+  color: var(--bad);
+}
+.stat-label .chev {
+  vertical-align: -4px;
+}
 .tip {
   position: absolute;
   pointer-events: none;
@@ -925,4 +988,7 @@ tr.sum td {
     scroll-behavior: auto !important;
     transition: none !important;
   }
+}
+.top-gap {
+  margin-top: 8px;
 }

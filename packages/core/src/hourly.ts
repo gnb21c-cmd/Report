@@ -257,7 +257,7 @@ export function hourlyInsights(board: Board, date: string, box: BoxKey, weather:
   const f = forecastNext(board, date, box);
   if (f) {
     const hol = holidayName(f.date);
-    const note = hol ? ` ${md(f.date)}은 ${hol}이라 평소 ${wd}요일과 다를 수 있습니다.` : isOffDay(f.date) !== isOffDay(date) ? ` 마감일과 휴일 여부가 달라 차이가 날 수 있습니다.` : "";
+    const note = hol ? ` 그날은 공휴일(${hol})이라 평소 ${wd}요일과 다를 수 있습니다.` : isOffDay(f.date) !== isOffDay(date) ? ` 마감일과 휴일 여부가 달라 차이가 날 수 있습니다.` : "";
     out.push(
       `다음 주 ${md(f.date)}(${wd}) 예상 ${wonMan(f.value)} (${wonMan(f.low)}~${wonMan(f.high)})${f.peak != null ? ` · 가장 바쁜 시간 예상 ${f.peak}시` : ""} — 최근 ${f.n}번의 같은 요일 흐름으로 계산 (날씨는 넣지 않음).${note}`,
     );

@@ -1,16 +1,27 @@
-/* 설정 — POS 송부 상태 · 계산 기준 · 폰 설치 방법 */
-import { KIDS_PRICES, posStatus, POS_IDS, POS_LABEL, shortLabel, VISITOR_FACTOR, won, type DayBatch } from "@report/core";
-import type { DeviceStatus } from "../data/firebase";
+/* 설정 — 최근 입력 현황(누가 언제) · 사무실 PC(C) 상태 · 계산 기준 · 폰 설치 방법 */
+import { addDays, KIDS_PRICES, shortLabel, VISITOR_FACTOR, won, type Board, type PartMeta } from "@report/core";
+import type { OfficeStatus } from "../data/source";
 
-const time = (iso: string | null) => {
+const time = (iso?: string | null) => {
   if (!iso) return "—";
   const d = new Date(iso);
   return isNaN(d.getTime()) ? "—" : d.toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
-export function Settings(props: { batches: DayBatch[]; devices: DeviceStatus[]; demo: boolean; syncedAt: string | null; syncing: boolean; onSync: () => void; onReload: () => void; onBack: () => void }) {
-  const st = posStatus(props.batches);
+function Who({ m, has }: { m?: PartMeta; has: boolean }) {
+  if (!has) return <span className="muted">—</span>;
+  return (
+    <span>
+      ✓<div className="note">{m ? `${m.by || ""} ${time(m.at)}` : ""}</div>
+    </span>
+  );
+}
+
+export function Settings(props: { board: Board; status: OfficeStatus | null; source: "cloud" | "office" | "demo"; latest: string | null; syncedAt: string | null; syncing: boolean; onSync: () => void; onReload: () => void; onBack: () => void }) {
   const price = KIDS_PRICES[KIDS_PRICES.length - 1];
+  const end = props.latest || addDays(new Date().toISOString().slice(0, 10), -1);
+  const recent = Array.from({ length: 7 }, (_, i) => addDays(end, -i));
+  const st = props.status;
   return (
     <>
       <header className="detail-head">
@@ -24,32 +35,62 @@ export function Settings(props: { batches: DayBatch[]; devices: DeviceStatus[]; 
       </header>
       <main className="content">
         <section className="card">
-          <h2>POS 마감 송부</h2>
+          <h2>최근 입력 현황</h2>
+          <p className="sub">사무실에서 A(입력 화면)로 넣은 것 — 이름 · 시각</p>
           <table>
+            <thead>
+              <tr>
+                <th>마감일</th>
+                <th>카페</th>
+                <th>키즈</th>
+                <th>네이버</th>
+              </tr>
+            </thead>
             <tbody>
-              {POS_IDS.map((pos) => {
-                const s = st.find((x) => x.pos === pos)!;
-                const d = props.devices.find((x) => x.pos === pos);
+              {recent.map((d) => {
+                const r = props.board.report(d);
                 return (
-                  <tr key={pos}>
+                  <tr key={d}>
+                    <td>{shortLabel(d)}</td>
                     <td>
-                      <b>{POS_LABEL[pos]} POS</b>
-                      <div className="note">{d?.source || "아직 연결 기록 없음"}</div>
-                      {d?.lastError && <div className="note bad">⚠ {d.lastError}</div>}
-                      {!!d?.pending && <div className="note bad">⚠ PC 에 못 보낸 날 {d.pending}일</div>}
+                      <Who m={r?.meta?.cafe} has={!!r?.cafe} />
                     </td>
-                    <td className="num">
-                      {s.lastDate ? shortLabel(s.lastDate) : "자료 없음"}
-                      <div className="note">보낸 시각 {time(s.lastSentAt)}</div>
-                      <div className="note">받은 날 {s.days.toLocaleString("ko-KR")}일</div>
+                    <td>
+                      <Who m={r?.meta?.kids} has={!!r?.kids} />
+                    </td>
+                    <td>
+                      <Who m={r?.meta?.naver} has={!!r?.naver} />
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          {props.demo ? (
-            <p className="note">체험판입니다. 숫자는 모두 가짜 자료이고, 네이버 입장권을 고친 값은 이 폰에만 저장됩니다.</p>
+        </section>
+
+        <section className="card">
+          <h2>사무실 PC (C)</h2>
+          <table>
+            <tbody>
+              <tr>
+                <td>마지막으로 올린 시각</td>
+                <td className="num">{time(st?.at)}</td>
+              </tr>
+              <tr>
+                <td>프로그램 판</td>
+                <td className="num">{st?.version || "—"}</td>
+              </tr>
+              {!!st?.pending && (
+                <tr>
+                  <td className="bad">아직 못 올린 날</td>
+                  <td className="num bad">{st.pending}일</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {st?.lastError && <p className="note bad">⚠ {st.lastError}</p>}
+          {props.source === "demo" ? (
+            <p className="note">체험판입니다. 숫자는 모두 가짜 자료입니다 (날씨는 기상청 실제 값).</p>
           ) : (
             <div className="row">
               <button onClick={props.onSync} disabled={props.syncing}>
@@ -60,7 +101,10 @@ export function Settings(props: { batches: DayBatch[]; devices: DeviceStatus[]; 
               </button>
             </div>
           )}
-          <p className="note">마지막 확인 {time(props.syncedAt)}</p>
+          <p className="note">
+            마지막 확인 {time(props.syncedAt)}
+            {props.source === "office" ? " · 사무실 PC에서 바로 보는 중" : ""}
+          </p>
         </section>
 
         <section className="card">
@@ -80,19 +124,34 @@ export function Settings(props: { batches: DayBatch[]; devices: DeviceStatus[]; 
               </tr>
               <tr>
                 <td>네이버 입장권</td>
-                <td className="num">키즈 POS 0원 입장권 수 (고친 값 우선)</td>
+                <td className="num">
+                  A 에 넣은 시간대별 판매 입장권 합
+                  <div className="note">넣기 전에는 키즈 POS 입장 발행 − 현장으로 추정</div>
+                </td>
               </tr>
               <tr>
-                <td>추정 방문자</td>
+                <td>팀</td>
+                <td className="num">같은 포스번호 + 같은 영수증번호</td>
+              </tr>
+              <tr>
+                <td>카페아스타나 방문인원</td>
                 <td className="num">음료·맥주 잔 수 × {VISITOR_FACTOR}</td>
               </tr>
               <tr>
-                <td>1인 평균 소비</td>
-                <td className="num">총 매출 ÷ 추정 방문자</td>
+                <td>1인 평균소비</td>
+                <td className="num">총 매출 ÷ 방문인원</td>
+              </tr>
+              <tr>
+                <td>반품</td>
+                <td className="num">앞서 판 영수증에서 찾아 지움</td>
+              </tr>
+              <tr>
+                <td>상품권·교환권 결제</td>
+                <td className="num">결제 수단 — 매출에서 빼지 않음</td>
               </tr>
               <tr>
                 <td>기타</td>
-                <td className="num">카페 기타 + 키즈 POS 입장권 외 (추가 인원·간식 등)</td>
+                <td className="num">카페 기타 + 키즈 입장권 외 (추가 인원 등)</td>
               </tr>
             </tbody>
           </table>
