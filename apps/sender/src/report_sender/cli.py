@@ -19,7 +19,7 @@ import os
 import sys
 
 from . import VERSION
-from .config import ConfigError, data_dir, load, pos_label, problems, save
+from .config import ConfigError, basic_problems, data_dir, load, pos_label, problems, save, trial_mode
 from .lock import AlreadyRunning, acquire
 from .normalize import aggregate, totals, won
 
@@ -36,6 +36,13 @@ def setup_logging():
 def make_sender(conf):
     from .runner import Sender
 
+    if trial_mode(conf):
+        from .trial import TrialSender
+
+        bad = basic_problems(conf)
+        if bad:
+            raise ConfigError(" / ".join(bad))
+        return TrialSender(conf)
     bad = problems(conf)
     if bad:
         raise ConfigError(" / ".join(bad))
@@ -44,6 +51,9 @@ def make_sender(conf):
 
 def cmd_auto(conf, args):
     from .gui import result_lines
+
+    if trial_mode(conf):
+        return 0  # 시험 모드에서는 저절로 하지 않음
 
     try:
         lock = acquire(os.path.join(data_dir(), "send.lock"))
@@ -116,6 +126,21 @@ def cmd_dry_run(conf, args):
     return 0
 
 
+def cmd_trial(conf, args):
+    """보내지 않고 읽기만 → 바탕화면 결과 파일"""
+    from .gui import result_lines
+    from .trial import TrialSender
+
+    t = TrialSender(conf)
+    try:
+        res = t.run()
+    finally:
+        t.close()
+    for ln in result_lines(res):
+        print(ln)
+    return 0
+
+
 def cmd_import(conf, args):
     """지난 엑셀 → 하루씩 올림 (같은 날은 통째로 바뀜)"""
     from .outbox import Outbox
@@ -184,6 +209,11 @@ def cmd_setup(conf, args):
         os.makedirs(args.folder, exist_ok=True)
     path = save(conf)
     print("설정 저장:", path)
+    if trial_mode(conf):
+        for b in basic_problems(conf):
+            print("[확인 필요]", b)
+        print("[시험 모드] 클라우드 보관함 설정이 없어 보내지 않고 읽기만 합니다 (바탕화면에 결과 파일).")
+        return 0
     for b in problems(conf):
         print("[확인 필요]", b)
     return 0
@@ -197,6 +227,7 @@ def main(argv=None) -> int:
     sub.add_parser("auto")
     sub.add_parser("check")
     sub.add_parser("dry-run")
+    sub.add_parser("trial")
     sub.add_parser("version")
     im = sub.add_parser("import")
     im.add_argument("folder")
@@ -225,6 +256,7 @@ def main(argv=None) -> int:
             "auto": cmd_auto,
             "check": cmd_check,
             "dry-run": cmd_dry_run,
+            "trial": cmd_trial,
             "import": cmd_import,
             "setup": cmd_setup,
         }[cmd](conf, args)

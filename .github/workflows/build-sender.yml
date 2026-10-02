@@ -27,7 +27,7 @@ jobs:
           PYTHONPATH: src
       - name: exe 만들기 (32비트)
         run: |
-          pyinstaller --noconfirm --onefile --console --name PosReport --paths src --hidden-import xlrd --hidden-import fdb --collect-submodules fdb src/report_sender/__main__.py
+          pyinstaller --noconfirm --onefile --console --name PosReport --paths src --hidden-import xlrd --hidden-import fdb --collect-submodules fdb src/console_main.py
           pyinstaller --noconfirm --onefile --noconsole --name PosReportW --paths src --hidden-import xlrd --hidden-import fdb --collect-submodules fdb src/window_main.py
       - name: 묶기 · 실행 확인
         shell: pwsh

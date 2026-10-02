@@ -120,3 +120,31 @@ class RelayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TrialTest(unittest.TestCase):
+    def test_trial_reads_and_writes_file_without_sending(self):
+        import os
+        import tempfile
+
+        from report_sender.config import trial_mode
+        from report_sender.trial import TrialSender
+
+        conf = {**CONF, "firebase": {"apiKey": "", "projectId": "", "board": "", "email": "", "password": ""}}
+        self.assertTrue(trial_mode(conf))
+        d = tempfile.mkdtemp()
+        t = TrialSender(conf, out_dir=d, today=lambda: dt.date(2026, 10, 1))
+        import report_sender.trial as tr
+
+        old = tr.make_source
+        tr.make_source = lambda c, s: FakeSource({"2026-10-01": [row("자유입장권", 12000, 1)]})
+        try:
+            res = t.run()
+        finally:
+            tr.make_source = old
+        self.assertEqual(res.read, [("2026-10-01", 1, 12000, True)])
+        text = open(res.trial_file, encoding="utf-8-sig").read()
+        self.assertIn("자유입장권", text)
+        self.assertIn("실매출 12,000원", text)
+        self.assertIn("시험 모드라 보내지 않았습니다", "\n".join(result_lines(res)))
+        self.assertTrue(os.path.basename(res.trial_file).startswith("매출보내기_시험결과_"))

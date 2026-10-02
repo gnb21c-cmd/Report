@@ -47,12 +47,19 @@ try {
       if ($fb.kmaKey) { $a += @('--kma-key', $fb.kmaKey) }
       if ($fb.board) { $a += @('--board', $fb.board) } else { $a += @('--board', (Read-Host '  매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤 글자)')) }
     } else {
-      $a += @('--apikey', (Read-Host '  클라우드 보관함 API 키'), '--projectid', (Read-Host '  클라우드 보관함 프로젝트 ID'))
-      $a += @('--board', (Read-Host '  매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤 글자)'))
+      $k = Read-Host '  클라우드 보관함 API 키 (없으면 Enter)'
+      if ($k) {
+        $a += @('--apikey', $k, '--projectid', (Read-Host '  클라우드 보관함 프로젝트 ID'))
+        $a += @('--board', (Read-Host '  매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤 글자)'))
+      }
     }
-    $a += @('--email', (Read-Host ('  보내기 계정 이메일 (예: ' + $pos + '-pos@…)')))
-    $sec = Read-Host '  보내기 계정 비밀번호' -AsSecureString
-    $a += @('--password', [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)))
+    Say '  (클라우드 보관함을 아직 만들지 않았으면 아래는 Enter 만 누르세요 — 보내지 않고 읽기만 하는 "시험 모드"로 설치됩니다)' 'Yellow'
+    $em = Read-Host ('  보내기 계정 이메일 (예: ' + $pos + '-pos@…)')
+    if ($em) {
+      $a += @('--email', $em)
+      $sec = Read-Host '  보내기 계정 비밀번호' -AsSecureString
+      $a += @('--password', [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)))
+    }
     $src = Join-Path $here 'source.json'
     if (Test-Path $src) { $a += @('--source-file', $src) } else { $a += @('--folder', 'C:\PosReport\엑셀') }
   }
@@ -93,6 +100,7 @@ try {
   & $exe check
   Say ''
   Say '설치를 마쳤습니다. 바탕화면 "매출 보내기" 아이콘으로 보낼 수 있습니다.' 'Green'
+  Say '(시험 모드면 보내지 않고, 누를 때마다 바탕화면에 "매출보내기_시험결과" 파일을 남깁니다)'
   Say ('기록 파일: ' + (Join-Path $data 'logs\send.log'))
 } catch {
   Say ''

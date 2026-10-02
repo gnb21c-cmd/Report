@@ -37,6 +37,8 @@ class Result:
     #: 올린 날씨 날 수 · 날씨 오류 (매출 송부와 따로 — 날씨가 안 돼도 매출은 보냄)
     weather: int = 0
     weather_error: str | None = None
+    #: 시험 모드 결과 파일 (보내지 않음)
+    trial_file: str | None = None
 
     @property
     def ok(self) -> bool:

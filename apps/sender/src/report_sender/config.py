@@ -95,3 +95,14 @@ def problems(conf: dict) -> list:
 
 def pos_label(conf: dict) -> str:
     return POS_LABEL.get(conf.get("pos") or "", "?")
+
+
+def trial_mode(conf: dict) -> bool:
+    """보관함(Firebase) 설정이 아직 없음 → 시험 모드 (읽기만, 보내지 않음)"""
+    fb = conf.get("firebase") or {}
+    return not all(str(fb.get(k) or "").strip() for k in ("apiKey", "projectId", "board", "email", "password"))
+
+
+def basic_problems(conf: dict) -> list:
+    """시험 모드에서도 필요한 것 (POS 구분)"""
+    return [p for p in problems(conf) if "pos" in p]

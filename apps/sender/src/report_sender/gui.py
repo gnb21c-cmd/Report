@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import threading
 
-from .config import pos_label
+from .config import pos_label, trial_mode
 from .normalize import won
 
 WEEK = "월화수목금토일"
@@ -25,6 +25,18 @@ def day_label(iso: str) -> str:
 def result_lines(res) -> list:
     """보내기 결과 → 창에 보일 줄들 (시험: tests/test_runner.py)"""
     out = []
+    if res.trial_file:
+        for date, count, net, _ in res.read:
+            out.append(f"✔ {day_label(date)} 상품 {count}개 · 실매출 {won(net)} 읽음")
+        if not res.read and not res.error:
+            out.append("읽은 자료가 없습니다")
+        for w in res.warnings:
+            out.append("⚠ " + w)
+        if res.error:
+            out.append("✖ " + res.error)
+        out.append("시험 모드라 보내지 않았습니다. 바탕화면에 결과 파일을 남겼습니다:")
+        out.append(res.trial_file)
+        return out
     for date, count, net in res.sent:
         out.append(f"✔ {day_label(date)} 상품 {count}개 · 실매출 {won(net)} 보냈습니다")
     if not res.sent and not res.error:
@@ -54,7 +66,8 @@ def run_window(conf: dict, make_sender):
     big = tkfont.Font(family="맑은 고딕", size=18, weight="bold")
     mid = tkfont.Font(family="맑은 고딕", size=12)
 
-    tk.Label(root, text=f"{pos_label(conf)} POS 마감 자료 보내기", font=big, bg="#f9f9f7").pack(pady=(24, 4))
+    title = f"{pos_label(conf)} POS 마감 자료 보내기" + (" (시험 모드)" if trial_mode(conf) else "")
+    tk.Label(root, text=title, font=big, bg="#f9f9f7").pack(pady=(24, 4))
     tk.Label(root, text=f"오늘 {day_label(dt.date.today().isoformat())}", font=mid, bg="#f9f9f7", fg="#52514e").pack()
     src = conf.get("source") or {}
     if src.get("type") == "folder":
