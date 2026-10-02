@@ -174,7 +174,7 @@ function ProductsCard({ board, k, date }: { board: Board; k: MetricKey; date: st
     const all = board.sales.products(from, date);
     const pick = (p: ProductRow) => {
       if (k === "기타") return (p.pos === "cafe" && p.team === "기타") || (p.pos === "kids" && ["기타", "추가인원"].includes(kidsKind({ name: p.name, gross: p.net, net: p.net })));
-      if (k === "visitors") return isCup(p.pos, { name: p.name, cat1: "" }, p.team);
+      if (k === "visitors") return isCup(p.pos, { name: p.name, cat1: "", gross: p.net, net: p.net }, p.team);
       return p.pos === "cafe" && p.team === k;
     };
     return topProducts(all.filter(pick), 50);

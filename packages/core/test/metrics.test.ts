@@ -65,6 +65,12 @@ describe("방문자 추정", () => {
     expect(isCup("cafe", { name: "생맥주 500", cat1: "" }, "기타")).toBe(true);
     expect(isCup("cafe", { name: "소금빵", cat1: "베이커리" }, "베이커리")).toBe(false);
     expect(isCup("kids", { name: "키즈 주스", cat1: "" }, "키즈")).toBe(true);
+    // 2026-10-02 카페 실제 자료에서 찾은 것: 0원 옵션 · 아이스크림은 잔이 아님, 맥주는 잔
+    expect(isCup("cafe", { name: "연하게", cat1: "바리스타", gross: 0, net: 0 }, "바리스타")).toBe(false);
+    expect(isCup("cafe", { name: "상하목장아이스크림", cat1: "바리스타", gross: 37500, net: 37500 }, "바리스타")).toBe(false);
+    expect(isCup("cafe", { name: "디카페인 변경", cat1: "바리스타", gross: 1000, net: 1000 }, "바리스타")).toBe(false);
+    expect(isCup("cafe", { name: "생맥주[켈리]", cat1: "바리스타", gross: 27500, net: 27500 }, "바리스타")).toBe(true);
+    expect(isCup("cafe", { name: "(D_ICE)아메리카노", cat1: "바리스타", gross: 77000, net: 77000 }, "바리스타")).toBe(true);
   });
   it("잔 수 × 0.96 반올림", () => {
     expect(visitorsFromCups(29)).toBe(28);
