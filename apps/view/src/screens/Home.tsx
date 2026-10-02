@@ -7,7 +7,7 @@
    ⑤ 키즈 입장권: 네이버 예약(= 입장 발행 − 현장, 고칠 수 있음) · 현장 구매 · 이벤트 무료입장
    상자를 누르면 그 숫자의 추세 그래프 · 분석 설명 화면으로
    ============================================================ */
-import { WeatherPanel } from "../ui/WeatherPanel";
+import { HeroBox } from "../ui/WeatherPanel";
 import { BOXES, changePct, comparable, count, holidayName, pct, POS_LABEL, shortLabel, won, wonMan, type Board, type Dashboard, type DayWeather, type MetricKey, type Metrics } from "@report/core";
 
 export type Open = (v: { name: "metric"; key: MetricKey } | { name: "cum"; kind: "month" | "year" }) => void;
@@ -57,17 +57,20 @@ export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: O
         )
       )}
 
-      <div className="card hero hero-split">
-        <button className="hero-main tap" onClick={() => open({ name: "metric", key: "total" })}>
-          <span className="stat-label">
+      <HeroBox
+        label={
+          <>
             {shortLabel(d.date)}
             {hol ? ` · ${hol}` : ""} 총 매출 <Chevron />
-          </span>
-          <span className="hero-value">{won(day.total)}</span>
-          <Delta now={day.total} before={d.prevWeek.m.total} label={`지난주 ${d.weekday}요일`} />
-        </button>
-        <WeatherPanel date={d.date} w={weather} />
-      </div>
+          </>
+        }
+        value={won(day.total)}
+        date={d.date}
+        w={weather}
+        onClick={() => open({ name: "metric", key: "total" })}
+      >
+        <Delta now={day.total} before={d.prevWeek.m.total} label={`지난주 ${d.weekday}요일`} />
+      </HeroBox>
 
       {/* 팀별 섹터 버튼 — 다섯 개가 한 화면 폭에 (금액은 만 단위, 정확한 금액은 눌러서 상세에서) */}
       <div className="sectors" role="list">

@@ -32,7 +32,7 @@ import {
   type WeatherMap,
 } from "@report/core";
 import { ChartCard, Legend } from "../charts/common";
-import { WeatherPanel } from "../ui/WeatherPanel";
+import { HeroBox } from "../ui/WeatherPanel";
 import { LineChart, type Line } from "../charts/LineChart";
 import { Delta } from "./Home";
 
@@ -408,15 +408,10 @@ export function Detail(props: {
     <>
       <DetailHeader title={METRIC_LABEL[k]} date={date} onBack={props.onBack} onDate={props.onDate} minDate={props.minDate} maxDate={props.maxDate} />
       <main className="content">
-        <section className="card hero">
-          <div className="stat-label">
-            {shortLabel(date)} {METRIC_LABEL[k]}
-          </div>
-          <div className="hero-value">{formatMetric(k, v)}</div>
+        <HeroBox label={`${shortLabel(date)} ${METRIC_LABEL[k]}`} value={formatMetric(k, v)} date={date} w={props.weather[date]}>
           <Delta now={v} before={pwv} label="지난주 같은 요일" money={false} />
-          {pwv != null && <div className="note">지난주 {formatMetric(k, pwv)}</div>}
-          <WeatherPanel date={date} w={props.weather[date]} compact />
-        </section>
+          {pwv != null && <span className="note">지난주 {formatMetric(k, pwv)}</span>}
+        </HeroBox>
         <TrendCard board={board} k={k} date={date} onDate={props.onDate} weather={props.weather} />
         <section className="card">
           <h2>분석</h2>

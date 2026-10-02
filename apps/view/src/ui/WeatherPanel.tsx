@@ -1,3 +1,4 @@
+import type React from "react";
 /* 총 매출 상자 오른쪽 — 2 × 2 칸: [기간 스티커] [날씨] / [최고기온] [최저기온] (지난 날도 쌓인 자료로 그대로) */
 import { seasonOf, temp, WEATHER_SOURCE_TEXT, type DayWeather } from "@report/core";
 
@@ -36,5 +37,20 @@ export function WeatherPanel({ date, w, compact = false }: { date: string; w?: D
         </span>
       </div>
     </div>
+  );
+}
+
+/** 금액 상자 + 날씨 — 위: 날짜 줄(한 줄 전체) / 아래 왼쪽: 금액·비교, 오른쪽: 날씨 2 × 2 (폰에서도 옆에) */
+export function HeroBox(props: { label: React.ReactNode; value: string; children?: React.ReactNode; date: string; w?: DayWeather; onClick?: () => void }) {
+  const Tag = props.onClick ? "button" : "div";
+  return (
+    <Tag className={`card hero hero-box${props.onClick ? " tap" : ""}`} onClick={props.onClick}>
+      <span className="stat-label hero-label">{props.label}</span>
+      <span className="hero-main">
+        <span className="hero-value">{props.value}</span>
+        {props.children}
+      </span>
+      <WeatherPanel date={props.date} w={props.w} />
+    </Tag>
   );
 }
