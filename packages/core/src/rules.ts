@@ -44,6 +44,12 @@ export function isCup(pos: PosId, line: Pick<SaleLine, "name" | "cat1"> & Partia
   return CUP_NAME.test(name) || /주류|맥주|음료/.test(line.cat1 || "");
 }
 
+/** 한 상품이 몇 잔인지 — '맥주2+감자튀김' · '와인2+리코타샐러드M' 처럼 이름에 잔 수가 붙은 세트는 그 수만큼 */
+export function cupsPerItem(name: string): number {
+  const m = (name || "").match(/(?:맥주|와인|하이볼|에이드|커피|라떼|아메리카노)\s*(\d)\s*(?:잔|ea)?\s*\+/i);
+  return m ? Math.max(1, Number(m[1])) : 1;
+}
+
 export function visitorsFromCups(cups: number): number {
   return Math.max(0, Math.round(cups * VISITOR_FACTOR));
 }

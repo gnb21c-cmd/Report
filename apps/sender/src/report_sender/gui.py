@@ -64,7 +64,7 @@ def office_lines(results: list) -> list:
         out += ["  " + ln for ln in result_lines(res)]
         trial_file = trial_file or res.trial_file
     if trial_file:
-        out += ["", "시험 모드라 보내지 않았습니다. 바탕화면에 결과 파일을 남겼습니다:", trial_file]
+        out += ["", "시험 모드라 보내지 않았습니다. 결과 파일 (메모장으로 열림):", trial_file]
     return out
 
 

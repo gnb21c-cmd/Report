@@ -12,7 +12,7 @@
    ============================================================ */
 import { addDays, addMonths, dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekday, weekdayLabel } from "./dates";
 import { kidsKind, teamOf } from "./classify";
-import { isCup, isOffDay, kidsPrice, visitorsFromCups, VISITOR_FACTOR } from "./rules";
+import { cupsPerItem, isCup, isOffDay, kidsPrice, visitorsFromCups, VISITOR_FACTOR } from "./rules";
 import { count, pct, won } from "./format";
 import type { SalesIndex } from "./report";
 import { seasonOf, temp, WEATHER_SOURCE_TEXT, type WeatherMap } from "./weather";
@@ -150,7 +150,7 @@ export class Board {
     for (const s of this.sales.day(date)) {
       m.posNet += s.net;
       const team = teamOf(s.pos, s);
-      if (isCup(s.pos, s, team)) cups += s.qty;
+      if (isCup(s.pos, s, team)) cups += s.qty * cupsPerItem(s.name);
       if (s.pos === "cafe") {
         m.box[team === "키즈" ? "기타" : team] += s.net;
         continue;

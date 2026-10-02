@@ -224,7 +224,7 @@ def cmd_setup(conf, args):
     if trial_mode(conf):
         for b in basic_problems(conf):
             print("[확인 필요]", b)
-        print("[시험 모드] 클라우드 보관함 설정이 없어 보내지 않고 읽기만 합니다 (바탕화면에 결과 파일).")
+        print("[시험 모드] 클라우드 보관함 설정이 없어 보내지 않고 읽기만 합니다 (결과 파일은 C:\\PosReport\\시험결과).")
         return 0
     for b in problems(conf):
         print("[확인 필요]", b)

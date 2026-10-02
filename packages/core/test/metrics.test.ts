@@ -72,6 +72,13 @@ describe("방문자 추정", () => {
     expect(isCup("cafe", { name: "생맥주[켈리]", cat1: "바리스타", gross: 27500, net: 27500 }, "바리스타")).toBe(true);
     expect(isCup("cafe", { name: "(D_ICE)아메리카노", cat1: "바리스타", gross: 77000, net: 77000 }, "바리스타")).toBe(true);
   });
+  it("세트 메뉴는 이름의 잔 수만큼 (2026-10-01 카페: 맥주2+감자튀김 · 와인2+리코타샐러드M)", async () => {
+    const { cupsPerItem } = await import("../src");
+    expect([cupsPerItem("맥주2+감자튀김"), cupsPerItem("와인2+리코타샐러드M"), cupsPerItem("[ICE] 아메리카노"), cupsPerItem("생맥주[켈리]")]).toEqual([2, 2, 1, 1]);
+    expect(isCup("cafe", { name: "맥주2+감자튀김", cat1: "키친", gross: 28500, net: 28500 }, "키친")).toBe(true);
+    expect(isCup("cafe", { name: "밥으로 변경", cat1: "키친", gross: 0, net: 0 }, "키친")).toBe(false);
+    expect(isCup("cafe", { name: "+ 헤이즐넛시럽", cat1: "바리스타", gross: 500, net: 500 }, "바리스타")).toBe(false);
+  });
   it("잔 수 × 0.96 반올림", () => {
     expect(visitorsFromCups(29)).toBe(28);
     expect(visitorsFromCups(100)).toBe(96);
