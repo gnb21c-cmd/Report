@@ -15,6 +15,7 @@ import { kidsKind, teamOf } from "./classify";
 import { isCup, isOffDay, kidsPrice, visitorsFromCups, VISITOR_FACTOR } from "./rules";
 import { count, pct, won } from "./format";
 import type { SalesIndex } from "./report";
+import { seasonOf, temp, WEATHER_SOURCE_TEXT, type WeatherMap } from "./weather";
 
 export type BoxKey = "바리스타" | "베이커리" | "키친" | "키즈입장료" | "기타";
 export const BOXES: BoxKey[] = ["바리스타", "베이커리", "키친", "키즈입장료", "기타"];
@@ -477,4 +478,30 @@ export function cumulative(board: Board, kind: "month" | "year", date: string): 
   if (cur.visitors > 0) lines.push(`추정 방문자 ${count(cur.visitors, "명")}, 1인 평균 ${won(cur.avgSpend || 0)}.`);
   if (cur.naver + cur.walkIn > 0) lines.push(`키즈 입장권 ${count(cur.naver + cur.walkIn, "장")} (네이버 ${count(cur.naver, "장")} · 현장 ${count(cur.walkIn, "장")}).`);
   return { kind, cur, ly: lyR, lyFull, prev, lines };
+}
+
+/* ---------- 날씨와 함께 본 분석 ---------- */
+
+/** 그날 날씨·기간 한 줄 + 최근 90일 비·눈 온 날과 맑은·구름 낀 날의 평균 비교 (날씨 자료가 있는 날만) */
+export function analyzeWeather(board: Board, key: MetricKey, date: string, weather: WeatherMap): string[] {
+  const out: string[] = [];
+  const w = weather[date];
+  const s = seasonOf(date);
+  if (w)
+    out.push(
+      `이날 날씨 ${w.icon} ${w.label}, 최고 ${temp(w.tempMax)} · 최저 ${temp(w.tempMin)}${w.rainMm ? ` · 강수 ${w.rainMm}mm` : ""} (${WEATHER_SOURCE_TEXT[w.source]}) · ${s.emoji} ${s.kind}${s.name ? `(${s.name})` : ""}.`,
+    );
+  else out.push(`이날 날씨 자료가 없습니다 · ${s.emoji} ${s.kind}${s.name ? `(${s.name})` : ""}.`);
+  const wet: number[] = [];
+  const dry: number[] = [];
+  for (const p of dailySeries(board, key, date, 90)) {
+    const x = weather[p.x];
+    if (p.v == null || !x) continue;
+    (x.key === "rain" || x.key === "heavyrain" || x.key === "snow" ? wet : dry).push(p.v);
+  }
+  const a = mean(wet);
+  const b = mean(dry);
+  if (wet.length >= 3 && dry.length >= 3 && a != null && b != null && b > 0)
+    out.push(`최근 90일 비·눈 온 날(${wet.length}일) 하루 평균 ${formatMetric(key, Math.round(a))} — 맑거나 흐린 날 ${formatMetric(key, Math.round(b))}보다 ${updown(change(a, b))}.`);
+  return out;
 }

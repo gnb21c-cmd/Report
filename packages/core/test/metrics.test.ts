@@ -185,3 +185,21 @@ describe("누계 상세", () => {
     expect(v.lines.some((l) => l.includes("채웠습니다"))).toBe(false);
   });
 });
+
+describe("날씨와 함께 본 분석", () => {
+  it("그날 날씨·기간 한 줄, 비 온 날과 맑은 날 평균 비교", async () => {
+    const { analyzeWeather } = await import("../src");
+    const batches: DayBatch[] = [];
+    const weather: Record<string, any> = {};
+    for (let i = 1; i <= 30; i++) {
+      const d = `2026-09-${String(i).padStart(2, "0")}`;
+      const rainy = i % 5 === 0;
+      batches.push(batch("cafe", d, [line("아메리카노", 10, rainy ? 30000 : 60000, "바리스타")]));
+      weather[d] = { date: d, key: rainy ? "rain" : "sunny", label: rainy ? "비" : "맑음", icon: rainy ? "🌧️" : "☀️", tempMax: 25, tempMin: 15, rainMm: rainy ? 5 : 0, source: "observed" };
+    }
+    const lines = analyzeWeather(boardOf(batches), "total", "2026-09-30", weather);
+    expect(lines[0]).toContain("🌧️ 비, 최고 25° · 최저 15° · 강수 5mm (기상청 관측)");
+    expect(lines[1]).toContain("비·눈 온 날(6일) 하루 평균 30,000원");
+    expect(lines[1]).toContain("-50.0% 낮습니다");
+  });
+});

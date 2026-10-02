@@ -125,3 +125,8 @@ class FirebaseRelay:
 
     def put_status(self, pos: str, status: dict):
         return self.put(f"boards/{self.board}/devices/{pos}", {**status, "at": dt.datetime.now(dt.timezone.utc)})
+
+    def put_weather(self, day: dict):
+        """boards/{열쇠}/weather/{날짜} — 보고 앱이 at 으로 새로 온 것만 받음"""
+        body = {k: day.get(k) for k in ("date", "key", "label", "icon", "tempMax", "tempMin", "rainMm", "source", "basis")}
+        return self.put(f"boards/{self.board}/weather/{day['date']}", {**body, "at": dt.datetime.now(dt.timezone.utc)})

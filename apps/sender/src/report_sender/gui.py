@@ -36,6 +36,8 @@ def result_lines(res) -> list:
         out.append("⚠ " + w)
     if res.error:
         out.append("✖ " + res.error)
+    if res.weather_error:
+        out.append("⚠ 날씨: " + res.weather_error + " (매출은 보냈습니다)")
     if res.pending:
         out.append(f"아직 못 보낸 날 {res.pending}일 — PC 에 보관했다가 다음에 보냅니다")
     return out

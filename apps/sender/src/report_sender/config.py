@@ -7,6 +7,7 @@
     "email": "cafe-pos@…", "password": "…",  이 PC 전용 계정 (자기 POS 자료만 쓸 수 있음)
     "board": "…"                          매장 열쇠 (보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
   },
+  "weather": { "serviceKey": "…" },     기상청 공공데이터포털 인증키 (없으면 날씨는 건너뜀). 위치 기본값: 격자 61·119, 관측소 119 수원
   "catchUpDays": 3,                      보낼 때 지난 며칠도 다시 맞춰 봄 (늦은 취소·못 보낸 날)
   "source": { "type": "folder" | "firebird" | "none", … }   POS 자료 읽는 방법 (sources.py)
 }
@@ -22,6 +23,7 @@ DEFAULTS = {
     "pos": "",
     "firebase": {"apiKey": "", "projectId": "", "email": "", "password": "", "board": ""},
     "catchUpDays": 3,
+    "weather": {"serviceKey": ""},
     "source": {"type": "none"},
 }
 
@@ -59,6 +61,7 @@ def load(path: str | None = None, must_exist: bool = True) -> dict:
     conf = {**DEFAULTS, **raw}
     conf["firebase"] = {**DEFAULTS["firebase"], **(raw.get("firebase") or {})}
     conf["source"] = {**DEFAULTS["source"], **(raw.get("source") or {})}
+    conf["weather"] = {**DEFAULTS["weather"], **(raw.get("weather") or {})}
     conf["_path"] = path
     return conf
 

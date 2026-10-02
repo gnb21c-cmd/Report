@@ -340,6 +340,103 @@ button.stat {
   color: var(--muted);
   flex-shrink: 0;
 }
+/* 총 매출 + 날씨 */
+.hero-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.hero-main {
+  background: none;
+  color: var(--text-primary);
+  padding: 0;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  font-weight: 400;
+  border-radius: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.hero-main .stat-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.hero.hero-split .hero-value {
+  font-size: clamp(20px, 6vw, 34px);
+  white-space: nowrap;
+  letter-spacing: -0.8px;
+}
+.hero-main > * {
+  min-width: 0;
+}
+.hero-main .delta {
+  display: block;
+  white-space: normal;
+}
+.wx {
+  display: grid;
+  gap: 3px;
+  padding-left: 10px;
+  border-left: 1px solid var(--grid);
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.wx-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.wx-emoji {
+  width: 18px;
+  text-align: center;
+  font-size: 15px;
+}
+.wx-text b {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.wx-text small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.season {
+  justify-self: start;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.season.s-성수기 {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.season.s-평상시 {
+  background: var(--track);
+  color: var(--accent);
+}
+.season.s-비수기 {
+  background: var(--page);
+  color: var(--text-secondary);
+}
+.wx-cell {
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.wx.compact {
+  border-left: 0;
+  padding-left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
 .hero-top {
   display: flex;
   justify-content: space-between;

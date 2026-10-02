@@ -12,6 +12,11 @@ service cloud.firestore {
     function email() {
       return request.auth != null && request.auth.token.email != null ? request.auth.token.email.lower() : "";
     }
+    function isAnySender(board) {
+      return email() != ""
+        && exists(/databases/$(database)/documents/senders/$(email()))
+        && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
+    }
     function isSender(board, pos) {
       return email() != ""
         && exists(/databases/$(database)/documents/senders/$(email()))
@@ -28,6 +33,14 @@ service cloud.firestore {
           && request.resource.data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
           && request.resource.data.rows is string
           && request.resource.data.rows.size() < 900000;
+      }
+
+      // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜. POS PC 가 송부할 때 함께 씀
+      match /weather/{date} {
+        allow read: if true;
+        allow write: if isAnySender(board)
+          && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.date == date;
       }
 
       // POS PC 송부 상태

@@ -68,7 +68,7 @@ export function App() {
   if (view.name === "metric")
     return (
       <div className="app">
-        <Detail board={board} k={view.key} adjust={d.adjusts[date]} onSaveAdjust={d.setAdjust} {...nav} />
+        <Detail board={board} k={view.key} adjust={d.adjusts[date]} onSaveAdjust={d.setAdjust} weather={d.weather} {...nav} />
       </div>
     );
   if (view.name === "cum")
@@ -92,7 +92,7 @@ export function App() {
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.batches.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home board={board} d={dashboard(board, date)} open={open} />}
+        {d.phase === "loading" && !d.batches.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home board={board} d={dashboard(board, date)} open={open} weather={d.weather[date]} />}
       </main>
     </div>
   );

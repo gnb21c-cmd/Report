@@ -17,6 +17,7 @@ from .normalize import rows_hash
 from .outbox import Outbox
 from .relay import FirebaseRelay, RelayError
 from .sources import SourceError, make_source
+from . import weather as wx
 
 log = logging.getLogger("report_sender")
 
@@ -33,6 +34,9 @@ class Result:
     warnings: list = field(default_factory=list)
     #: 멈춘 이유 (없으면 None)
     error: str | None = None
+    #: 올린 날씨 날 수 · 날씨 오류 (매출 송부와 따로 — 날씨가 안 돼도 매출은 보냄)
+    weather: int = 0
+    weather_error: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -44,13 +48,16 @@ def days_to_read(today: dt.date, catch_up: int) -> list:
 
 
 class Sender:
-    def __init__(self, conf: dict, outbox: Outbox | None = None, source=None, relay=None, today=None):
+    def __init__(self, conf: dict, outbox: Outbox | None = None, source=None, relay=None, today=None, kma=None, now=None):
         self.conf = conf
         self.pos = conf["pos"]
         self.outbox = outbox or Outbox(os.path.join(data_dir(), "outbox.db"))
         self.source = source if source is not None else make_source(conf.get("source") or {}, self.outbox)
         self.relay = relay or FirebaseRelay(conf.get("firebase") or {})
         self.today = today or dt.date.today
+        self.now = now or dt.datetime.now
+        key = ((conf.get("weather") or {}).get("serviceKey") or "").strip()
+        self.kma = kma if kma is not None else (wx.Kma(conf["weather"]) if key else None)
 
     def collect(self, res: Result, force: bool = False):
         """POS 자료를 읽어 PC 보관함에 넣음"""
@@ -84,6 +91,24 @@ class Sender:
             log.info("보냄 %s %s행", item["date"], len(item["rows"]))
         res.pending = self.outbox.pending()
 
+    def sync_weather(self, res: Result):
+        """기상청 날씨 → 보관함 (관측: 아직 없는 날 ~ 어제, 처음이면 since 부터 / 오늘: 예보). 실패해도 매출과는 상관없음"""
+        if not self.kma:
+            return
+        try:
+            today = self.today()
+            span = wx.days_to_fetch(today, self.outbox.weather_observed(), self.kma.conf.get("since") or "2025-01-01")
+            days = self.kma.observed(*span) if span else []
+            if self.outbox.weather_source(today.isoformat()) != "observed":
+                days += [d for d in self.kma.forecast(self.now()) if d["date"] == today.isoformat()]
+            for d in days:
+                self.relay.put_weather(d)
+                self.outbox.set_weather(d["date"], d["source"])
+                res.weather += 1
+        except (wx.WeatherError, RelayError) as e:
+            res.weather_error = str(e)
+            log.warning("날씨 실패: %s", e)
+
     def report_status(self, res: Result):
         """보고 앱 '송부 상태'용 (실패해도 넘어감)"""
         last = self.outbox.last_sent()
@@ -108,6 +133,8 @@ class Sender:
         res.error = None
         self.flush(res)  # 읽기에 실패해도 남아 있던 것은 보냄
         res.error = source_error or res.error
+        if not res.pending:
+            self.sync_weather(res)
         self.report_status(res)
         return res
 

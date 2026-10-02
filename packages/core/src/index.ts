@@ -8,3 +8,4 @@ export * from "./report";
 export * from "./metrics";
 export * from "./sample";
 export * from "./format";
+export * from "./weather";

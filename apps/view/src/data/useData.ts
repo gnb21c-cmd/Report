@@ -1,7 +1,8 @@
 /* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 → 폰 저장소 → 새로 온 것만 받기 */
 import { useCallback, useEffect, useState } from "react";
-import { addDays, sampleUntilYesterday, todayKst, type Adjusts, type DayBatch, type KidsAdjust, type PosId } from "@report/core";
-import { boardKey, fetchAdjusts, fetchDays, fetchDevices, firebaseConfig, saveAdjust, type DeviceStatus } from "./firebase";
+import { addDays, sampleUntilYesterday, todayKst, type Adjusts, type DayBatch, type KidsAdjust, type PosId, type WeatherKey, type WeatherMap } from "@report/core";
+import { boardKey, fetchAdjusts, fetchDays, fetchDevices, fetchWeather, firebaseConfig, saveAdjust, type DeviceStatus } from "./firebase";
+import demoWeatherRaw from "./demoWeather.json";
 import { clearCached, loadCached, local, saveCached } from "./cache";
 
 export type Phase = "setup" | "nokey" | "loading" | "ready";
@@ -10,6 +11,8 @@ export interface DataState {
   phase: Phase;
   batches: DayBatch[];
   adjusts: Adjusts;
+  /** 날짜별 날씨 (쌓아 두고 지난 날도 봄) */
+  weather: WeatherMap;
   devices: DeviceStatus[];
   /** 마지막으로 새 자료를 확인한 시각 */
   syncedAt: string | null;
@@ -22,6 +25,17 @@ const SYNCED = "report.syncedAt";
 const CURSOR = "report.cursor";
 const ADJUSTS = "report.adjusts";
 const DEMO_ADJUSTS = "report.demoAdjusts";
+const WEATHER = "report.weather";
+const WEATHER_CURSOR = "report.weatherCursor";
+
+const LABEL: Record<WeatherKey, [string, string]> = { sunny: ["맑음", "☀️"], cloudy: ["구름", "☁️"], rain: ["비", "🌧️"], heavyrain: ["강우", "⛈️"], snow: ["눈", "❄️"] };
+/** 체험판: 기상청에서 받아 둔 실제 날씨 (2025-01-01 ~ 만든 날) */
+function demoWeather(): WeatherMap {
+  const out: WeatherMap = {};
+  for (const [date, [key, tempMax, tempMin, rainMm, src]] of Object.entries(demoWeatherRaw as unknown as Record<string, [WeatherKey, number | null, number | null, number | null, string]>))
+    out[date] = { date, key, label: LABEL[key][0], icon: LABEL[key][1], tempMax, tempMin, rainMm, source: src === "o" ? "observed" : "forecast" };
+  return out;
+}
 
 function demoDevices(today: string): DeviceStatus[] {
   const y = addDays(today, -1);
@@ -43,6 +57,7 @@ export function useData() {
     phase: __DEMO__ ? "ready" : !cfg ? "setup" : !board ? "nokey" : "loading",
     batches: __DEMO__ ? sampleUntilYesterday(todayKst()) : [],
     adjusts: (__DEMO__ ? local.get<Adjusts>(DEMO_ADJUSTS) : local.get<Adjusts>(ADJUSTS)) || {},
+    weather: __DEMO__ ? demoWeather() : local.get<WeatherMap>(WEATHER) || {},
     devices: __DEMO__ ? demoDevices(todayKst()) : [],
     syncedAt: __DEMO__ ? new Date().toISOString() : local.get<string>(SYNCED),
     syncing: false,
@@ -60,11 +75,22 @@ export function useData() {
       const got = await fetchDays(cfg, board, local.get<string>(CURSOR));
       await saveCached(got);
       if (got.length) local.set(CURSOR, got[got.length - 1].sentAt);
-      const [adjusts, devices] = await Promise.all([fetchAdjusts(cfg, board), fetchDevices(cfg, board).catch(() => [] as DeviceStatus[])]);
+      const [adjusts, devices, wx] = await Promise.all([
+        fetchAdjusts(cfg, board),
+        fetchDevices(cfg, board).catch(() => [] as DeviceStatus[]),
+        fetchWeather(cfg, board, local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })),
+      ]);
       local.set(ADJUSTS, adjusts);
+      let weather = local.get<WeatherMap>(WEATHER) || {};
+      if (wx.days.length) {
+        weather = { ...weather };
+        for (const w of wx.days) weather[w.date] = w;
+        local.set(WEATHER, weather);
+        if (wx.last) local.set(WEATHER_CURSOR, wx.last);
+      }
       const now = new Date().toISOString();
       local.set(SYNCED, now);
-      set((p) => ({ ...p, batches: got.length ? [...p.batches, ...got] : p.batches, adjusts, devices, syncedAt: now, syncing: false }));
+      set((p) => ({ ...p, batches: got.length ? [...p.batches, ...got] : p.batches, adjusts, devices, weather, syncedAt: now, syncing: false }));
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }
@@ -101,6 +127,8 @@ export function useData() {
   /** 저장된 자료를 지우고 처음부터 다시 받음 */
   const reload = useCallback(async () => {
     local.set(CURSOR, null);
+    local.set(WEATHER_CURSOR, null);
+    local.set(WEATHER, null);
     await clearCached();
     set((p) => ({ ...p, batches: [] }));
     await sync();

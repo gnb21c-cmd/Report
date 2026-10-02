@@ -92,3 +92,15 @@ describe("좁은 칸 금액", () => {
     expect([wonMan(901600), wonMan(3500000), wonMan(12345678), wonMan(125000000), wonMan(9000), wonMan(0)]).toEqual(["90.2만", "350만", "1235만", "1.25억", "9,000원", "0원"]);
   });
 });
+
+describe("기간 스티커 · 기온", () => {
+  it("성수기 · 비수기 · 평상시 (해를 넘기는 기간 포함)", async () => {
+    const { seasonOf, temp } = await import("../src");
+    expect(seasonOf("2026-08-01").kind).toBe("성수기");
+    expect(seasonOf("2026-01-15")).toMatchObject({ kind: "성수기", name: "겨울방학" });
+    expect(seasonOf("2026-12-30").kind).toBe("성수기");
+    expect(seasonOf("2026-03-10")).toMatchObject({ kind: "비수기", emoji: "🍃" });
+    expect(seasonOf("2026-10-01")).toMatchObject({ kind: "평상시", emoji: "🙂" });
+    expect([temp(22.25), temp(-3), temp(null)]).toEqual(["22.3°", "-3°", "—"]);
+  });
+});

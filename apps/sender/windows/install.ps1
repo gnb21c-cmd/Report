@@ -44,6 +44,7 @@ try {
     if (Test-Path $fbFile) {
       $fb = Get-Content $fbFile -Raw -Encoding UTF8 | ConvertFrom-Json
       $a += @('--apikey', $fb.apiKey, '--projectid', $fb.projectId)
+      if ($fb.kmaKey) { $a += @('--kma-key', $fb.kmaKey) }
       if ($fb.board) { $a += @('--board', $fb.board) } else { $a += @('--board', (Read-Host '  매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤 글자)')) }
     } else {
       $a += @('--apikey', (Read-Host '  클라우드 보관함 API 키'), '--projectid', (Read-Host '  클라우드 보관함 프로젝트 ID'))

@@ -43,6 +43,15 @@ cd ../../firebase && npx firebase-tools deploy --only hosting,firestore:rules --
   `senders` 두 문서의 `board` 와 POS PC 설정(install.bat 다시)을 바꾸고 새 주소를 다시 보냅니다 (옛 자료는 옮겨 드림).
 - GitHub 저장소 변수 `FIREBASE_API_KEY` · `FIREBASE_PROJECT_ID` 와 비밀 값 `REPORT_BOARD_KEY`(열쇠)를 넣어 두면 A 설치 묶음에 들어가 설치 때 묻지 않습니다.
 
+## ②-1 기상청 날씨 (아스타나와 같은 키)
+
+- 아스타나 때 공공데이터포털에서 받은 **기상청 인증키(Decoding)** 를 그대로 씁니다. 필요한 서비스: 단기예보 조회서비스 · 지상(종관, ASOS) 일자료 조회서비스
+- 서버가 없으므로 **POS PC 의 A 가 송부할 때** 기상청에서 받아 보관함 `boards/{열쇠}/weather/{날짜}` 에 쌓습니다.
+  - 지난 날: 관측 확정값 (관측소 119 수원). 처음 한 번은 2025-01-01 부터 모두 채움
+  - 오늘: 단기예보 (매장 격자 61·119, 오늘 02시 발표의 최고·최저). 다음 날 관측값이 오면 관측으로 바뀜
+  - 날씨가 실패해도 매출 송부는 그대로 됩니다 (보내기 창에 "⚠ 날씨: …" 로만 표시)
+- 키는 GitHub 비밀 값 `KMA_SERVICE_KEY` 로 넣어 두면 A 설치 묶음에 들어갑니다 (또는 `PosReport.exe setup --kma-key …`).
+
 ## ③ POS PC 에 A 설치 (매장, PC 마다 10분)
 
 1. GitHub → Actions → **Build sender** → Run workflow → 끝나면 `pos-report-sender` 내려받기 → USB 로 POS PC 에 옮겨 압축 풀기

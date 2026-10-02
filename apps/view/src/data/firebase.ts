@@ -6,7 +6,7 @@
    - 쓰기: 네이버 입장권 고친 값(adjust/<날짜>)만. 매출(days)은 POS PC 계정만 쓸 수 있음 (firebase/firestore.rules)
    A 가 쓰는 모양: apps/sender/src/report_sender/relay.py day_doc
    ============================================================ */
-import type { Adjusts, DayBatch, KidsAdjust, PosId, SaleLine } from "@report/core";
+import type { Adjusts, DayBatch, DayWeather, KidsAdjust, PosId, SaleLine, WeatherKey } from "@report/core";
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -167,4 +167,24 @@ export async function saveAdjust(cfg: FirebaseConfig, board: string, date: strin
       },
     }),
   });
+}
+
+/** 날씨 — at(올린 시각) 이 after 뒤인 것만 (처음이면 전부). A 가 기상청에서 받아 쌓아 둔 값 */
+export async function fetchWeather(cfg: FirebaseConfig, board: string, after: string | null): Promise<{ days: DayWeather[]; last: string | null }> {
+  const days: DayWeather[] = [];
+  let cursor = after;
+  for (let page = 0; page < 20; page++) {
+    const query: any = { structuredQuery: { from: [{ collectionId: "weather" }], orderBy: [{ field: { fieldPath: "at" }, direction: "ASCENDING" }], limit: 300 } };
+    if (cursor) query.structuredQuery.where = { fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN", value: { timestampValue: cursor } } };
+    const res = await call(`${base(cfg, board)}:runQuery?key=${cfg.apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(query) });
+    const got = (Array.isArray(res) ? res : []).map((r: any) => r.document).filter(Boolean);
+    for (const d of got) {
+      const f = fieldsOf(d);
+      cursor = f.at || cursor;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) continue;
+      days.push({ date: f.date, key: f.key as WeatherKey, label: f.label, icon: f.icon, tempMax: f.tempMax ?? null, tempMin: f.tempMin ?? null, rainMm: f.rainMm ?? null, source: f.source === "observed" ? "observed" : "forecast" });
+    }
+    if (got.length < 300) break;
+  }
+  return { days, last: cursor };
 }

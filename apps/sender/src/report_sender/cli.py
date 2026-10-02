@@ -174,6 +174,8 @@ def cmd_setup(conf, args):
         v = getattr(args, k.lower())
         if v:
             fb[k] = v
+    if args.kma_key:
+        conf.setdefault("weather", {})["serviceKey"] = args.kma_key
     if args.source_file:
         with open(args.source_file, encoding="utf-8-sig") as f:
             conf["source"] = json.load(f)
@@ -207,6 +209,7 @@ def main(argv=None) -> int:
     st.add_argument("--email")
     st.add_argument("--password")
     st.add_argument("--board", help="매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤)")
+    st.add_argument("--kma-key", help="기상청 공공데이터포털 인증키")
     st.add_argument("--folder", help="엑셀 폴더 (엑셀 방식으로 정함)")
     st.add_argument("--source-file", help="읽는 방법 JSON 파일")
     args = p.parse_args(argv)

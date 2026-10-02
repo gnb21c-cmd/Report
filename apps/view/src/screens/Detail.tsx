@@ -7,6 +7,8 @@ import { useMemo, useState } from "react";
 import {
   addDays,
   analyze,
+  analyzeWeather,
+  temp,
   BOXES,
   count,
   dailySeries,
@@ -27,8 +29,10 @@ import {
   type KidsAdjust,
   type MetricKey,
   type ProductRow,
+  type WeatherMap,
 } from "@report/core";
 import { ChartCard, Legend } from "../charts/common";
+import { WeatherPanel } from "../ui/WeatherPanel";
 import { LineChart, type Line } from "../charts/LineChart";
 import { Delta } from "./Home";
 
@@ -76,7 +80,7 @@ export function DetailHeader({ title, date, onBack, onDate, minDate, maxDate }: 
 
 const mdLabel = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
 
-function TrendCard({ board, k, date, onDate }: { board: Board; k: MetricKey; date: string; onDate: (d: string) => void }) {
+function TrendCard({ board, k, date, onDate, weather }: { board: Board; k: MetricKey; date: string; onDate: (d: string) => void; weather: WeatherMap }) {
   const [range, setRange] = useState<Range>("30");
   const money = isMoney(k);
   const fmt = (v: number) => formatMetric(k, v);
@@ -120,6 +124,7 @@ function TrendCard({ board, k, date, onDate }: { board: Board; k: MetricKey; dat
           <thead>
             <tr>
               <th>{range === "12m" ? "달" : "날짜"}</th>
+              {range !== "12m" && <th>날씨</th>}
               {series.map((s) => (
                 <th key={s.label} className="num">
                   {s.label}
@@ -132,6 +137,9 @@ function TrendCard({ board, k, date, onDate }: { board: Board; k: MetricKey; dat
               .map((x, i) => (
                 <tr key={x} className={i === selected ? "sel" : ""}>
                   <td>{range === "12m" ? x.replace("-", ".") : shortLabel(x)}</td>
+                  {range !== "12m" && (
+                    <td className="wx-cell">{weather[x] ? `${weather[x].icon} ${temp(weather[x].tempMax)}/${temp(weather[x].tempMin)}` : "—"}</td>
+                  )}
                   {series.map((s) => (
                     <td key={s.label} className="num">
                       {s.values[i] == null ? "—" : fmt(s.values[i]!)}
@@ -368,13 +376,14 @@ export function Detail(props: {
   onDate: (d: string) => void;
   onBack: () => void;
   onSaveAdjust: (date: string, adj: KidsAdjust | null) => Promise<void>;
+  weather: WeatherMap;
 }) {
   const { board, k, date } = props;
   const m = board.day(date);
   const v = m.has.cafe + m.has.kids ? valueOf(m, k) : null;
   const pw = board.day(addDays(date, -7));
   const pwv = pw.has.cafe + pw.has.kids ? valueOf(pw, k) : null;
-  const lines = analyze(board, k, date);
+  const lines = [...analyzeWeather(board, k, date, props.weather), ...analyze(board, k, date)];
   const kids = k === "키즈입장료" || k === "naver" || k === "walkIn" || k === "tickets";
   const team = k === "바리스타" || k === "베이커리" || k === "키친" || k === "기타";
 
@@ -389,8 +398,9 @@ export function Detail(props: {
           <div className="hero-value">{formatMetric(k, v)}</div>
           <Delta now={v} before={pwv} label="지난주 같은 요일" money={false} />
           {pwv != null && <div className="note">지난주 {formatMetric(k, pwv)}</div>}
+          <WeatherPanel date={date} w={props.weather[date]} compact />
         </section>
-        <TrendCard board={board} k={k} date={date} onDate={props.onDate} />
+        <TrendCard board={board} k={k} date={date} onDate={props.onDate} weather={props.weather} />
         <section className="card">
           <h2>분석</h2>
           <ul className="analysis">

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS pending (
 );
 CREATE TABLE IF NOT EXISTS sent (date TEXT PRIMARY KEY, hash TEXT NOT NULL, count INTEGER NOT NULL, net INTEGER NOT NULL, at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS files (name TEXT PRIMARY KEY, sig TEXT NOT NULL, at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS weather (date TEXT PRIMARY KEY, source TEXT NOT NULL, at REAL NOT NULL);
 """
 
 
@@ -86,3 +87,15 @@ class Outbox:
     def set_file_sig(self, name: str, sig: str):
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO files (name, sig, at) VALUES (?, ?, ?)", (name, sig, self.clock()))
+
+    def weather_observed(self) -> set:
+        """관측값을 이미 올린 날짜들"""
+        return {r[0] for r in self.db.execute("SELECT date FROM weather WHERE source='observed'")}
+
+    def weather_source(self, date: str):
+        row = self.db.execute("SELECT source FROM weather WHERE date=?", (date,)).fetchone()
+        return row[0] if row else None
+
+    def set_weather(self, date: str, source: str):
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO weather (date, source, at) VALUES (?, ?, ?)", (date, source, self.clock()))
