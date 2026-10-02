@@ -1,0 +1,20 @@
+{
+  "name": "report",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --filter @report/view dev",
+    "build": "pnpm --filter @report/view build",
+    "demo": "pnpm --filter @report/view build:demo",
+    "test": "pnpm -r test && pnpm test:sender",
+    "test:sender": "cd apps/sender && PYTHONPATH=src python3 -m unittest discover -s tests",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}
