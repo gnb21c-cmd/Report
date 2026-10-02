@@ -344,7 +344,7 @@ button.stat {
 .hero-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 .hero-main {
@@ -365,7 +365,7 @@ button.stat {
   gap: 2px;
 }
 .hero.hero-split .hero-value {
-  font-size: clamp(20px, 6vw, 34px);
+  font-size: clamp(22px, 6.4vw, 36px);
   white-space: nowrap;
   letter-spacing: -0.8px;
 }
@@ -376,39 +376,50 @@ button.stat {
   display: block;
   white-space: normal;
 }
+/* 날씨 칸 — 70대도 한눈에: 큰 이모지 · 큰 글자 */
 .wx {
   display: grid;
-  gap: 3px;
-  padding-left: 10px;
+  gap: 6px;
+  padding-left: 12px;
   border-left: 1px solid var(--grid);
-  font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   white-space: nowrap;
+  align-content: center;
 }
 .wx-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
 }
 .wx-emoji {
-  width: 18px;
+  width: 30px;
   text-align: center;
-  font-size: 15px;
+  font-size: 26px;
+  line-height: 1;
 }
-.wx-text b {
-  color: var(--text-primary);
+.wx-text {
+  font-size: 18px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.wx-text .wx-key {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-right: 3px;
 }
 .wx-text small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
 }
 .season {
-  justify-self: start;
+  justify-self: stretch;
+  text-align: center;
   margin-top: 2px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-size: 16px;
+  font-weight: 800;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
 }
@@ -434,8 +445,11 @@ button.stat {
   padding-left: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 6px;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+.wx.compact .season {
+  justify-self: start;
 }
 .hero-top {
   display: flex;

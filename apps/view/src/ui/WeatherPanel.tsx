@@ -19,7 +19,8 @@ export function WeatherPanel({ date, w, compact = false }: { date: string; w?: D
           🌡️
         </span>
         <span className="wx-text">
-          최고 <b>{temp(w?.tempMax)}</b>
+          <span className="wx-key">최고</span>
+          {temp(w?.tempMax)}
         </span>
       </div>
       <div className="wx-row">
@@ -27,7 +28,8 @@ export function WeatherPanel({ date, w, compact = false }: { date: string; w?: D
           🧊
         </span>
         <span className="wx-text">
-          최저 <b>{temp(w?.tempMin)}</b>
+          <span className="wx-key">최저</span>
+          {temp(w?.tempMin)}
         </span>
       </div>
       <div className={`season s-${season.kind}`} title={season.name || "평상시"}>
