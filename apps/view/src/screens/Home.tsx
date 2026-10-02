@@ -74,8 +74,10 @@ export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: O
         {BOXES.map((b) => (
           <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "metric", key: b })} aria-label={`${b} ${won(day.box[b])}`}>
             <span className="sec-label">{b === "키즈입장료" ? "키즈입장" : b}</span>
-            <span className="sec-value">{wonMan(day.box[b])}</span>
-            <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : "—"}</span>
+            <span className="sec-line">
+              <span className="sec-value">{wonMan(day.box[b])}</span>
+              <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : ""}</span>
+            </span>
           </button>
         ))}
       </div>

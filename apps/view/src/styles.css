@@ -482,14 +482,14 @@ button.stat {
 .sectors {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 5px;
+  gap: 4px;
 }
 .sector {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text-primary);
-  padding: 8px 4px 7px;
+  padding: 8px 2px 8px;
   display: grid;
   justify-items: center;
   gap: 2px;
@@ -509,15 +509,29 @@ button.stat {
   white-space: nowrap;
   letter-spacing: -0.3px;
 }
+.sec-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1px;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.sec-line .sec-value {
+  font-size: min(15px, 3.25vw);
+  letter-spacing: -0.5px;
+}
 .sec-pct {
-  font-size: 11px;
+  font-size: min(11px, 2.35vw);
   color: var(--muted);
+  letter-spacing: -0.4px;
 }
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+/* 숫자 상자: 이름은 왼쪽 위, 금액·비교는 오른쪽 정렬 */
 .stat {
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -526,8 +540,24 @@ button.stat {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
+  text-align: right;
   gap: 2px;
+}
+.stat > .stat-label {
+  align-self: flex-start;
+  text-align: left;
+  margin-bottom: 4px;
+}
+.stats .stat-value {
+  font-size: min(20px, 4.5vw);
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.stats .stat .delta,
+.stats .stat .note {
+  white-space: nowrap;
+  font-size: min(13px, 3.3vw);
 }
 .stat-label {
   color: var(--text-secondary);
