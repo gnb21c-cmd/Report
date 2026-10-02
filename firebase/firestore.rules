@@ -1,46 +1,54 @@
 rules_version = '2';
 // 매출 보고 클라우드 보관함 보안 규칙 (Firebase 콘솔 → Firestore → 규칙에 붙여 넣기)
 //
-// 누가 무엇을:
-//   보는 사람 (대표이사 · 관리자 4명)  → viewers/{이메일} 문서가 있으면 days · devices 읽기만
-//   카페 메인 POS PC 계정              → senders/{이메일} = { pos: "cafe" } → days/cafe_* · devices/cafe 쓰기만
-//   키즈 POS PC 계정                   → senders/{이메일} = { pos: "kids" } → days/kids_* · devices/kids 쓰기만
-//   viewers · senders 문서는 Firebase 콘솔에서만 만듦 (앱·PC 에서는 못 바꿈)
+// 매장 자료는 boards/{열쇠}/ 아래에 둡니다. 열쇠 = 긴 무작위 글자 (docs/SETUP.md ①-6)
+//   보는 폰 (로그인 없음)      → 설치 주소 /b/{열쇠}/ 를 아는 폰만 읽음 (열쇠를 모르면 목록도 못 봄)
+//                                네이버 입장권 고친 값(adjust)만 쓸 수 있음
+//   카페 메인 · 키즈 POS PC    → senders/{이메일} = { pos: "cafe"|"kids", board: "{열쇠}" } 계정으로 로그인해
+//                                자기 POS 의 하루치(days)와 상태(devices)만 씀
+//   senders 문서는 Firebase 콘솔에서만 만듦
 service cloud.firestore {
   match /databases/{database}/documents {
     function email() {
       return request.auth != null && request.auth.token.email != null ? request.auth.token.email.lower() : "";
     }
-    function isViewer() {
-      return email() != "" && exists(/databases/$(database)/documents/viewers/$(email()));
-    }
-    function senderPos() {
-      return get(/databases/$(database)/documents/senders/$(email())).data.pos;
-    }
-    function isSenderOf(pos) {
-      return email() != "" && exists(/databases/$(database)/documents/senders/$(email())) && senderPos() == pos;
+    function isSender(board, pos) {
+      return email() != ""
+        && exists(/databases/$(database)/documents/senders/$(email()))
+        && get(/databases/$(database)/documents/senders/$(email())).data.pos == pos
+        && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
     }
 
-    // 하루치 매출: 문서 이름 = {pos}_{YYYY-MM-DD}
-    match /days/{id} {
-      allow read: if isViewer();
-      allow write: if isSenderOf(request.resource.data.pos)
-        && id == request.resource.data.pos + "_" + request.resource.data.date
-        && request.resource.data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-        && request.resource.data.rows is string
-        && request.resource.data.rows.size() < 900000;
+    match /boards/{board} {
+      // 하루치 매출: 문서 이름 = {pos}_{YYYY-MM-DD}
+      match /days/{id} {
+        allow read: if true;
+        allow write: if isSender(board, request.resource.data.pos)
+          && id == request.resource.data.pos + "_" + request.resource.data.date
+          && request.resource.data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.rows is string
+          && request.resource.data.rows.size() < 900000;
+      }
+
+      // POS PC 송부 상태
+      match /devices/{pos} {
+        allow read: if true;
+        allow write: if isSender(board, pos);
+      }
+
+      // 네이버 입장권 고친 값 (문서 이름 = 날짜) — 설치한 폰이면 누구나 고침
+      match /adjust/{date} {
+        allow read: if true;
+        allow delete: if date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
+        allow create, update: if date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.keys().hasOnly(["naver", "by", "at"])
+          && request.resource.data.naver is int
+          && request.resource.data.naver >= 0 && request.resource.data.naver <= 5000
+          && request.resource.data.by is string && request.resource.data.by.size() <= 20;
+      }
     }
 
-    // POS PC 송부 상태
-    match /devices/{pos} {
-      allow read: if isViewer();
-      allow write: if isSenderOf(pos);
-    }
-
-    // 보는 사람 · 보내는 PC 명단 — 자기 문서만 읽기 (앱이 '권한 있음'을 확인), 쓰기는 콘솔에서만
-    match /viewers/{em} {
-      allow read: if email() == em;
-    }
+    // POS PC 계정 명단 — 자기 문서만 읽기, 쓰기는 콘솔에서만
     match /senders/{em} {
       allow read: if email() == em;
     }

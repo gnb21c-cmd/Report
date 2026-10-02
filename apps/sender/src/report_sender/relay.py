@@ -1,9 +1,10 @@
 """클라우드 보관함(Firebase) 에 올리기 — 우리가 운영하는 서버 없이, Google 이 운영하는 보관함을 우편함처럼 씀
 
 - 로그인: 이 PC 전용 계정(이메일·비밀번호) → 1시간짜리 출입증(idToken)
-- 하루치: days/{pos}_{date} 문서 하나를 통째로 덮어씀 (rows 는 JSON 글자 한 칸)
-- 상태: devices/{pos} — 마지막 송부·프로그램 판·남은 묶음·오류 (보고 앱 '송부 상태'에 보임)
-보안 규칙(firebase/firestore.rules)이 이 계정은 자기 POS 문서만 쓰게 막음. 읽기는 관리자 계정만
+- 매장 자료는 boards/{열쇠}/ 아래 (열쇠 = 보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
+- 하루치: boards/{열쇠}/days/{pos}_{date} 문서 하나를 통째로 덮어씀 (rows 는 JSON 글자 한 칸)
+- 상태: boards/{열쇠}/devices/{pos} — 마지막 송부·프로그램 판·남은 묶음·오류 (보고 앱 설정에 보임)
+보안 규칙(firebase/firestore.rules)이 이 계정은 자기 POS 문서만 쓰게 막음
 """
 from __future__ import annotations
 
@@ -100,6 +101,7 @@ class FirebaseRelay:
         self.project = str(fb.get("projectId") or "")
         self.email = str(fb.get("email") or "")
         self.password = str(fb.get("password") or "")
+        self.board = str(fb.get("board") or "")
         self.clock, self.post = clock, post
         self._token, self._until = None, 0.0
 
@@ -119,7 +121,7 @@ class FirebaseRelay:
 
     def put_day(self, pos: str, date: str, rows: list, source: str, version: str, now: dt.datetime | None = None):
         now = now or dt.datetime.now(dt.timezone.utc)
-        return self.put(f"days/{pos}_{date}", day_doc(pos, date, rows, source, self.email, version, now))
+        return self.put(f"boards/{self.board}/days/{pos}_{date}", day_doc(pos, date, rows, source, self.email, version, now))
 
     def put_status(self, pos: str, status: dict):
-        return self.put(f"devices/{pos}", {**status, "at": dt.datetime.now(dt.timezone.utc)})
+        return self.put(f"boards/{self.board}/devices/{pos}", {**status, "at": dt.datetime.now(dt.timezone.utc)})

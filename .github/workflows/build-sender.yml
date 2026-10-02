@@ -38,12 +38,12 @@ jobs:
           Copy-Item windows/* $out
           # 보관함 주소(비밀 아님)를 묶음에 넣어 두면 설치 때 묻지 않음 — 저장소 변수 FIREBASE_API_KEY · FIREBASE_PROJECT_ID
           if ("${{ vars.FIREBASE_PROJECT_ID }}") {
-            [IO.File]::WriteAllText("$PWD/$out/firebase.json", '{"apiKey":"${{ vars.FIREBASE_API_KEY }}","projectId":"${{ vars.FIREBASE_PROJECT_ID }}"}')
+            [IO.File]::WriteAllText("$PWD/$out/firebase.json", '{"apiKey":"${{ vars.FIREBASE_API_KEY }}","projectId":"${{ vars.FIREBASE_PROJECT_ID }}","board":"${{ secrets.REPORT_BOARD_KEY }}"}')
           }
           $v = & "$out/PosReport.exe" version
           Write-Host "version: $v"
           $env:POS_REPORT_HOME = "$env:RUNNER_TEMP/posreport"
-          & "$out/PosReport.exe" setup --pos cafe --apikey x --projectid x --email ci@example.invalid --password x --folder "$env:RUNNER_TEMP/xls"
+          & "$out/PosReport.exe" setup --pos cafe --apikey x --projectid x --email ci@example.invalid --password x --board ci-board-key-0000 --folder "$env:RUNNER_TEMP/xls"
           if ($LASTEXITCODE -ne 0) { throw "setup 실패" }
           & "$out/PosReport.exe" check   # 가짜 계정이라 [확인 필요]가 나오는 것이 정상 — 실행만 확인
           if (-not (Test-Path "$env:POS_REPORT_HOME/logs/send.log")) { throw "기록 파일이 없습니다" }

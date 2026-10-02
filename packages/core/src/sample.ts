@@ -2,6 +2,7 @@
    체험판용 가짜 매출 — 날짜마다 늘 같은 값이 나옴 (실제 매출 아님)
    ============================================================ */
 import { addDays, dayRange, weekday } from "./dates";
+import { isOffDay, kidsPrice } from "./rules";
 import type { DayBatch, PosId, SaleLine } from "./types";
 
 interface Item {
@@ -17,6 +18,7 @@ const CAFE: Item[] = [
   ["[ICE] 아메리카노", 5000, 38], ["[HOT] 아메리카노", 4500, 16], ["[ICE] 카페라떼", 5500, 22], ["[HOT] 카페라떼", 5500, 9],
   ["바닐라라떼", 6000, 11], ["아인슈페너", 6500, 7], ["자몽에이드", 6500, 8], ["레몬에이드", 6000, 6],
   ["딸기스무디", 7000, 6], ["얼그레이 밀크티", 6500, 5], ["유자차", 6000, 4], ["아이스티", 5000, 7],
+  ["생맥주 500", 6000, 5], ["샷 추가", 500, 9],
 ].map(([name, price, base], i) => ({ code: `1${String(i).padStart(4, "0")}`, name: String(name), cat1: "바리스타", price: Number(price), base: Number(base) }))
   .concat(
     [
@@ -33,10 +35,10 @@ const CAFE: Item[] = [
   .concat([{ code: "40000", name: "애견 간식", cat1: "기타 유료", price: 4000, base: 3 }]);
 
 const KIDS: Item[] = [
-  { code: "50001", name: "자유입장권", cat1: "키즈", price: 15000, base: 14 },
+  // 입장권 값은 그날 단가 (평일 12,000 · 휴일 14,000)
+  { code: "50001", name: "자유입장권", cat1: "키즈", price: -1, base: 14 },
   { code: "50002", name: "네이버 입장권", cat1: "키즈", price: 0, base: 22 },
   { code: "50003", name: "추가인원", cat1: "키즈", price: 5000, base: 9 },
-  { code: "50004", name: "야간자유입장권 [7시 입장]", cat1: "키즈", price: 10000, base: 3 },
   { code: "50005", name: "키즈 주스", cat1: "키즈", price: 3000, base: 8 },
   { code: "50006", name: "양말", cat1: "키즈", price: 2000, base: 4 },
 ];
@@ -55,11 +57,11 @@ function rand(seed: string): number {
 
 function dayFactor(date: string): number {
   const w = weekday(date);
-  const weekend = w === 0 || w === 6 ? 1.9 : w === 5 ? 1.2 : 1;
+  const weekend = isOffDay(date) ? 1.9 : w === 5 ? 1.2 : 1;
   const month = Number(date.slice(5, 7));
   const season = [0, 0.85, 0.85, 0.95, 1.05, 1.15, 1.0, 1.2, 1.25, 1.05, 1.1, 0.95, 1.0][month];
   // 해가 갈수록 조금씩 늘어남
-  const growth = 1 + (Date.parse(date) - Date.parse("2025-09-01")) / (365 * 86400_000) * 0.12;
+  const growth = 1 + (Date.parse(date) - Date.parse("2025-01-01")) / (365 * 86400_000) * 0.12;
   return weekend * season * growth * (0.85 + rand(date) * 0.3);
 }
 
@@ -70,8 +72,9 @@ function lines(pos: PosId, date: string): SaleLine[] {
   for (const it of items) {
     const qty = Math.max(0, Math.round(it.base * f * (0.6 + rand(date + it.code) * 0.8)));
     if (!qty) continue;
-    const gross = qty * it.price;
-    const discount = it.price > 0 && rand(date + it.code + "d") < 0.25 ? Math.round(gross * 0.05 / 100) * 100 : 0;
+    const price = it.price < 0 ? kidsPrice(date).price : it.price;
+    const gross = qty * price;
+    const discount = price > 0 && it.price > 0 && rand(date + it.code + "d") < 0.25 ? Math.round(gross * 0.05 / 100) * 100 : 0;
     out.push({ code: it.code, name: it.name, cat1: it.cat1, cat2: "", cat3: "", qty, gross, discount, net: gross - discount });
   }
   return out;
@@ -79,7 +82,7 @@ function lines(pos: PosId, date: string): SaleLine[] {
 
 /** from ~ to 의 체험판 묶음. 설날·추석 당일은 휴무로 뺌 */
 export function sampleBatches(from: string, to: string): DayBatch[] {
-  const closed = new Set(["2026-02-17", "2026-09-25"]);
+  const closed = new Set(["2025-01-29", "2025-10-06", "2026-02-17", "2026-09-25"]);
   const out: DayBatch[] = [];
   for (const date of dayRange(from, to)) {
     if (closed.has(date)) continue;
@@ -89,7 +92,7 @@ export function sampleBatches(from: string, to: string): DayBatch[] {
   return out;
 }
 
-/** 체험판: 오늘 기준 어제까지 (2025-09-01 부터) */
+/** 체험판: 오늘 기준 어제까지 (작년 1월 1일부터 — 작년 비교가 보이게) */
 export function sampleUntilYesterday(today: string): DayBatch[] {
-  return sampleBatches("2025-09-01", addDays(today, -1));
+  return sampleBatches(`${Number(today.slice(0, 4)) - 1}-01-01`, addDays(today, -1));
 }

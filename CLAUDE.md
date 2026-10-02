@@ -14,5 +14,6 @@
 - `pnpm test` (core + A 시험) / `pnpm typecheck`
 - `pnpm demo` — 체험판 HTML (`apps/view/dist-demo/index.html`)
 - A 시험만: `cd apps/sender && PYTHONPATH=src python3 -m unittest discover -s tests`
-- 보고 계산 규칙은 `packages/core/src/report.ts`, 팀·키즈 입장 구분은 `classify.ts`. 바꾸면 `packages/core/test` 에 시험을 먼저 더한다.
+- 계산 규칙은 `packages/core/src/rules.ts`(키즈 단가 · 방문자 × 0.96)와 `metrics.ts`(대시보드 · 누계 · 분석 설명), 팀·키즈 입장 구분은 `classify.ts`. 바꾸면 `packages/core/test` 에 시험을 먼저 더한다.
+- 폰 앱은 로그인 없음 — 설치 주소 `/b/{열쇠}/` 의 열쇠로 `boards/{열쇠}` 를 읽는다. 열쇠는 저장소에 넣지 않는다.
 - A 가 보내는 칸(`relay.py day_doc`)과 B 가 읽는 칸(`apps/view/src/data/firebase.ts toBatch`)은 같이 바꾼다.

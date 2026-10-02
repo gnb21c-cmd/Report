@@ -4,7 +4,8 @@
   "pos": "cafe" | "kids",               이 PC 가 어느 POS 인지
   "firebase": {                          클라우드 보관함 (docs/SETUP.md)
     "apiKey": "…", "projectId": "…",
-    "email": "cafe-pos@…", "password": "…"   이 PC 전용 계정 (자기 POS 자료만 쓸 수 있음)
+    "email": "cafe-pos@…", "password": "…",  이 PC 전용 계정 (자기 POS 자료만 쓸 수 있음)
+    "board": "…"                          매장 열쇠 (보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
   },
   "catchUpDays": 3,                      보낼 때 지난 며칠도 다시 맞춰 봄 (늦은 취소·못 보낸 날)
   "source": { "type": "folder" | "firebird" | "none", … }   POS 자료 읽는 방법 (sources.py)
@@ -19,7 +20,7 @@ POS_LABEL = {"cafe": "카페", "kids": "키즈"}
 
 DEFAULTS = {
     "pos": "",
-    "firebase": {"apiKey": "", "projectId": "", "email": "", "password": ""},
+    "firebase": {"apiKey": "", "projectId": "", "email": "", "password": "", "board": ""},
     "catchUpDays": 3,
     "source": {"type": "none"},
 }
@@ -80,7 +81,7 @@ def problems(conf: dict) -> list:
     if conf.get("pos") not in POS_LABEL:
         out.append('이 PC 가 어느 POS 인지(pos: "cafe" 또는 "kids") 정해지지 않았습니다.')
     fb = conf.get("firebase") or {}
-    for k, label in (("apiKey", "API 키"), ("projectId", "프로젝트 ID"), ("email", "보내기 계정"), ("password", "보내기 계정 비밀번호")):
+    for k, label in (("apiKey", "API 키"), ("projectId", "프로젝트 ID"), ("board", "매장 열쇠"), ("email", "보내기 계정"), ("password", "보내기 계정 비밀번호")):
         if not str(fb.get(k) or "").strip():
             out.append(f"클라우드 보관함 {label}({k})가 비어 있습니다.")
     n = conf.get("catchUpDays")

@@ -1,0 +1,47 @@
+/* ============================================================
+   보고 규칙 (사장님이 정한 기준) — 바꾸면 test/metrics.test.ts 에 시험을 먼저 더함
+   - 키즈 입장료 단가: 평일 12,000원 · 평일 외(토·일·공휴일·대체공휴일) 14,000원
+   - 추정 방문자 = 음료·맥주 잔 수 × 0.96 (두 잔 마시는 사람을 감안)
+   - 1인 평균 소비금액 = 총매출 ÷ 추정 방문자
+   ============================================================ */
+import { weekday } from "./dates";
+import { EXTRA_HOLIDAYS, HOLIDAYS } from "./holidays";
+import type { PosId, SaleLine } from "./types";
+
+/** 키즈 입장권 단가 (from 날짜부터 적용, 늦은 것이 우선) — 값이 바뀌면 줄을 더함 */
+export const KIDS_PRICES: { from: string; weekday: number; holiday: number }[] = [{ from: "2025-01-01", weekday: 12000, holiday: 14000 }];
+
+/** 추정 방문자 = 잔 수 × 이 값 */
+export const VISITOR_FACTOR = 0.96;
+
+export function holidayName(date: string): string | null {
+  return HOLIDAYS[date] || EXTRA_HOLIDAYS[date] || null;
+}
+
+/** 평일 외 = 토·일·공휴일·대체공휴일 */
+export function isOffDay(date: string): boolean {
+  const w = weekday(date);
+  return w === 0 || w === 6 || !!holidayName(date);
+}
+
+export function kidsPrice(date: string): { price: number; kind: "평일" | "휴일" } {
+  const rule = [...KIDS_PRICES].reverse().find((r) => r.from <= date) || KIDS_PRICES[0];
+  return isOffDay(date) ? { price: rule.holiday, kind: "휴일" } : { price: rule.weekday, kind: "평일" };
+}
+
+/** 잔 수에서 뺄 것 (옵션·원두·상품 등) */
+const NOT_CUP = /추가|변경|사이즈|업그레이드|원두|드립백|시럽|굿즈|텀블러|쿠폰|할인|포장비|봉투|컵\s*홀더/;
+/** 잔으로 셀 것 — 카페 POS 바리스타 상품 + 이름으로 맥주 등 */
+const CUP_NAME = /맥주|beer|생맥|하이볼|와인|커피|라떼|아메리카노|에스프레소|에이드|주스|스무디|프라페|밀크티|티\b|차\b|tea|coffee/i;
+
+/** 방문자 추정용 '잔'인지 */
+export function isCup(pos: PosId, line: Pick<SaleLine, "name" | "cat1">, team: string): boolean {
+  const name = line.name || "";
+  if (NOT_CUP.test(name)) return false;
+  if (pos === "cafe" && team === "바리스타") return true;
+  return CUP_NAME.test(name) || /주류|맥주|음료/.test(line.cat1 || "");
+}
+
+export function visitorsFromCups(cups: number): number {
+  return Math.max(0, Math.round(cups * VISITOR_FACTOR));
+}

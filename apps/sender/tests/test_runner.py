@@ -109,13 +109,13 @@ class RelayTest(unittest.TestCase):
         calls = []
 
         def post(url, body, token=None, method="POST"):
-            calls.append((url.split("?")[0].rsplit("/", 1)[-1], method, token))
+            calls.append((url.split("?")[0].split("/documents/")[-1] if "/documents/" in url else url.split("?")[0].rsplit("/", 1)[-1], method, token))
             return {"idToken": "T", "expiresIn": "3600"} if "signInWithPassword" in url else {}
 
-        r = FirebaseRelay({"apiKey": "k", "projectId": "p", "email": "e", "password": "w"}, clock=lambda: 0, post=post)
+        r = FirebaseRelay({"apiKey": "k", "projectId": "p", "email": "e", "password": "w", "board": "B0ard"}, clock=lambda: 0, post=post)
         r.put_day("cafe", "2026-10-01", [], "DB", "0.1.0")
         r.put_day("cafe", "2026-10-02", [], "DB", "0.1.0")
-        self.assertEqual(calls, [("accounts:signInWithPassword", "POST", None), ("cafe_2026-10-01", "PATCH", "T"), ("cafe_2026-10-02", "PATCH", "T")])
+        self.assertEqual(calls, [("accounts:signInWithPassword", "POST", None), ("boards/B0ard/days/cafe_2026-10-01", "PATCH", "T"), ("boards/B0ard/days/cafe_2026-10-02", "PATCH", "T")])
 
 
 if __name__ == "__main__":

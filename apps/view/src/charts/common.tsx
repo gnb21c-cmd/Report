@@ -66,7 +66,7 @@ export function Legend({ items }: { items: { color: string; label: string; key?:
 }
 
 /** 그래프 ↔ 표 바꾸기 (값을 말풍선 없이도 볼 수 있게) */
-export function ChartCard({ title, sub, legend, table, children }: { title: string; sub?: string; legend?: ReactNode; table: ReactNode; children: ReactNode }) {
+export function ChartCard({ title, sub, legend, head, table, children }: { title: string; sub?: string; legend?: ReactNode; head?: ReactNode; table: ReactNode; children: ReactNode }) {
   const [asTable, setAsTable] = useState(false);
   return (
     <section className="card">
@@ -75,12 +75,13 @@ export function ChartCard({ title, sub, legend, table, children }: { title: stri
           <h2>{title}</h2>
           {sub && <p className="sub">{sub}</p>}
         </div>
-        <button className="ghost" onClick={() => setAsTable((v) => !v)} aria-pressed={asTable}>
+        <button className="ghost small" onClick={() => setAsTable((v) => !v)} aria-pressed={asTable}>
           {asTable ? "그래프" : "표로 보기"}
         </button>
       </div>
+      {head && <div className="card-tools">{head}</div>}
       {!asTable && legend}
-      {asTable ? <div className="table-wrap">{table}</div> : children}
+      {asTable ? <div className="table-wrap tall">{table}</div> : children}
     </section>
   );
 }

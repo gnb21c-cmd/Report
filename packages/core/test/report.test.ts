@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  dailyReport,
-  forecastMonth,
   kidsKind,
   latestBatches,
-  monthlyRows,
   posStatus,
   reportDate,
   salesOf,
@@ -41,7 +38,7 @@ describe("묶음 정리", () => {
       batch("kids", "2026-10-01", [line("자유입장권", 15000)]),
     ];
     const idx = index(b);
-    expect(idx.net("2026-10-01", "2026-10-01")).toBe(25000);
+    expect(idx.day("2026-10-01").reduce((t, x) => t + x.net, 0)).toBe(25000);
     expect(latestBatches(b)).toHaveLength(2);
   });
 
@@ -81,71 +78,6 @@ describe("팀 · 키즈 구분", () => {
     expect(kidsKind({ name: "키즈 주스", gross: 3000, net: 3000 })).toBe("기타");
   });
 
-  it("키즈 입장 집계 — 네이버 발행 장수, 반품은 음수로 빠짐", () => {
-    const idx = index([
-      batch("kids", "2026-10-01", [
-        line("자유입장권", 45000, 3),
-        line("자유입장권 반품", -15000, -1, { code: "x" }),
-        line("네이버 입장권", 0, 5, { gross: 0 }),
-        line("추가인원", 10000, 2),
-        line("키즈 주스", 6000, 2),
-      ]),
-    ]);
-    expect(idx.kids("2026-10-01", "2026-10-01")).toEqual({ walkIn: 2, naver: 5, extra: 2, tickets: 7, admissionNet: 40000, otherNet: 6000 });
-  });
-});
-
-describe("일일 보고", () => {
-  // 2026-09: 날마다 카페 10만 + 키즈 5만, 2025-10: 날마다 카페 8만
-  const b: DayBatch[] = [];
-  for (let d = 1; d <= 30; d++) {
-    const date = `2026-09-${String(d).padStart(2, "0")}`;
-    b.push(batch("cafe", date, [line("아메리카노", 100000, 20, { cat1: "바리스타" })]));
-    b.push(batch("kids", date, [line("자유입장권", 50000, 4)]));
-  }
-  for (let d = 1; d <= 31; d++) b.push(batch("cafe", `2025-10-${String(d).padStart(2, "0")}`, [line("아메리카노", 80000, 16)]));
-  b.push(batch("cafe", "2026-10-01", [line("아메리카노", 120000, 24, { cat1: "바리스타" }), line("소금빵", 30000, 8)]));
-  b.push(batch("kids", "2026-10-01", [line("자유입장권", 60000, 4), line("네이버 입장권", 0, 6, { gross: 0 })]));
-  const idx = index(b);
-  const r = dailyReport(idx, "2026-10-01");
-
-  it("전일 · 팀별 · POS 별", () => {
-    expect(r.weekday).toBe("목");
-    expect(r.day.net).toBe(210000);
-    expect(r.day.byPos).toEqual({ cafe: 150000, kids: 60000 });
-    expect(r.day.byTeam).toMatchObject({ 바리스타: 120000, 베이커리: 30000, 키즈: 60000, 키친: 0 });
-    expect(r.missing).toEqual([]);
-  });
-
-  it("지난주 같은 요일 · 지난달 같은 기간 · 작년 같은 날", () => {
-    expect(r.prevWeek).toMatchObject({ date: "2026-09-24" });
-    expect(r.prevWeek.agg.net).toBe(150000);
-    expect(r.prevMonth).toEqual({ from: "2026-09-01", to: "2026-09-01", net: 150000 });
-    expect(r.lastYear).toMatchObject({ sameDay: "2025-10-01", sameDayNet: 80000, monthNet: 80000, monthFullNet: 80000 * 31, has: true });
-  });
-
-  it("예상 월매출 — 최근 4주 같은 요일 평균으로 남은 날 채움", () => {
-    // 최근 4주는 하루 15만(9월) + 오늘(목) 21만. 목요일만 (15만×3 + 21만)/4 = 16.5만
-    const f = forecastMonth(idx, "2026-10-01");
-    const thursdays = ["2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29"].length;
-    expect(f.net).toBe(210000 + 150000 * (30 - thursdays) + 165000 * thursdays);
-  });
-
-  it("자료 없는 POS 는 missing", () => {
-    const only = index([batch("cafe", "2026-10-02", [line("아메리카노", 5000)])]);
-    expect(dailyReport(only, "2026-10-02").missing).toEqual(["kids"]);
-  });
-
-  it("월별 — 작년 같은 달 비교, 이번 달은 기준일까지", () => {
-    const rows = monthlyRows(idx, "2026-10-01", 2);
-    expect(rows.map((m) => m.month)).toEqual(["2026-09", "2026-10"]);
-    expect(rows[0]).toMatchObject({ net: 4500000, days: 30, lastYear: null });
-    expect(rows[1]).toMatchObject({ net: 210000, days: 1, lastYear: 80000 });
-  });
-
-  it("상품 순위 — 실매출 큰 순", () => {
-    expect(r.top.day.map((p) => p.name)).toEqual(["아메리카노", "자유입장권", "소금빵", "네이버 입장권"]);
-  });
 });
 
 describe("날짜", () => {

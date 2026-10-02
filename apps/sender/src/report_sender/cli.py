@@ -170,7 +170,7 @@ def cmd_setup(conf, args):
     if args.pos:
         conf["pos"] = args.pos
     fb = conf["firebase"]
-    for k in ("apiKey", "projectId", "email", "password"):
+    for k in ("apiKey", "projectId", "email", "password", "board"):
         v = getattr(args, k.lower())
         if v:
             fb[k] = v
@@ -206,6 +206,7 @@ def main(argv=None) -> int:
     st.add_argument("--projectid")
     st.add_argument("--email")
     st.add_argument("--password")
+    st.add_argument("--board", help="매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤)")
     st.add_argument("--folder", help="엑셀 폴더 (엑셀 방식으로 정함)")
     st.add_argument("--source-file", help="읽는 방법 JSON 파일")
     args = p.parse_args(argv)

@@ -28,3 +28,9 @@ export function pct(v: number | null): string {
 export function count(n: number, unit = ""): string {
   return `${Math.round(n).toLocaleString("ko-KR")}${unit}`;
 }
+
+/** 증감률(%) — 비교 값이 0 이하이거나 없으면 null */
+export function changePct(now: number | null, before: number | null): number | null {
+  if (now == null || before == null || !(before > 0)) return null;
+  return Math.round(((now - before) / before) * 1000) / 10;
+}
