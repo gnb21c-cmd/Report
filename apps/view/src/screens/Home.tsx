@@ -4,7 +4,7 @@
    ② 바리스타 · 베이커리 · 키친 · 키즈 입장료 · 기타 (한 줄씩 각각 상자)
    ③ 당월 누계 · 올해 누계 / 작년 같은 달 누계 · 작년 같은 기간 누계
    ④ 추정 방문자 · 1인 평균 소비
-   ⑤ 키즈 입장권: 네이버(고칠 수 있음) · 현장
+   ⑤ 키즈 입장권: 네이버 예약(= 입장 발행 − 현장, 고칠 수 있음) · 현장 구매 · 이벤트 무료입장
    상자를 누르면 그 숫자의 추세 그래프 · 분석 설명 화면으로
    ============================================================ */
 import { WeatherPanel } from "../ui/WeatherPanel";
@@ -123,19 +123,24 @@ export function Home({ d, open, weather }: { board: Board; d: Dashboard; open: O
         </button>
       </div>
 
-      <h3 className="group">키즈 입장권</h3>
-      <div className="stats">
+      <h3 className="group">키즈 입장권 (입장 발행 {count(day.issued, "장")})</h3>
+      <div className="stats three">
         <button className="stat tap" onClick={() => open({ name: "metric", key: "naver" })}>
           <div className="stat-label">
-            네이버 예약 {day.naverAdjusted ? <span className="tag">수정됨</span> : <span className="tag ghost">✎ 고치기</span>}
+            네이버 예약 {day.naverAdjusted ? <span className="tag">수정됨</span> : <span className="tag ghost">✎</span>}
           </div>
           <div className="stat-value">{count(day.naver, "장")}</div>
-          <span className="note">{day.naverAdjusted ? `POS 발행 ${count(day.naverPos, "장")}` : "POS 0원 발행 수"}</span>
+          <span className="note">발행 − 현장</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "metric", key: "walkIn" })}>
           <div className="stat-label">현장 구매</div>
           <div className="stat-value">{count(day.walkIn, "장")}</div>
-          <span className="note">키즈 POS 입장료 결제</span>
+          <span className="note">입장료 결제</span>
+        </button>
+        <button className="stat tap" onClick={() => open({ name: "metric", key: "eventFree" })}>
+          <div className="stat-label">이벤트 무료</div>
+          <div className="stat-value">{count(day.eventFree, "팀")}</div>
+          <span className="note">쿠폰 입장</span>
         </button>
       </div>
       <p className="note center-note">

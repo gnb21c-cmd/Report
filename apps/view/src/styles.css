@@ -531,6 +531,12 @@ button.stat {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.stats.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.stats.three .stat {
+  padding: 10px 10px;
+}
 /* 숫자 상자: 이름은 왼쪽 위, 금액·비교는 오른쪽 정렬 */
 .stat {
   background: var(--surface-1);

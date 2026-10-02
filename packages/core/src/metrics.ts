@@ -20,7 +20,7 @@ import { seasonOf, temp, WEATHER_SOURCE_TEXT, type WeatherMap } from "./weather"
 export type BoxKey = "바리스타" | "베이커리" | "키친" | "키즈입장료" | "기타";
 export const BOXES: BoxKey[] = ["바리스타", "베이커리", "키친", "키즈입장료", "기타"];
 
-export type MetricKey = "total" | BoxKey | "visitors" | "avgSpend" | "naver" | "walkIn" | "tickets";
+export type MetricKey = "total" | BoxKey | "visitors" | "avgSpend" | "naver" | "walkIn" | "eventFree" | "tickets";
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
   total: "총 매출",
@@ -31,20 +31,21 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   기타: "기타",
   visitors: "추정 방문자",
   avgSpend: "1인 평균 소비",
-  naver: "네이버 입장권",
-  walkIn: "현장 입장권",
+  naver: "네이버 예약",
+  walkIn: "현장 구매",
+  eventFree: "이벤트 무료입장",
   tickets: "키즈 입장권",
 };
 
 /** 금액인지 (아니면 사람·장 수) */
 export function isMoney(key: MetricKey): boolean {
-  return !["visitors", "naver", "walkIn", "tickets"].includes(key);
+  return !["visitors", "naver", "walkIn", "eventFree", "tickets"].includes(key);
 }
 
 export function formatMetric(key: MetricKey, v: number | null): string {
   if (v == null) return "—";
   if (isMoney(key)) return won(v);
-  return count(v, key === "visitors" ? "명" : "장");
+  return count(v, key === "visitors" ? "명" : key === "eventFree" ? "팀" : "장");
 }
 
 /** 관리자가 고친 네이버 입장권 수 (날짜별) */
@@ -69,8 +70,12 @@ export interface Metrics {
   cups: number;
   visitors: number;
   avgSpend: number | null;
-  /** POS 에 찍힌 네이버(0원) 입장권 수 */
+  /** 0원 입장 발행 수 (네이버 + 현장 손님 모두) */
+  issued: number;
+  /** POS 로 계산한 네이버 예약 수 = 발행 − 현장 결제 */
   naverPos: number;
+  /** 이벤트 무료입장 (쿠폰) 팀 수 */
+  eventFree: number;
   /** 계산에 쓴 네이버 입장권 수 (고친 값 우선) */
   naver: number;
   /** 네이버 수를 고친 날 수 */
@@ -95,7 +100,9 @@ function empty(from: string, to: string): Metrics {
     cups: 0,
     visitors: 0,
     avgSpend: null,
+    issued: 0,
     naverPos: 0,
+    eventFree: 0,
     naver: 0,
     naverAdjusted: 0,
     walkIn: 0,
@@ -111,6 +118,7 @@ export function valueOf(m: Metrics, key: MetricKey): number | null {
   if (key === "avgSpend") return m.avgSpend;
   if (key === "naver") return m.naver;
   if (key === "walkIn") return m.walkIn;
+  if (key === "eventFree") return m.eventFree;
   if (key === "tickets") return m.naver + m.walkIn;
   return m.box[key];
 }
@@ -156,8 +164,9 @@ export class Board {
         continue;
       }
       const kind = kidsKind(s);
-      if (kind === "네이버입장") m.naverPos += s.qty;
-      else if (kind === "현장입장") {
+      if (kind === "입장발행") m.issued += s.qty;
+      else if (kind === "이벤트무료") m.eventFree += s.qty;
+      else if (kind === "현장결제") {
         m.walkIn += s.qty;
         m.walkInPosNet += s.net;
       } else {
@@ -165,6 +174,7 @@ export class Board {
         m.box.기타 += s.net;
       }
     }
+    m.naverPos = Math.max(0, m.issued - m.walkIn);
     const adj = this.adjusts[date];
     m.naver = adj && Number.isFinite(adj.naver) ? Math.max(0, Math.round(adj.naver)) : m.naverPos;
     m.naverAdjusted = adj ? 1 : 0;
@@ -191,7 +201,9 @@ export class Board {
       m.posNet += x.posNet;
       m.cups += x.cups;
       m.visitors += x.visitors;
+      m.issued += x.issued;
       m.naverPos += x.naverPos;
+      m.eventFree += x.eventFree;
       m.naver += x.naver;
       m.naverAdjusted += x.naverAdjusted;
       m.walkIn += x.walkIn;
@@ -411,12 +423,13 @@ export function analyze(board: Board, key: MetricKey, date: string): string[] {
   // 5) 항목별 설명
   if (["바리스타", "베이커리", "키친", "키즈입장료", "기타"].includes(key) && today.total > 0)
     out.push(`이날 총 매출 중 ${label} 비중은 ${((v / today.total) * 100).toFixed(1)}%입니다.`);
-  if (key === "키즈입장료" || key === "tickets" || key === "naver" || key === "walkIn") {
+  if (key === "키즈입장료" || key === "tickets" || key === "naver" || key === "walkIn" || key === "eventFree") {
     const t = today.naver + today.walkIn;
     const { price, kind } = kidsPrice(date);
     out.push(`${kind} 단가 ${won(price)} × 입장권 ${count(t, "장")} (네이버 ${count(today.naver, "장")} · 현장 ${count(today.walkIn, "장")}) = ${won(t * price)}.`);
     if (t > 0) out.push(`입장권 중 네이버 예약 비중은 ${((today.naver / t) * 100).toFixed(0)}%입니다.`);
-    if (today.naverAdjusted) out.push(`네이버 입장권은 POS 발행 ${count(today.naverPos, "장")}을 ${count(today.naver, "장")}으로 고친 값으로 계산했습니다.`);
+    out.push(`네이버 예약 = 입장 발행 ${count(today.issued, "장")} − 현장 구매 ${count(today.walkIn, "장")} = ${count(today.naverPos, "장")}${today.eventFree ? ` · 이벤트 무료입장 ${count(today.eventFree, "팀")}은 입장료에서 뺌` : ""}.`);
+    if (today.naverAdjusted) out.push(`네이버 예약은 ${count(today.naverPos, "장")}을 ${count(today.naver, "장")}으로 고친 값으로 계산했습니다.`);
   }
   if (key === "visitors") out.push(`음료·맥주 ${count(today.cups, "잔")} × ${VISITOR_FACTOR} = ${count(today.visitors, "명")} (두 잔 마시는 손님을 감안한 추정).`);
   if (key === "avgSpend") out.push(`총 매출 ${won(today.total)} ÷ 추정 방문자 ${count(today.visitors, "명")} = ${won(v)}.`);

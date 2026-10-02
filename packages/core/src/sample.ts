@@ -34,13 +34,11 @@ const CAFE: Item[] = [
   )
   .concat([{ code: "40000", name: "애견 간식", cat1: "기타 유료", price: 4000, base: 3 }]);
 
+// 키즈 POS 실제 모양 (2026-10-01): 돈 받은 입장권 = 현장 구매, 0원 '무제한 이용'·'야간자유입장권' = 입장 발행(네이버 + 현장 모두),
+// 0원 쿠폰 = 이벤트 무료입장, '인원추가' = 추가 인원
 const KIDS: Item[] = [
-  // 입장권 값은 그날 단가 (평일 12,000 · 휴일 14,000)
-  { code: "50001", name: "자유입장권", cat1: "키즈", price: -1, base: 14 },
-  { code: "50002", name: "네이버 입장권", cat1: "키즈", price: 0, base: 22 },
-  { code: "50003", name: "추가인원", cat1: "키즈", price: 5000, base: 9 },
-  { code: "50005", name: "키즈 주스", cat1: "키즈", price: 3000, base: 8 },
-  { code: "50006", name: "양말", cat1: "키즈", price: 2000, base: 4 },
+  { code: "000782", name: "1시간 50분 입장권", cat1: "기타 유료", price: -1, base: 6 },
+  { code: "000787", name: "인원추가", cat1: "기타 유료", price: 3000, base: 2 },
 ];
 
 /** 날짜·상품마다 같은 값이 나오는 0~1 난수 */
@@ -65,9 +63,30 @@ function dayFactor(date: string): number {
   return weekend * season * growth * (0.85 + rand(date) * 0.3);
 }
 
+function kidsLines(date: string): SaleLine[] {
+  const f = dayFactor(date) * 1.1;
+  const off = isOffDay(date);
+  const tag = off ? "[휴일]" : "[평일]";
+  const price = kidsPrice(date).price;
+  const walk = Math.max(0, Math.round(5 * f * (0.6 + rand(date + "walk") * 0.8)));
+  const naver = Math.max(0, Math.round(16 * f * (0.6 + rand(date + "naver") * 0.8)));
+  const night = Math.round(naver * 0.15);
+  const out: SaleLine[] = [];
+  const add = (code: string, name: string, qty: number, unit: number, cat1 = "기타 유료") => {
+    if (qty) out.push({ code, name, cat1, cat2: "", cat3: "", qty, gross: qty * unit, discount: 0, net: qty * unit });
+  };
+  add(off ? "000783" : "000782", `${tag} 1시간 50분 입장권`, walk, price);
+  add("000787", `인원추가 ${tag}`, Math.round(walk * 0.4), 3000);
+  add("900001", `${tag} 무제한 이용`, naver + walk - night, 0);
+  add("000291", "야간자유입장권", night, 0);
+  if (date <= "2026-11-30" && date >= "2026-09-20") add("000865", `${tag} 한가위 무제한 쿠폰`, Math.round(rand(date + "ev") * 3), 0, "서비스.쿠폰");
+  return out;
+}
+
 function lines(pos: PosId, date: string): SaleLine[] {
-  const items = pos === "cafe" ? CAFE : KIDS;
-  const f = dayFactor(date) * (pos === "kids" ? 1.1 : 1);
+  if (pos === "kids") return kidsLines(date);
+  const items = CAFE;
+  const f = dayFactor(date);
   const out: SaleLine[] = [];
   for (const it of items) {
     const qty = Math.max(0, Math.round(it.base * f * (0.6 + rand(date + it.code) * 0.8)));

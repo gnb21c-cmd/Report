@@ -287,7 +287,7 @@ function KidsCard({ board, date, onSave, adjust }: { board: Board; date: string;
         /* 없어도 됨 */
       }
       await onSave(date, adj);
-      setMsg(adj ? `${count(adj.naver, "장")}으로 고쳤습니다. 모든 폰에 같은 값으로 보입니다.` : "POS 발행 수로 되돌렸습니다.");
+      setMsg(adj ? `${count(adj.naver, "장")}으로 고쳤습니다. 모든 폰에 같은 값으로 보입니다.` : "POS 계산 값(발행 − 현장)으로 되돌렸습니다.");
       if (!adj) setVal(String(m.naverPos));
     } catch (e) {
       setMsg((e as Error).message);
@@ -302,33 +302,49 @@ function KidsCard({ board, date, onSave, adjust }: { board: Board; date: string;
         <tbody>
           <tr>
             <td>
-              네이버 예약 입장권
-              <div className="note">POS 0원 발행 {count(m.naverPos, "장")}</div>
+              입장 발행
+              <div className="note">0원 입장권 (무제한 이용 · 야간 · 시간대별) — 네이버 + 현장 손님 모두</div>
+            </td>
+            <td className="num">{count(m.issued, "장")}</td>
+            <td />
+          </tr>
+          <tr>
+            <td>
+              현장 구매
+              <div className="note">입장료 결제 · POS 실결제 {won(m.walkInPosNet)}</div>
+            </td>
+            <td className="num">{count(m.walkIn, "장")}</td>
+            <td className="num">{won(m.fee.walkIn)}</td>
+          </tr>
+          <tr>
+            <td>
+              네이버 예약
+              <div className="note">{m.naverAdjusted ? `고친 값 (계산 ${count(m.naverPos, "장")})` : "발행 − 현장"}</div>
             </td>
             <td className="num">{count(m.naver, "장")}</td>
             <td className="num">{won(m.fee.naver)}</td>
           </tr>
           <tr>
             <td>
-              현장 구매 입장권
-              <div className="note">POS 실결제 {won(m.walkInPosNet)}</div>
+              이벤트 무료입장
+              <div className="note">쿠폰 입장 — 입장료 없음</div>
             </td>
-            <td className="num">{count(m.walkIn, "장")}</td>
-            <td className="num">{won(m.fee.walkIn)}</td>
+            <td className="num">{count(m.eventFree, "팀")}</td>
+            <td className="num">0원</td>
           </tr>
           <tr className="sum">
             <td>
-              합계 <span className="muted">({kind} {won(price)})</span>
+              키즈 입장료 <span className="muted">({kind} {won(price)} × {count(m.naver + m.walkIn, "장")})</span>
             </td>
-            <td className="num">{count(m.naver + m.walkIn, "장")}</td>
+            <td />
             <td className="num">{won(m.box.키즈입장료)}</td>
           </tr>
         </tbody>
       </table>
 
       <div className="edit">
-        <h3>네이버 입장권 수 고치기</h3>
-        <p className="note">근무자가 더 출력했거나 시험 출력한 장수가 있으면, 네이버 예약 화면의 실제 수로 고쳐 주세요. 키즈 입장료와 총 매출이 다시 계산됩니다.</p>
+        <h3>네이버 예약 수 고치기</h3>
+        <p className="note">근무자가 입장권을 더 출력했거나 시험 출력한 장수가 있으면, 네이버 예약 화면의 실제 수로 고쳐 주세요. 키즈 입장료와 총 매출이 다시 계산됩니다.</p>
         <div className="stepper">
           <button className="ghost" onClick={() => setVal(String(Math.max(0, n - 1)))} aria-label="한 장 빼기">
             −
@@ -349,7 +365,7 @@ function KidsCard({ board, date, onSave, adjust }: { board: Board; date: string;
           </button>
           {adjust && (
             <button className="ghost" disabled={busy} onClick={() => save(null)}>
-              POS 수({count(m.naverPos, "장")})로 되돌리기
+              계산 값({count(m.naverPos, "장")})으로 되돌리기
             </button>
           )}
         </div>
@@ -384,7 +400,7 @@ export function Detail(props: {
   const pw = board.day(addDays(date, -7));
   const pwv = pw.has.cafe + pw.has.kids ? valueOf(pw, k) : null;
   const lines = [...analyzeWeather(board, k, date, props.weather), ...analyze(board, k, date)];
-  const kids = k === "키즈입장료" || k === "naver" || k === "walkIn" || k === "tickets";
+  const kids = k === "키즈입장료" || k === "naver" || k === "walkIn" || k === "eventFree" || k === "tickets";
   const team = k === "바리스타" || k === "베이커리" || k === "키친" || k === "기타";
 
   return (

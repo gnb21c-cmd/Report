@@ -32,14 +32,14 @@ export function kidsPrice(date: string): { price: number; kind: "평일" | "휴�
 /** 잔 수에서 뺄 것 (옵션·원두·상품 등) */
 const NOT_CUP = /추가|변경|사이즈|업그레이드|연하게|진하게|원두|드립백|시럽|굿즈|텀블러|쿠폰|할인|포장비|봉투|컵\s*홀더|아이스크림/;
 /** 잔으로 셀 것 — 카페 POS 바리스타 상품 + 이름으로 맥주 등 */
-const CUP_NAME = /맥주|beer|생맥|하이볼|와인|커피|라떼|아메리카노|에스프레소|에이드|주스|스무디|프라페|밀크티|티\b|차\b|tea|coffee/i;
+const CUP_NAME = /맥주|beer|생맥|하이볼|와인|커피|라떼|아메리카노|아메(?![가-힣])|에스프레소|에이드|주스|스무디|프라페|밀크티|티(?![가-힣])|차(?![가-힣])|tea|coffee/i;
 
 /** 방문자 추정용 '잔'인지 */
 export function isCup(pos: PosId, line: Pick<SaleLine, "name" | "cat1"> & Partial<Pick<SaleLine, "gross" | "net">>, team: string): boolean {
   const name = line.name || "";
   if (NOT_CUP.test(name)) return false;
-  // 0원 상품은 옵션(연하게·테이크아웃 등)이라 잔으로 세지 않음
-  if (line.gross === 0 && line.net === 0) return false;
+  // 0원 상품은 옵션(연하게·less ice·테이크아웃 등)이라 잔으로 세지 않음 — 단 '[종이] ICE 아메' 같은 무료 음료 쿠폰은 잔
+  if (line.gross === 0 && line.net === 0) return CUP_NAME.test(name);
   if (pos === "cafe" && team === "바리스타") return true;
   return CUP_NAME.test(name) || /주류|맥주|음료/.test(line.cat1 || "");
 }

@@ -39,10 +39,11 @@ const CAFE = [
   line("소금빵", 10, 38000, "베이커리"),
   line("트러플 크림파스타", 3, 54000, "키친"),
 ];
+// 입장 발행 12장 (네이버 10 + 현장 2), 현장 결제 3장 중 1장 환불
 const KIDS = [
-  line("자유입장권", 3, 36000),
-  line("자유입장권", -1, -12000, "", -12000, "환불"),
-  line("네이버 입장권", 10, 0, "", 0),
+  line("[평일] 1시간 50분 입장권", 3, 36000),
+  line("[평일] 1시간 50분 입장권", -1, -12000, "", -12000, "환불"),
+  line("[평일] 무제한 이용", 12, 0, "", 0),
   line("추가인원", 2, 10000),
   line("키즈 주스", 4, 12000),
 ];
@@ -71,6 +72,9 @@ describe("방문자 추정", () => {
     expect(isCup("cafe", { name: "디카페인 변경", cat1: "바리스타", gross: 1000, net: 1000 }, "바리스타")).toBe(false);
     expect(isCup("cafe", { name: "생맥주[켈리]", cat1: "바리스타", gross: 27500, net: 27500 }, "바리스타")).toBe(true);
     expect(isCup("cafe", { name: "(D_ICE)아메리카노", cat1: "바리스타", gross: 77000, net: 77000 }, "바리스타")).toBe(true);
+    // 9/27: 무료 음료 쿠폰은 잔, less ice 같은 0원 옵션은 아님
+    expect(isCup("cafe", { name: "[종이] ICE 아메", cat1: "서비스.쿠폰", gross: 0, net: 0 }, "기타")).toBe(true);
+    expect(isCup("cafe", { name: "less ice", cat1: "바리스타", gross: 0, net: 0 }, "바리스타")).toBe(false);
   });
   it("세트 메뉴는 이름의 잔 수만큼 (2026-10-01 카페: 맥주2+감자튀김 · 와인2+리코타샐러드M)", async () => {
     const { cupsPerItem } = await import("../src");
@@ -96,7 +100,7 @@ describe("하루 숫자", () => {
   });
 
   it("키즈 입장료 = (네이버 10 + 현장 3-1) × 평일 12,000", () => {
-    expect([m.naverPos, m.naver, m.walkIn, m.walkInPosNet]).toEqual([10, 10, 2, 24000]);
+    expect([m.issued, m.naverPos, m.naver, m.walkIn, m.walkInPosNet]).toEqual([12, 10, 10, 2, 24000]);
     expect(m.fee).toEqual({ naver: 120000, walkIn: 24000 });
   });
 
@@ -114,8 +118,33 @@ describe("하루 숫자", () => {
   });
 
   it("휴일은 14,000 으로", () => {
-    const h = boardOf([batch("kids", "2026-10-05", [line("네이버 입장권", 5, 0, "", 0), line("자유입장권", 2, 28000)])]).day("2026-10-05");
+    const h = boardOf([batch("kids", "2026-10-05", [line("3시 20분 퇴장 [1시30분 입장]", 7, 0, "", 0), line("[휴일] 1시간 50분 입장권", 2, 28000)])]).day("2026-10-05");
     expect(h.box.키즈입장료).toBe(7 * 14000);
+  });
+});
+
+describe("키즈 실제 자료", () => {
+  it("2026-10-01: 발행 20(무제한 17 + 야간 3) − 현장 4 = 네이버 16, 이벤트 무료 2팀", () => {
+    const m = boardOf([
+      batch("kids", "2026-10-01", [
+        line("[평일] 1시간 50분 입장권", 4, 48000, "기타 유료"),
+        line("인원추가 [평일만]", 1, 3000, "기타 유료"),
+        line("야간자유입장권", 3, 0, "기타 유료", 0),
+        line("[평일] 한가위 무제한 쿠폰", 2, 0, "서비스.쿠폰", 0),
+        line("[평일] 무제한 이용", 17, 0, "기타 유료", 0),
+      ]),
+    ]).day("2026-10-01");
+    expect([m.issued, m.walkIn, m.naver, m.eventFree]).toEqual([20, 4, 16, 2]);
+    expect(m.box.키즈입장료).toBe(20 * 12000);
+    expect(m.box.기타).toBe(3000);
+  });
+  it("2026-09-27(일): 시간대별 발행 133 − 현장 5 = 네이버 128, 휴일 14,000", () => {
+    const slots = [8, 12, 10, 4, 2, 10, 11, 15, 9, 9, 10, 8, 4, 8, 1, 7, 5];
+    const rows = [line("[휴일] 1시간 50분 입장권", 5, 70000, "기타 유료"), line("야간자유입장권", slots[0], 0, "", 0)];
+    slots.slice(1).forEach((q, i) => rows.push(line(`${i + 1}시 퇴장 [${i}시 입장]`, q, 0, "", 0)));
+    const m = boardOf([batch("kids", "2026-09-27", rows)]).day("2026-09-27");
+    expect([m.issued, m.walkIn, m.naver]).toEqual([133, 5, 128]);
+    expect(m.box.키즈입장료).toBe(133 * 14000);
   });
 });
 

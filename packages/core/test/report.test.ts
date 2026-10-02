@@ -71,10 +71,14 @@ describe("팀 · 키즈 구분", () => {
     expect(teamOf("kids", { cat1: "", name: "아메리카노" })).toBe("키즈");
   });
 
-  it("0원 입장권은 네이버, 돈 받은 입장권은 현장, '추가'는 추가 인원", () => {
-    expect(kidsKind({ name: "네이버 입장권", gross: 0, net: 0 })).toBe("네이버입장");
-    expect(kidsKind({ name: "자유입장권", gross: 15000, net: 15000 })).toBe("현장입장");
-    expect(kidsKind({ name: "추가인원", gross: 5000, net: 5000 })).toBe("추가인원");
+  it("키즈: 0원 입장 발행 · 현장 결제 · 이벤트 무료 · 추가 인원 (2026-10-01 · 09-27 실제 상품명)", () => {
+    expect(kidsKind({ name: "[평일] 무제한 이용", gross: 0, net: 0 })).toBe("입장발행");
+    expect(kidsKind({ name: "야간자유입장권", gross: 0, net: 0 })).toBe("입장발행");
+    expect(kidsKind({ name: "3시 20분 퇴장 [1시30분 입장]", gross: 0, net: 0 })).toBe("입장발행");
+    expect(kidsKind({ name: "[평일] 1시간 50분 입장권", gross: 48000, net: 48000 })).toBe("현장결제");
+    expect(kidsKind({ name: "[휴일] 1시간 50분 입장권", gross: 70000, net: 70000 })).toBe("현장결제");
+    expect(kidsKind({ name: "[평일] 한가위 무제한 쿠폰", gross: 0, net: 0, cat1: "서비스.쿠폰" })).toBe("이벤트무료");
+    expect(kidsKind({ name: "인원추가 [평일만]", gross: 3000, net: 3000 })).toBe("추가인원");
     expect(kidsKind({ name: "키즈 주스", gross: 3000, net: 3000 })).toBe("기타");
   });
 
