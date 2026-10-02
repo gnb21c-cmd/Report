@@ -61,7 +61,7 @@ jobs:
           if ($page.Content -notmatch "매출 보고 입력") { throw "A 화면이 안 나옴" }
           $b = Invoke-WebRequest -Uri "http://localhost:8790/b/" -UseBasicParsing -TimeoutSec 10
           if ($b.Content -notmatch "매출 보고") { throw "B 화면이 안 나옴" }
-          Stop-Process -Id $p.Id -Force
+          Get-Process PosReportC -ErrorAction SilentlyContinue | Stop-Process -Force  # 한 파일 exe 는 프로세스가 둘 (풀기 + 서버)
           if (-not (Test-Path "$env:POS_REPORT_HOME/logs/office.log")) { throw "기록 파일이 없습니다" }
           exit 0
       - uses: actions/upload-artifact@v4
