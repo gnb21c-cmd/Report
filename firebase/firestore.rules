@@ -1,0 +1,48 @@
+rules_version = '2';
+// 매출 보고 클라우드 보관함 보안 규칙 (Firebase 콘솔 → Firestore → 규칙에 붙여 넣기)
+//
+// 누가 무엇을:
+//   보는 사람 (대표이사 · 관리자 4명)  → viewers/{이메일} 문서가 있으면 days · devices 읽기만
+//   카페 메인 POS PC 계정              → senders/{이메일} = { pos: "cafe" } → days/cafe_* · devices/cafe 쓰기만
+//   키즈 POS PC 계정                   → senders/{이메일} = { pos: "kids" } → days/kids_* · devices/kids 쓰기만
+//   viewers · senders 문서는 Firebase 콘솔에서만 만듦 (앱·PC 에서는 못 바꿈)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function email() {
+      return request.auth != null && request.auth.token.email != null ? request.auth.token.email.lower() : "";
+    }
+    function isViewer() {
+      return email() != "" && exists(/databases/$(database)/documents/viewers/$(email()));
+    }
+    function senderPos() {
+      return get(/databases/$(database)/documents/senders/$(email())).data.pos;
+    }
+    function isSenderOf(pos) {
+      return email() != "" && exists(/databases/$(database)/documents/senders/$(email())) && senderPos() == pos;
+    }
+
+    // 하루치 매출: 문서 이름 = {pos}_{YYYY-MM-DD}
+    match /days/{id} {
+      allow read: if isViewer();
+      allow write: if isSenderOf(request.resource.data.pos)
+        && id == request.resource.data.pos + "_" + request.resource.data.date
+        && request.resource.data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+        && request.resource.data.rows is string
+        && request.resource.data.rows.size() < 900000;
+    }
+
+    // POS PC 송부 상태
+    match /devices/{pos} {
+      allow read: if isViewer();
+      allow write: if isSenderOf(pos);
+    }
+
+    // 보는 사람 · 보내는 PC 명단 — 자기 문서만 읽기 (앱이 '권한 있음'을 확인), 쓰기는 콘솔에서만
+    match /viewers/{em} {
+      allow read: if email() == em;
+    }
+    match /senders/{em} {
+      allow read: if email() == em;
+    }
+  }
+}

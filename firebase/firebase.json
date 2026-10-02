@@ -1,0 +1,8 @@
+{
+  "firestore": { "rules": "firestore.rules" },
+  "hosting": {
+    "public": "../apps/view/dist",
+    "ignore": ["firebase.json", "**/.*"],
+    "headers": [{ "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }]
+  }
+}

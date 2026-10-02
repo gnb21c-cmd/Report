@@ -8,3 +8,11 @@
 - 상품별로 볼 때는 **상품명 기준** (2026-07-01 VAN 변경으로 상품코드가 모두 바뀜).
 - 사용자에게 보이는 문구와 주석은 한국어로 쓴다.
 - 개발 작업은 명령마다 새 브랜치(`feature/작업이름`)를 만들어 저장·검증·수정한다. 검증·수정이 끝나면 체험판 등으로 확인할 수 있게 보여주고 "main에 올릴까요?"라고 묻는다. 사용자가 "올려"라고 할 때만 main에 합쳐 `git push origin main` 하고, GitHub에 반영됐는지 확인해 알린다. 작업을 마칠 때마다 main에 아직 안 올라간 브랜치가 있는지 점검해 알린다. (사용자 지시)
+
+## 명령
+
+- `pnpm test` (core + A 시험) / `pnpm typecheck`
+- `pnpm demo` — 체험판 HTML (`apps/view/dist-demo/index.html`)
+- A 시험만: `cd apps/sender && PYTHONPATH=src python3 -m unittest discover -s tests`
+- 보고 계산 규칙은 `packages/core/src/report.ts`, 팀·키즈 입장 구분은 `classify.ts`. 바꾸면 `packages/core/test` 에 시험을 먼저 더한다.
+- A 가 보내는 칸(`relay.py day_doc`)과 B 가 읽는 칸(`apps/view/src/data/firebase.ts toBatch`)은 같이 바꾼다.
