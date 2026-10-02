@@ -2,67 +2,48 @@ rules_version = '2';
 // 매출 보고 클라우드 보관함 보안 규칙 (Firebase 콘솔 → Firestore → 규칙에 붙여 넣기)
 //
 // 매장 자료는 boards/{열쇠}/ 아래에 둡니다. 열쇠 = 긴 무작위 글자 (docs/SETUP.md ①-6)
-//   보는 폰 (로그인 없음)      → 설치 주소 /b/{열쇠}/ 를 아는 폰만 읽음 (열쇠를 모르면 목록도 못 봄)
-//                                네이버 입장권 고친 값(adjust)만 쓸 수 있음
-//   보내는 PC (사무실)         → senders/{이메일} = { pos: "all", board: "{열쇠}" } 계정으로 로그인해
-//                                하루치(days) · 상태(devices) · 날씨(weather)만 씀 (매장 PC 한 대 한 매장이면 pos: "cafe"|"kids")
+//   보는 폰 (로그인 없음)   → 설치 주소 /b/{열쇠}/ 를 아는 폰만 읽음 (열쇠를 모르면 목록도 못 봄). 쓰기 없음
+//   사무실 PC (C)           → senders/{이메일} = { board: "{열쇠}" } 계정으로 로그인해
+//                             보고(reports) · 날씨(weather) · 상태(devices)만 씀
 //   senders 문서는 Firebase 콘솔에서만 만듦
 service cloud.firestore {
   match /databases/{database}/documents {
     function email() {
       return request.auth != null && request.auth.token.email != null ? request.auth.token.email.lower() : "";
     }
-    function isAnySender(board) {
+    function isSender(board) {
       return email() != ""
         && exists(/databases/$(database)/documents/senders/$(email()))
-        && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
-    }
-    // pos = "all" 이면 모든 매장 (사무실 PC 한 대에서 카페 · 키즈를 함께 보낼 때)
-    function isSender(board, pos) {
-      return email() != ""
-        && exists(/databases/$(database)/documents/senders/$(email()))
-        && get(/databases/$(database)/documents/senders/$(email())).data.pos in [pos, "all"]
         && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
     }
 
     match /boards/{board} {
-      // 하루치 매출: 문서 이름 = {pos}_{YYYY-MM-DD}
-      match /days/{id} {
+      // 그날 보고 (C 가 카페 · 키즈 · 네이버 조각을 합친 것) — 문서 이름 = 날짜, report = JSON 글자
+      match /reports/{date} {
         allow read: if true;
-        allow write: if isSender(board, request.resource.data.pos)
-          && id == request.resource.data.pos + "_" + request.resource.data.date
-          && request.resource.data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-          && request.resource.data.rows is string
-          && request.resource.data.rows.size() < 900000;
+        allow write: if isSender(board)
+          && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.date == date
+          && request.resource.data.report is string
+          && request.resource.data.report.size() < 900000;
       }
 
-      // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜. POS PC 가 송부할 때 함께 씀
+      // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜
       match /weather/{date} {
         allow read: if true;
-        allow write: if isAnySender(board)
+        allow write: if isSender(board)
           && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
           && request.resource.data.date == date;
       }
 
-      // POS PC 송부 상태
-      match /devices/{pos} {
+      // C 상태 (devices/office)
+      match /devices/{id} {
         allow read: if true;
-        allow write: if isSender(board, pos);
-      }
-
-      // 네이버 입장권 고친 값 (문서 이름 = 날짜) — 설치한 폰이면 누구나 고침
-      match /adjust/{date} {
-        allow read: if true;
-        allow delete: if date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
-        allow create, update: if date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-          && request.resource.data.keys().hasOnly(["naver", "by", "at"])
-          && request.resource.data.naver is int
-          && request.resource.data.naver >= 0 && request.resource.data.naver <= 5000
-          && request.resource.data.by is string && request.resource.data.by.size() <= 20;
+        allow write: if isSender(board);
       }
     }
 
-    // POS PC 계정 명단 — 자기 문서만 읽기, 쓰기는 콘솔에서만
+    // C 계정 명단 — 자기 문서만 읽기, 쓰기는 콘솔에서만
     match /senders/{em} {
       allow read: if email() == em;
     }
