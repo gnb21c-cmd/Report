@@ -219,7 +219,23 @@ def cmd_setup(conf, args):
     return 0
 
 
+def safe_console():
+    """한글을 못 쓰는 창(영문 Windows 등)에서도 멈추지 않게 — 한글을 쓸 수 없으면 UTF-8 로, 그래도 안 되는 글자는 ? 로"""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            "가".encode(stream.encoding or "ascii")
+            stream.reconfigure(errors="replace")
+        except (UnicodeEncodeError, LookupError):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+
 def main(argv=None) -> int:
+    safe_console()
     p = argparse.ArgumentParser(prog="PosReport", description="매장 POS 매출 보내기")
     p.add_argument("--config", help="설정 파일 경로")
     sub = p.add_subparsers(dest="cmd")
