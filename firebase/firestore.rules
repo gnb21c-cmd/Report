@@ -4,8 +4,8 @@ rules_version = '2';
 // 매장 자료는 boards/{열쇠}/ 아래에 둡니다. 열쇠 = 긴 무작위 글자 (docs/SETUP.md ①-6)
 //   보는 폰 (로그인 없음)      → 설치 주소 /b/{열쇠}/ 를 아는 폰만 읽음 (열쇠를 모르면 목록도 못 봄)
 //                                네이버 입장권 고친 값(adjust)만 쓸 수 있음
-//   카페 메인 · 키즈 POS PC    → senders/{이메일} = { pos: "cafe"|"kids", board: "{열쇠}" } 계정으로 로그인해
-//                                자기 POS 의 하루치(days)와 상태(devices)만 씀
+//   보내는 PC (사무실)         → senders/{이메일} = { pos: "all", board: "{열쇠}" } 계정으로 로그인해
+//                                하루치(days) · 상태(devices) · 날씨(weather)만 씀 (매장 PC 한 대 한 매장이면 pos: "cafe"|"kids")
 //   senders 문서는 Firebase 콘솔에서만 만듦
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -17,10 +17,11 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/senders/$(email()))
         && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
     }
+    // pos = "all" 이면 모든 매장 (사무실 PC 한 대에서 카페 · 키즈를 함께 보낼 때)
     function isSender(board, pos) {
       return email() != ""
         && exists(/databases/$(database)/documents/senders/$(email()))
-        && get(/databases/$(database)/documents/senders/$(email())).data.pos == pos
+        && get(/databases/$(database)/documents/senders/$(email())).data.pos in [pos, "all"]
         && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
     }
 

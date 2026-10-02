@@ -1,16 +1,20 @@
 """설정 파일 (config.json) — 보통 C:\\ProgramData\\PosReport\\config.json (이 PC 에만, 저장소에 넣지 않음)
 
+사무실 PC 한 대에서 카페 · 키즈를 함께 보냄 (백오피스 nice.okpos.co.kr 에서 매장별로 받은 엑셀)
 {
-  "pos": "cafe" | "kids",               이 PC 가 어느 POS 인지
+  "stores": {                            매장별 읽는 방법 (sources.py)
+    "cafe": { "type": "folder", "folder": "C:\\PosReport\\엑셀\\카페" },
+    "kids": { "type": "folder", "folder": "C:\\PosReport\\엑셀\\키즈" }
+  },
   "firebase": {                          클라우드 보관함 (docs/SETUP.md)
     "apiKey": "…", "projectId": "…",
-    "email": "cafe-pos@…", "password": "…",  이 PC 전용 계정 (자기 POS 자료만 쓸 수 있음)
+    "email": "office@…", "password": "…",  보내기 전용 계정 (senders 문서 pos = "all")
     "board": "…"                          매장 열쇠 (보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
   },
   "weather": { "serviceKey": "…" },     기상청 공공데이터포털 인증키 (없으면 날씨는 건너뜀). 위치 기본값: 격자 61·119, 관측소 119 수원
-  "catchUpDays": 3,                      보낼 때 지난 며칠도 다시 맞춰 봄 (늦은 취소·못 보낸 날)
-  "source": { "type": "folder" | "firebird" | "none", … }   POS 자료 읽는 방법 (sources.py)
+  "catchUpDays": 3                       DB 읽기 방식일 때 지난 며칠도 다시 맞춰 봄
 }
+(예전 모양 "pos" + "source" 도 읽음 — 매장 PC 한 대에 한 매장)
 """
 from __future__ import annotations
 
@@ -19,12 +23,21 @@ import os
 
 POS_LABEL = {"cafe": "카페", "kids": "키즈"}
 
+OFFICE_ROOT = "C:\\PosReport\\엑셀"
+
+
+def office_stores(root: str = OFFICE_ROOT) -> dict:
+    import ntpath
+
+    join = ntpath.join if "\\" in root else os.path.join
+    return {pos: {"type": "folder", "folder": join(root, label), "pattern": "*.xls"} for pos, label in POS_LABEL.items()}
+
+
 DEFAULTS = {
-    "pos": "",
+    "stores": {},
     "firebase": {"apiKey": "", "projectId": "", "email": "", "password": "", "board": ""},
     "catchUpDays": 3,
     "weather": {"serviceKey": ""},
-    "source": {"type": "none"},
 }
 
 
@@ -60,7 +73,12 @@ def load(path: str | None = None, must_exist: bool = True) -> dict:
         raise ConfigError(f"설정 파일이 없습니다: {path} — install.bat 으로 설치해 주세요.")
     conf = {**DEFAULTS, **raw}
     conf["firebase"] = {**DEFAULTS["firebase"], **(raw.get("firebase") or {})}
-    conf["source"] = {**DEFAULTS["source"], **(raw.get("source") or {})}
+    stores = dict(raw.get("stores") or {})
+    if not stores and raw.get("pos") in POS_LABEL:  # 예전 모양 (매장 PC 한 대에 한 매장)
+        stores = {raw["pos"]: raw.get("source") or {"type": "none"}}
+    conf["stores"] = {p: s for p, s in stores.items() if p in POS_LABEL}
+    conf.pop("pos", None)
+    conf.pop("source", None)
     conf["weather"] = {**DEFAULTS["weather"], **(raw.get("weather") or {})}
     conf["_path"] = path
     return conf
@@ -81,8 +99,8 @@ def save(conf: dict, path: str | None = None) -> str:
 def problems(conf: dict) -> list:
     """설정에서 고쳐야 할 것 (없으면 빈 목록)"""
     out = []
-    if conf.get("pos") not in POS_LABEL:
-        out.append('이 PC 가 어느 POS 인지(pos: "cafe" 또는 "kids") 정해지지 않았습니다.')
+    if not conf.get("stores"):
+        out.append("보낼 매장(stores)이 정해지지 않았습니다 — install.bat 으로 다시 설치해 주세요.")
     fb = conf.get("firebase") or {}
     for k, label in (("apiKey", "API 키"), ("projectId", "프로젝트 ID"), ("board", "매장 열쇠"), ("email", "보내기 계정"), ("password", "보내기 계정 비밀번호")):
         if not str(fb.get(k) or "").strip():
@@ -94,7 +112,9 @@ def problems(conf: dict) -> list:
 
 
 def pos_label(conf: dict) -> str:
-    return POS_LABEL.get(conf.get("pos") or "", "?")
+    """'카페 · 키즈' 처럼 이 PC 가 보내는 매장들"""
+    names = [POS_LABEL[p] for p in POS_LABEL if p in (conf.get("stores") or {})]
+    return " · ".join(names) or "?"
 
 
 def trial_mode(conf: dict) -> bool:
@@ -104,5 +124,5 @@ def trial_mode(conf: dict) -> bool:
 
 
 def basic_problems(conf: dict) -> list:
-    """시험 모드에서도 필요한 것 (POS 구분)"""
-    return [p for p in problems(conf) if "pos" in p]
+    """시험 모드에서도 필요한 것 (매장)"""
+    return [p for p in problems(conf) if "stores" in p]

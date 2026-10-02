@@ -1,4 +1,4 @@
-# 매장 POS 매출 보내기(A) 설치 묶음 만들기 — apps/sender
+# 매출 보내기(A) 설치 묶음 만들기 — apps/sender (사무실 PC 한 대에서 카페 · 키즈)
 # GitHub → Actions → "Build sender" → Run workflow → 끝나면 Artifacts 에서 pos-report-sender 내려받기
 # 32비트로 만듦: OK포스 Firebird 클라이언트(fbclient.dll)가 32비트라서 (64비트 Windows 에서도 돎)
 name: Build sender
@@ -43,7 +43,7 @@ jobs:
           $v = & "$out/PosReport.exe" version
           Write-Host "version: $v"
           $env:POS_REPORT_HOME = "$env:RUNNER_TEMP/posreport"
-          & "$out/PosReport.exe" setup --pos cafe --apikey x --projectid x --email ci@example.invalid --password x --board ci-board-key-0000 --folder "$env:RUNNER_TEMP/xls"
+          & "$out/PosReport.exe" setup --apikey x --projectid x --email ci@example.invalid --password x --board ci-board-key-0000 --root "$env:RUNNER_TEMP\xls"
           if ($LASTEXITCODE -ne 0) { throw "setup 실패" }
           & "$out/PosReport.exe" check   # 가짜 계정이라 [확인 필요]가 나오는 것이 정상 — 실행만 확인
           if (-not (Test-Path "$env:POS_REPORT_HOME/logs/send.log")) { throw "기록 파일이 없습니다" }

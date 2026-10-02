@@ -59,7 +59,10 @@ class Sender:
         self.today = today or dt.date.today
         self.now = now or dt.datetime.now
         key = ((conf.get("weather") or {}).get("serviceKey") or "").strip()
-        self.kma = kma if kma is not None else (wx.Kma(conf["weather"]) if key else None)
+        if kma is False:  # 이 매장 차례에는 날씨를 받지 않음 (여러 매장 함께 보낼 때)
+            self.kma = None
+        else:
+            self.kma = kma if kma is not None else (wx.Kma(conf["weather"]) if key else None)
 
     def collect(self, res: Result, force: bool = False):
         """POS 자료를 읽어 PC 보관함에 넣음"""

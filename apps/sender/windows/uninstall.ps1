@@ -9,8 +9,10 @@ Write-Host '매출 보내기 프로그램 지우기' -ForegroundColor Cyan
 cmd /c "schtasks /Delete /TN PosReport-Logon /F >nul 2>&1"
 cmd /c "schtasks /Delete /TN PosReport-Close /F >nul 2>&1"
 Get-Process PosReport, PosReportW -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-$lnk = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) '매출 보내기.lnk'
-if (Test-Path $lnk) { Remove-Item $lnk -Force }
+foreach ($n in @('매출 보내기.lnk', '매출 엑셀 폴더.lnk')) {
+  $lnk = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) $n
+  if (Test-Path $lnk) { Remove-Item $lnk -Force }
+}
 if (Test-Path $app) { Remove-Item $app -Recurse -Force }
 Write-Host '  프로그램 · 아이콘 · 자동 보내기를 지웠습니다.'
 if (Test-Path $data) {

@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import threading
 
-from .config import pos_label, trial_mode
+from .config import POS_LABEL, pos_label, trial_mode
 from .normalize import won
 
 WEEK = "월화수목금토일"
@@ -34,8 +34,6 @@ def result_lines(res) -> list:
             out.append("⚠ " + w)
         if res.error:
             out.append("✖ " + res.error)
-        out.append("시험 모드라 보내지 않았습니다. 바탕화면에 결과 파일을 남겼습니다:")
-        out.append(res.trial_file)
         return out
     for date, count, net in res.sent:
         out.append(f"✔ {day_label(date)} 상품 {count}개 · 실매출 {won(net)} 보냈습니다")
@@ -55,23 +53,38 @@ def result_lines(res) -> list:
     return out
 
 
+def office_lines(results: list) -> list:
+    """여러 매장 결과 → 창에 보일 줄들 ([카페] … / [키즈] …)"""
+    from .config import POS_LABEL
+
+    out = []
+    trial_file = None
+    for pos, res in results:
+        out.append(f"[{POS_LABEL.get(pos, pos)}]")
+        out += ["  " + ln for ln in result_lines(res)]
+        trial_file = trial_file or res.trial_file
+    if trial_file:
+        out += ["", "시험 모드라 보내지 않았습니다. 바탕화면에 결과 파일을 남겼습니다:", trial_file]
+    return out
+
+
 def run_window(conf: dict, make_sender):
     import tkinter as tk
     from tkinter import font as tkfont
 
     root = tk.Tk()
     root.title("매출 보내기")
-    root.geometry("520x420")
+    root.geometry("600x560")
     root.configure(bg="#f9f9f7")
     big = tkfont.Font(family="맑은 고딕", size=18, weight="bold")
     mid = tkfont.Font(family="맑은 고딕", size=12)
 
-    title = f"{pos_label(conf)} POS 마감 자료 보내기" + (" (시험 모드)" if trial_mode(conf) else "")
+    title = f"{pos_label(conf)} 매출 보내기" + (" (시험 모드)" if trial_mode(conf) else "")
     tk.Label(root, text=title, font=big, bg="#f9f9f7").pack(pady=(24, 4))
     tk.Label(root, text=f"오늘 {day_label(dt.date.today().isoformat())}", font=mid, bg="#f9f9f7", fg="#52514e").pack()
-    src = conf.get("source") or {}
-    if src.get("type") == "folder":
-        tip = f"먼저 OK포스 백오피스에서 '상품별 (일자별)' 오늘 자료를\n{src.get('folder')} 폴더에 엑셀로 저장해 주세요."
+    folders = [f"{POS_LABEL.get(p, p)}: {s.get('folder')}" for p, s in (conf.get("stores") or {}).items() if s.get("type") == "folder"]
+    if folders:
+        tip = "백오피스(nice.okpos.co.kr) '상품별 (일자별)' 을 매장별로 받아\n" + "\n".join(folders) + "\n폴더에 저장한 뒤 누르세요."
         tk.Label(root, text=tip, font=mid, bg="#f9f9f7", fg="#52514e", justify="center").pack(pady=(10, 0))
 
     msg = tk.StringVar(value="")
@@ -83,8 +96,7 @@ def run_window(conf: dict, make_sender):
         sender = None
         try:
             sender = make_sender()
-            res = sender.run()
-            text = "\n".join(result_lines(res))
+            text = "\n".join(office_lines(sender.run()))
         except Exception as e:  # 설정 오류 등 — 창에 그대로
             text = "✖ " + str(e)[:300]
         finally:

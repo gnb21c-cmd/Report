@@ -123,28 +123,64 @@ if __name__ == "__main__":
 
 
 class TrialTest(unittest.TestCase):
-    def test_trial_reads_and_writes_file_without_sending(self):
+    def test_trial_reads_all_stores_into_one_file_without_sending(self):
         import os
         import tempfile
 
         from report_sender.config import trial_mode
+        from report_sender.gui import office_lines
         from report_sender.trial import TrialSender
 
-        conf = {**CONF, "firebase": {"apiKey": "", "projectId": "", "board": "", "email": "", "password": ""}}
+        conf = {"stores": {"cafe": {"type": "folder"}, "kids": {"type": "folder"}}, "catchUpDays": 0, "firebase": {}}
         self.assertTrue(trial_mode(conf))
         d = tempfile.mkdtemp()
-        t = TrialSender(conf, out_dir=d, today=lambda: dt.date(2026, 10, 1))
-        import report_sender.trial as tr
-
-        old = tr.make_source
-        tr.make_source = lambda c, s: FakeSource({"2026-10-01": [row("자유입장권", 12000, 1)]})
-        try:
-            res = t.run()
-        finally:
-            tr.make_source = old
-        self.assertEqual(res.read, [("2026-10-01", 1, 12000, True)])
-        text = open(res.trial_file, encoding="utf-8-sig").read()
+        data = {"cafe": {"2026-10-01": [row("[ICE] 아메리카노", 5000, 1)]}, "kids": {"2026-10-01": [row("자유입장권", 12000, 1)]}}
+        t = TrialSender(conf, out_dir=d, today=lambda: dt.date(2026, 10, 1), make=lambda c, s, it=iter(["cafe", "kids"]): FakeSource(data[next(it)]))
+        results = t.run()
+        self.assertEqual([(p, r.read) for p, r in results], [("cafe", [("2026-10-01", 1, 5000, True)]), ("kids", [("2026-10-01", 1, 12000, True)])])
+        text = open(results[0][1].trial_file, encoding="utf-8-sig").read()
+        self.assertIn("======== 카페 ========", text)
         self.assertIn("자유입장권", text)
-        self.assertIn("실매출 12,000원", text)
-        self.assertIn("시험 모드라 보내지 않았습니다", "\n".join(result_lines(res)))
-        self.assertTrue(os.path.basename(res.trial_file).startswith("매출보내기_시험결과_"))
+        lines = "\n".join(office_lines(results))
+        self.assertIn("[카페]", lines)
+        self.assertIn("시험 모드라 보내지 않았습니다", lines)
+        self.assertEqual(len(os.listdir(d)), 1)
+
+
+class OfficeTest(unittest.TestCase):
+    def test_both_stores_sent_from_one_pc_weather_once(self):
+        import tempfile
+
+        from report_sender.office import OfficeSender
+
+        relay = FakeRelay()
+        conf = {"stores": {"cafe": {"type": "folder"}, "kids": {"type": "folder"}}, "catchUpDays": 0, "firebase": {}, "weather": {}}
+        data = {"cafe": {"2026-10-01": [row("[ICE] 아메리카노", 5000, 1)]}, "kids": {"2026-10-01": [row("자유입장권", 12000, 1)]}}
+        names = iter(["cafe", "kids"])
+        o = OfficeSender(conf, relay=relay, make_source=lambda c, ob: FakeSource(data[next(names)]), today=lambda: dt.date(2026, 10, 1), out_dir=tempfile.mkdtemp())
+        self.assertIsNone(o.senders[1][1].kma)
+        results = o.run()
+        o.close()
+        self.assertEqual(relay.days, [("cafe", "2026-10-01", 1), ("kids", "2026-10-01", 1)])
+        self.assertTrue(all(r.ok for _, r in results))
+
+    def test_config_reads_old_single_store_shape(self):
+        import json
+        import os
+        import tempfile
+
+        from report_sender.config import load, office_stores, pos_label
+
+        p = os.path.join(tempfile.mkdtemp(), "c.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"pos": "kids", "source": {"type": "folder", "folder": "X"}}, f)
+        c = load(p)
+        self.assertEqual(c["stores"], {"kids": {"type": "folder", "folder": "X"}})
+        self.assertEqual(pos_label(c), "키즈")
+        st = office_stores("C:\\PosReport\\엑셀")
+        self.assertEqual(st["cafe"]["folder"], "C:\\PosReport\\엑셀\\카페")
+        self.assertEqual(pos_label({"stores": st}), "카페 · 키즈")
+
+
+if __name__ == "__main__":
+    unittest.main()

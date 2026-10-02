@@ -4,7 +4,7 @@
   auto                창 없이 한 번 보냄 (카페: 정해진 시각 · PC 켤 때 못 보낸 날)
   check               설정 · POS 자료 읽기 · 보관함 연결 점검 (아무것도 안 보냄)
   dry-run             오늘 자료를 읽어 보낼 내용만 보여 줌
-  import 폴더 --pos   지난 엑셀(상품별 일자별) 여러 개를 한 번에 올림 (작년 비교용)
+  import 폴더 --pos   매장 하나의 지난 엑셀(상품별 일자별) 여러 개를 한 번에 올림 (작년 비교용)
   setup               설정 넣기 (설치 스크립트가 부름)
   version
 """
@@ -34,7 +34,7 @@ def setup_logging():
 
 
 def make_sender(conf):
-    from .runner import Sender
+    from .office import OfficeSender
 
     if trial_mode(conf):
         from .trial import TrialSender
@@ -46,11 +46,11 @@ def make_sender(conf):
     bad = problems(conf)
     if bad:
         raise ConfigError(" / ".join(bad))
-    return Sender(conf)
+    return OfficeSender(conf)
 
 
 def cmd_auto(conf, args):
-    from .gui import result_lines
+    from .gui import office_lines
 
     if trial_mode(conf):
         return 0  # 시험 모드에서는 저절로 하지 않음
@@ -61,14 +61,14 @@ def cmd_auto(conf, args):
         return 0
     sender = make_sender(conf)
     try:
-        res = sender.run()
+        results = sender.run()
     finally:
         sender.close()
         lock.close()
-    for ln in result_lines(res):
+    for ln in office_lines(results):
         print(ln)
         logging.info(ln)
-    return 0 if res.error is None else 1
+    return 0 if all(r.error is None for _, r in results) else 1
 
 
 def cmd_window(conf, args):
@@ -79,35 +79,43 @@ def cmd_window(conf, args):
 
 
 def cmd_check(conf, args):
-    print(f"판 {VERSION} · 이 PC: {pos_label(conf)} POS · 설정 {conf['_path']}")
+    print(f"판 {VERSION} · 보내는 매장: {pos_label(conf)} · 설정 {conf['_path']}")
     bad = problems(conf)
-    for b in bad:
-        print("[확인 필요]", b)
+    if trial_mode(conf):
+        print("[시험 모드] 클라우드 보관함 설정 전 — 보내지 않고 읽기만 합니다")
+    else:
+        for b in bad:
+            print("[확인 필요]", b)
     from .outbox import Outbox
     from .relay import FirebaseRelay, RelayError
     from .sources import SourceError, make_source
 
-    ob = Outbox(os.path.join(data_dir(), "outbox.db"))
-    try:
-        src = make_source(conf.get("source") or {}, ob)
-        print("읽는 방법:", src.describe())
-        if src.type == "firebird":
-            today = dt.date.today().isoformat()
-            rows = src.poll([today])[0].rows
-            t = totals(rows)
-            print(f"[정상] 오늘 상품 {len(rows)}개 · 실매출 {won(t['net'])}")
-        elif src.type == "folder":
-            print(f"[정상] 엑셀 {len(src.files())}개가 폴더에 있음")
-    except SourceError as e:
-        print("[확인 필요]", e)
+    from .config import POS_LABEL
+
+    pending = 0
+    for pos, src_conf in (conf.get("stores") or {}).items():
+        ob = Outbox(os.path.join(data_dir(), f"outbox-{pos}.db"))
+        try:
+            src = make_source(src_conf, ob)
+            print(f"[{POS_LABEL[pos]}] 읽는 방법:", src.describe())
+            if src.type == "firebird":
+                today = dt.date.today().isoformat()
+                rows = src.poll([today])[0].rows
+                t = totals(rows)
+                print(f"[정상] 오늘 상품 {len(rows)}개 · 실매출 {won(t['net'])}")
+            elif src.type == "folder":
+                print(f"[정상] 엑셀 {len(src.files())}개가 폴더에 있음")
+        except SourceError as e:
+            print("[확인 필요]", e)
+        pending += ob.pending()
+        ob.close()
     if not bad:
         try:
             FirebaseRelay(conf["firebase"]).token()
             print("[정상] 클라우드 보관함 로그인")
         except RelayError as e:
             print("[확인 필요]", e)
-    print("아직 못 보낸 날:", ob.pending())
-    ob.close()
+    print("아직 못 보낸 날:", pending)
     return 0
 
 
@@ -116,27 +124,29 @@ def cmd_dry_run(conf, args):
     from .runner import days_to_read
     from .sources import make_source
 
-    ob = Outbox(":memory:")
-    src = make_source(conf.get("source") or {}, ob)
-    for it in src.poll(days_to_read(dt.date.today(), 0)):
-        t = totals(it.rows)
-        print(f"{it.date} · 상품 {len(it.rows)}개 · 실매출 {won(t['net'])} ({it.source})")
-        for r in sorted(it.rows, key=lambda r: -r["net"])[:5]:
-            print(f"   {r['name']} × {r['qty']} = {won(r['net'])}")
+    for pos, src_conf in (conf.get("stores") or {}).items():
+        ob = Outbox(":memory:")
+        src = make_source(src_conf, ob)
+        print(f"[{pos}]")
+        for it in src.poll(days_to_read(dt.date.today(), 0)):
+            t = totals(it.rows)
+            print(f"{it.date} · 상품 {len(it.rows)}개 · 실매출 {won(t['net'])} ({it.source})")
+            for r in sorted(it.rows, key=lambda r: -r["net"])[:5]:
+                print(f"   {r['name']} × {r['qty']} = {won(r['net'])}")
     return 0
 
 
 def cmd_trial(conf, args):
     """보내지 않고 읽기만 → 바탕화면 결과 파일"""
-    from .gui import result_lines
+    from .gui import office_lines
     from .trial import TrialSender
 
     t = TrialSender(conf)
     try:
-        res = t.run()
+        results = t.run()
     finally:
         t.close()
-    for ln in result_lines(res):
+    for ln in office_lines(results):
         print(ln)
     return 0
 
@@ -148,7 +158,7 @@ def cmd_import(conf, args):
     from .runner import Result, Sender
     from .xls_report import days_between, read_report
 
-    pos = args.pos or conf.get("pos")
+    pos = args.pos
     if pos not in ("cafe", "kids"):
         raise ConfigError("--pos cafe 또는 --pos kids 를 붙여 주세요.")
     conf = {**conf, "pos": pos}
@@ -192,8 +202,8 @@ def cmd_import(conf, args):
 
 
 def cmd_setup(conf, args):
-    if args.pos:
-        conf["pos"] = args.pos
+    from .config import office_stores
+
     fb = conf["firebase"]
     for k in ("apiKey", "projectId", "email", "password", "board"):
         v = getattr(args, k.lower())
@@ -201,12 +211,14 @@ def cmd_setup(conf, args):
             fb[k] = v
     if args.kma_key:
         conf.setdefault("weather", {})["serviceKey"] = args.kma_key
-    if args.source_file:
-        with open(args.source_file, encoding="utf-8-sig") as f:
-            conf["source"] = json.load(f)
-    if args.folder:
-        conf["source"] = {"type": "folder", "folder": args.folder, "pattern": "*.xls"}
-        os.makedirs(args.folder, exist_ok=True)
+    if args.root or not conf.get("stores"):
+        # 사무실 방식: 매장별 엑셀 폴더 (카페 · 키즈)
+        conf["stores"] = office_stores(args.root) if args.root else office_stores()
+        for s in conf["stores"].values():
+            try:
+                os.makedirs(s["folder"], exist_ok=True)
+            except OSError:
+                pass
     path = save(conf)
     print("설정 저장:", path)
     if trial_mode(conf):
@@ -250,15 +262,13 @@ def main(argv=None) -> int:
     im.add_argument("--pos", choices=["cafe", "kids"])
     im.add_argument("--dry", action="store_true", help="읽기만, 올리지 않음")
     st = sub.add_parser("setup")
-    st.add_argument("--pos", choices=["cafe", "kids"])
     st.add_argument("--apikey")
     st.add_argument("--projectid")
     st.add_argument("--email")
     st.add_argument("--password")
     st.add_argument("--board", help="매장 열쇠 (보고 앱 설치 주소의 /b/ 뒤)")
     st.add_argument("--kma-key", help="기상청 공공데이터포털 인증키")
-    st.add_argument("--folder", help="엑셀 폴더 (엑셀 방식으로 정함)")
-    st.add_argument("--source-file", help="읽는 방법 JSON 파일")
+    st.add_argument("--root", help="매장별 엑셀 폴더의 위 폴더 (기본 C:\\PosReport\\엑셀 → 그 안에 카페 · 키즈)")
     args = p.parse_args(argv)
     cmd = args.cmd or "window"
     if cmd == "version":
