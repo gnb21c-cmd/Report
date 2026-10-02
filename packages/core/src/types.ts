@@ -1,14 +1,18 @@
 /* ============================================================
-   자료 모양 — A(보내는 프로그램)와 B(보고 앱)가 같은 모양을 씀
-   A 의 apps/sender/src/report_sender/normalize.py 와 칸 이름이 같아야 합니다.
+   자료 모양 — A(입력 화면)가 계산해 C(사무실 PC)로 보내고, B(보고 앱)가 읽는 모양
+   C(apps/office/src/report_office/store.py)는 이 모양을 그대로 보관·합칩니다.
    ============================================================ */
 
-/** 어느 POS 에서 온 자료인지 — 카페 메인 POS(서브 결제 포함) · 키즈 POS */
-export type PosId = "cafe" | "kids";
-export const POS_IDS: PosId[] = ["cafe", "kids"];
-export const POS_LABEL: Record<PosId, string> = { cafe: "카페", kids: "키즈" };
+/** 매장 — 카페아스타나(카페 POS: 메인 01 · 서브 02) · 아스타나키즈(키즈 POS) */
+export type StoreId = "cafe" | "kids";
+/** 예전 이름 (POS = 매장) */
+export type PosId = StoreId;
+export const STORE_IDS: StoreId[] = ["cafe", "kids"];
+export const POS_IDS = STORE_IDS;
+export const STORE_LABEL: Record<StoreId, string> = { cafe: "카페아스타나", kids: "아스타나키즈" };
+export const POS_LABEL: Record<StoreId, string> = { cafe: "카페", kids: "키즈" };
 
-/** POS 하루 × 상품 한 줄 (반품·취소는 음수 그대로) */
+/** 상품별(일자별) 엑셀 한 줄 — 지난 자료 넣기에서 씀 (반품·취소는 음수 그대로) */
 export interface SaleLine {
   code: string;
   name: string;
@@ -22,22 +26,4 @@ export interface SaleLine {
   discount: number;
   /** 실매출액 (원) */
   net: number;
-}
-
-/** A 가 보내는 한 묶음 = 한 POS 의 하루치 전체. 같은 POS·날짜가 다시 오면 통째로 바뀜 */
-export interface DayBatch {
-  pos: PosId;
-  /** 매장 날짜 YYYY-MM-DD */
-  date: string;
-  rows: SaleLine[];
-  /** 보낸 시각 (ISO) — 같은 POS·날짜가 여러 번 오면 늦은 것을 씀 */
-  sentAt: string;
-  /** 어떻게 읽었는지 (예: "엑셀:상품별.xls", "DB") */
-  source?: string;
-}
-
-/** 보고 계산에 쓰는 한 줄 (묶음을 펼친 것) */
-export interface Sale extends SaleLine {
-  pos: PosId;
-  date: string;
 }

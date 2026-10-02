@@ -1,264 +1,244 @@
 import { describe, expect, it } from "vitest";
 import {
-  analyze,
-  comparable,
-  cumulative,
   Board,
-  dailySeries,
+  bottomProducts,
+  comparable,
+  cupsPerItem,
   dashboard,
+  forecastNext,
+  HOURS,
+  hourDay,
+  hourlyInsights,
   isCup,
   kidsPrice,
-  latestBatches,
-  monthCumulative,
-  monthlySeries,
-  movingAverage,
-  salesOf,
-  SalesIndex,
+  monthDaily,
+  monthView,
+  naverSlots,
+  sampleUntilYesterday,
   visitorsFromCups,
-  yearCumulative,
-  type Adjusts,
-  type DayBatch,
-  type SaleLine,
+  weeksAverage,
+  weeksTrend,
+  yearMonthly,
+  yearView,
+  type DayReport,
+  type NaverPart,
+  type ProductTuple,
+  type StorePart,
 } from "../src";
 
-const line = (name: string, qty: number, net: number, cat1 = "", gross = net, code = name): SaleLine => ({ code, name, cat1, cat2: "", cat3: "", qty, gross, discount: gross - net, net });
-const batch = (pos: "cafe" | "kids", date: string, rows: SaleLine[]): DayBatch => ({ pos, date, rows, sentAt: `${date}T13:00:00Z` });
-const boardOf = (batches: DayBatch[], adj: Adjusts = {}) =>
-  new Board(
-    new SalesIndex(
-      salesOf(batches),
-      latestBatches(batches).map((b) => ({ pos: b.pos, date: b.date })),
-    ),
-    adj,
-  );
+const H = (xs: number[] = []) => HOURS.map((_, i) => xs[i] || 0);
+function cafe(date: string, o: { 바리스타?: number; 베이커리?: number; 키친?: number; 기타?: number; cups?: number; voucher?: number; hourly?: Partial<Record<"바리스타" | "베이커리" | "키친" | "기타", number[]>> & { cups?: number[] }; products?: ProductTuple[]; daily?: boolean } = {}): StorePart {
+  const sectors = { 바리스타: o.바리스타 || 0, 베이커리: o.베이커리 || 0, 키친: o.키친 || 0, 기타: o.기타 || 0 };
+  const posNet = sectors.바리스타 + sectors.베이커리 + sectors.키친 + sectors.기타 - (o.voucher || 0);
+  return {
+    v: 1,
+    store: "cafe",
+    date,
+    basis: o.daily ? "daily" : "receipt",
+    file: "t.xls",
+    sheetNet: posNet,
+    posNet,
+    voucher: o.voucher || 0,
+    sectors,
+    cups: o.cups || 0,
+    teams: 0,
+    teamSizes: [0, 0, 0, 0, 0, 0],
+    hourly: o.daily ? null : { sectors: { 바리스타: H(o.hourly?.바리스타), 베이커리: H(o.hourly?.베이커리), 키친: H(o.hourly?.키친), 기타: H(o.hourly?.기타) }, cups: H(o.hourly?.cups), teams: H() },
+    products: o.products || [],
+    refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
+    kids: null,
+  };
+}
+function kids(date: string, k: { issued?: number; walkIn?: number; eventFree?: number; other?: number; walkInH?: number[]; issuedH?: number[] }): StorePart {
+  const price = kidsPrice(date).price;
+  return {
+    ...cafe(date),
+    store: "kids",
+    hourly: null,
+    posNet: (k.walkIn || 0) * price + (k.other || 0),
+    kids: {
+      issued: k.issued || 0,
+      walkIn: k.walkIn || 0,
+      walkInNet: (k.walkIn || 0) * price,
+      eventFree: k.eventFree || 0,
+      other: k.other || 0,
+      hourly: { issued: H(k.issuedH), walkIn: H(k.walkInH), eventFree: H(), other: H() },
+    },
+  };
+}
+const naver = (date: string, tickets: number[], newVisitors: number[] = []): NaverPart => ({ v: 1, date, tickets: Array.from({ length: 20 }, (_, i) => tickets[i] || 0), newVisitors: Array.from({ length: 20 }, (_, i) => newVisitors[i] || 0) });
+const days = (from: string, to: string) => {
+  const out: string[] = [];
+  for (let d = new Date(from + "T00:00:00Z"); d <= new Date(to + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
+  return out;
+};
 
-const CAFE = [
-  line("[ICE] 아메리카노", 20, 100000, "바리스타"),
-  line("샷 추가", 5, 2500, "바리스타"),
-  line("생맥주 500", 5, 30000),
-  line("소금빵", 10, 38000, "베이커리"),
-  line("트러플 크림파스타", 3, 54000, "키친"),
-];
-// 입장 발행 12장 (네이버 10 + 현장 2), 현장 결제 3장 중 1장 환불
-const KIDS = [
-  line("[평일] 1시간 50분 입장권", 3, 36000),
-  line("[평일] 1시간 50분 입장권", -1, -12000, "", -12000, "환불"),
-  line("[평일] 무제한 이용", 12, 0, "", 0),
-  line("추가인원", 2, 10000),
-  line("키즈 주스", 4, 12000),
-];
-
-describe("키즈 입장료 단가", () => {
-  it("평일 12,000 · 토·일·공휴일·대체공휴일 14,000", () => {
-    expect(kidsPrice("2026-10-01")).toEqual({ price: 12000, kind: "평일" }); // 목
-    expect(kidsPrice("2026-10-03").price).toBe(14000); // 토 · 개천절
-    expect(kidsPrice("2026-10-04").price).toBe(14000); // 일
-    expect(kidsPrice("2026-10-05").price).toBe(14000); // 월 · 개천절 대체 휴일
-    expect(kidsPrice("2026-10-06").price).toBe(12000); // 화
-    expect(kidsPrice("2025-10-08").price).toBe(14000); // 수 · 추석 대체 휴일
+describe("규칙", () => {
+  it("키즈 단가: 평일 12,000 · 토·일·공휴일·대체공휴일 14,000", () => {
+    expect(kidsPrice("2026-10-01")).toEqual({ price: 12000, kind: "평일" });
+    expect([kidsPrice("2026-10-03").price, kidsPrice("2026-10-04").price, kidsPrice("2026-10-05").price, kidsPrice("2026-10-06").price, kidsPrice("2025-10-08").price]).toEqual([14000, 14000, 14000, 12000, 14000]);
   });
-});
-
-describe("방문자 추정", () => {
-  it("음료·맥주는 잔으로, 옵션(샷 추가)은 빼고", () => {
-    expect(isCup("cafe", { name: "[ICE] 아메리카노", cat1: "바리스타" }, "바리스타")).toBe(true);
-    expect(isCup("cafe", { name: "샷 추가", cat1: "바리스타" }, "바리스타")).toBe(false);
-    expect(isCup("cafe", { name: "생맥주 500", cat1: "" }, "기타")).toBe(true);
-    expect(isCup("cafe", { name: "소금빵", cat1: "베이커리" }, "베이커리")).toBe(false);
-    expect(isCup("kids", { name: "키즈 주스", cat1: "" }, "키즈")).toBe(true);
-    // 2026-10-02 카페 실제 자료에서 찾은 것: 0원 옵션 · 아이스크림은 잔이 아님, 맥주는 잔
-    expect(isCup("cafe", { name: "연하게", cat1: "바리스타", gross: 0, net: 0 }, "바리스타")).toBe(false);
-    expect(isCup("cafe", { name: "상하목장아이스크림", cat1: "바리스타", gross: 37500, net: 37500 }, "바리스타")).toBe(false);
-    expect(isCup("cafe", { name: "디카페인 변경", cat1: "바리스타", gross: 1000, net: 1000 }, "바리스타")).toBe(false);
-    expect(isCup("cafe", { name: "생맥주[켈리]", cat1: "바리스타", gross: 27500, net: 27500 }, "바리스타")).toBe(true);
-    expect(isCup("cafe", { name: "(D_ICE)아메리카노", cat1: "바리스타", gross: 77000, net: 77000 }, "바리스타")).toBe(true);
-    // 9/27: 무료 음료 쿠폰은 잔, less ice 같은 0원 옵션은 아님
-    expect(isCup("cafe", { name: "[종이] ICE 아메", cat1: "서비스.쿠폰", gross: 0, net: 0 }, "기타")).toBe(true);
-    expect(isCup("cafe", { name: "less ice", cat1: "바리스타", gross: 0, net: 0 }, "바리스타")).toBe(false);
+  it("잔: 음료·맥주는 잔, 옵션·0원·아이스크림은 아님, 세트는 이름의 잔 수", () => {
+    expect(isCup("cafe", { name: "[ICE] 아메리카노", cat1: "" }, "바리스타")).toBe(true);
+    expect(isCup("cafe", { name: "샷 추가", cat1: "" }, "바리스타")).toBe(false);
+    expect(isCup("cafe", { name: "연하게", cat1: "", gross: 0, net: 0 }, "바리스타")).toBe(false);
+    expect(isCup("cafe", { name: "상하목장아이스크림", cat1: "", gross: 7500, net: 7500 }, "바리스타")).toBe(false);
+    expect(isCup("cafe", { name: "필스너[해태]", cat1: "", gross: 7500, net: 7500 }, "기타")).toBe(true);
+    expect(isCup("cafe", { name: "[종이] ICE 아메", cat1: "", gross: 0, net: 0 }, "기타")).toBe(true);
+    expect([cupsPerItem("맥주2+감자튀김"), cupsPerItem("와인2+리코타샐러드M"), cupsPerItem("[ICE] 아메리카노")]).toEqual([2, 2, 1]);
   });
-  it("세트 메뉴는 이름의 잔 수만큼 (2026-10-01 카페: 맥주2+감자튀김 · 와인2+리코타샐러드M)", async () => {
-    const { cupsPerItem } = await import("../src");
-    expect([cupsPerItem("맥주2+감자튀김"), cupsPerItem("와인2+리코타샐러드M"), cupsPerItem("[ICE] 아메리카노"), cupsPerItem("생맥주[켈리]")]).toEqual([2, 2, 1, 1]);
-    expect(isCup("cafe", { name: "맥주2+감자튀김", cat1: "키친", gross: 28500, net: 28500 }, "키친")).toBe(true);
-    expect(isCup("cafe", { name: "밥으로 변경", cat1: "키친", gross: 0, net: 0 }, "키친")).toBe(false);
-    expect(isCup("cafe", { name: "+ 헤이즐넛시럽", cat1: "바리스타", gross: 500, net: 500 }, "바리스타")).toBe(false);
-  });
-  it("잔 수 × 0.96 반올림", () => {
-    expect(visitorsFromCups(29)).toBe(28);
-    expect(visitorsFromCups(100)).toBe(96);
-    expect(visitorsFromCups(-3)).toBe(0);
+  it("방문인원 = 잔 × 0.96 반올림", () => {
+    expect([visitorsFromCups(29), visitorsFromCups(100), visitorsFromCups(-3)]).toEqual([28, 96, 0]);
   });
 });
 
 describe("하루 숫자", () => {
-  const b = boardOf([batch("cafe", "2026-10-01", CAFE), batch("kids", "2026-10-01", KIDS)]);
-  const m = b.day("2026-10-01");
-
-  it("팀별 상자 · 기타에는 맥주와 키즈 POS 의 입장권 외 매출", () => {
-    expect(m.box).toEqual({ 바리스타: 102500, 베이커리: 38000, 키친: 54000, 키즈입장료: 144000, 기타: 52000 });
-    expect(m.kidsOtherNet).toBe(22000);
-  });
-
-  it("키즈 입장료 = (네이버 10 + 현장 3-1) × 평일 12,000", () => {
-    expect([m.issued, m.naverPos, m.naver, m.walkIn, m.walkInPosNet]).toEqual([12, 10, 10, 2, 24000]);
-    expect(m.fee).toEqual({ naver: 120000, walkIn: 24000 });
-  });
-
-  it("총매출 = 다섯 상자 합, 방문자 = 29잔 × 0.96, 1인 평균 = 총매출 ÷ 방문자", () => {
-    expect(m.total).toBe(390500);
-    expect(m.posNet).toBe(270500);
-    expect([m.cups, m.visitors, m.avgSpend]).toEqual([29, 28, Math.round(390500 / 28)]);
-  });
-
-  it("관리자가 고친 네이버 수로 다시 계산", () => {
-    const fixed = boardOf([batch("cafe", "2026-10-01", CAFE), batch("kids", "2026-10-01", KIDS)], { "2026-10-01": { naver: 8, by: "점장" } }).day("2026-10-01");
-    expect([fixed.naverPos, fixed.naver, fixed.naverAdjusted]).toEqual([10, 8, 1]);
-    expect(fixed.box.키즈입장료).toBe(120000);
-    expect(fixed.total).toBe(366500);
-  });
-
-  it("휴일은 14,000 으로", () => {
-    const h = boardOf([batch("kids", "2026-10-05", [line("3시 20분 퇴장 [1시30분 입장]", 7, 0, "", 0), line("[휴일] 1시간 50분 입장권", 2, 28000)])]).day("2026-10-05");
-    expect(h.box.키즈입장료).toBe(7 * 14000);
-  });
-});
-
-describe("상품권 결제", () => {
-  it("9/27 카페: 종이쿠폰 만원권 -40,000 · 아키 교환권 -80,000 은 매출에서 빼지 않고 따로", () => {
-    const m = boardOf([
-      batch("cafe", "2026-09-27", [
-        line("[ICE] 아메리카노", 10, 65000, "바리스타"),
-        line("이벤트 초", 1, 3500, "기타 유료"),
-        line("[종이쿠폰]만원권", 4, -40000, "기타 유료"),
-        line("[아키 2만원] 교환권", 4, -80000, "기타 유료"),
-      ]),
-    ]).day("2026-09-27");
-    expect(m.box.기타).toBe(3500);
-    expect(m.voucher).toBe(120000);
-    expect(m.total).toBe(68500);
-    expect(m.posNet).toBe(68500 - 120000);
-  });
-});
-
-describe("키즈 실제 자료", () => {
-  it("2026-10-01: 발행 20(무제한 17 + 야간 3) − 현장 4 = 네이버 16, 이벤트 무료 2팀", () => {
-    const m = boardOf([
-      batch("kids", "2026-10-01", [
-        line("[평일] 1시간 50분 입장권", 4, 48000, "기타 유료"),
-        line("인원추가 [평일만]", 1, 3000, "기타 유료"),
-        line("야간자유입장권", 3, 0, "기타 유료", 0),
-        line("[평일] 한가위 무제한 쿠폰", 2, 0, "서비스.쿠폰", 0),
-        line("[평일] 무제한 이용", 17, 0, "기타 유료", 0),
-      ]),
-    ]).day("2026-10-01");
-    expect([m.issued, m.walkIn, m.naver, m.eventFree]).toEqual([20, 4, 16, 2]);
-    expect(m.box.키즈입장료).toBe(20 * 12000);
-    expect(m.box.기타).toBe(3000);
-  });
-  it("2026-09-27(일): 시간대별 발행 133 − 현장 5 = 네이버 128, 휴일 14,000", () => {
-    const slots = [8, 12, 10, 4, 2, 10, 11, 15, 9, 9, 10, 8, 4, 8, 1, 7, 5];
-    const rows = [line("[휴일] 1시간 50분 입장권", 5, 70000, "기타 유료"), line("야간자유입장권", slots[0], 0, "", 0)];
-    slots.slice(1).forEach((q, i) => rows.push(line(`${i + 1}시 퇴장 [${i}시 입장]`, q, 0, "", 0)));
-    const m = boardOf([batch("kids", "2026-09-27", rows)]).day("2026-09-27");
-    expect([m.issued, m.walkIn, m.naver]).toEqual([133, 5, 128]);
-    expect(m.box.키즈입장료).toBe(133 * 14000);
-  });
-});
-
-describe("대시보드 누계", () => {
-  // 2025-10 · 2026-01~10 날마다 카페 아메리카노 10잔 50,000
-  const batches: DayBatch[] = [];
-  const add = (from: string, to: string) => {
-    for (let d = new Date(from + "T00:00:00Z"); d <= new Date(to + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1))
-      batches.push(batch("cafe", d.toISOString().slice(0, 10), [line("아메리카노", 10, 50000, "바리스타")]));
+  const D = "2026-10-01";
+  const r: DayReport = {
+    date: D,
+    cafe: cafe(D, { 바리스타: 100000, 베이커리: 38000, 키친: 54000, 기타: 3500, cups: 29, voucher: 90000 }),
+    kids: kids(D, { issued: 20, walkIn: 4, eventFree: 2, other: 3000 }),
   };
-  add("2025-01-01", "2025-12-31");
-  add("2026-01-01", "2026-10-01");
-  const b = boardOf(batches);
-  const d = dashboard(b, "2026-10-01");
-
-  it("당월 · 올해 · 작년 같은 달 · 작년 같은 기간", () => {
-    expect(d.weekday).toBe("목");
-    expect(d.prevWeek.date).toBe("2026-09-24");
-    expect(d.month.total).toBe(50000);
-    expect(d.year.total).toBe(274 * 50000);
-    expect(d.lyDate).toBe("2025-10-01");
-    expect(d.lyMonth.total).toBe(50000);
-    expect(d.lyYear.total).toBe(274 * 50000);
-    expect(d.year.visitors).toBe(274 * 10); // 날마다 10 × 0.96 = 9.6 → 10
+  it("2026-10-01 키즈 실제: 네이버를 안 넣었으면 발행 20 − 현장 4 = 16 으로 추정", () => {
+    const m = new Board([r]).day(D);
+    expect([m.issued, m.walkIn, m.naver, m.naverPos, m.naverInput, m.eventFree]).toEqual([20, 4, 16, 16, 0, 2]);
+    expect(m.box).toEqual({ 바리스타: 100000, 베이커리: 38000, 키친: 54000, 키즈입장료: 20 * 12000, 기타: 6500 });
+    expect(m.total).toBe(100000 + 38000 + 54000 + 240000 + 6500);
+    expect(m.voucher).toBe(90000);
+    expect([m.cups, m.visitors, m.avgSpend]).toEqual([29, 28, Math.round(m.total / 28)]);
   });
+  it("A 에 넣은 네이버 판매 입장권이 있으면 그 값 (신규 방문자도)", () => {
+    const m = new Board([{ ...r, naver: naver(D, [2, 3, 4, 5], [1, 1]) }]).day(D);
+    expect([m.naver, m.naverInput, m.newVisitors, m.has.naver]).toEqual([14, 1, 2, 1]);
+    expect(m.box.키즈입장료).toBe((14 + 4) * 12000);
+  });
+  it("휴일 14,000", () => {
+    const m = new Board([{ date: "2026-10-05", kids: kids("2026-10-05", { issued: 7, walkIn: 2 }) }]).day("2026-10-05");
+    expect(m.box.키즈입장료).toBe(7 * 14000);
+  });
+});
 
-  it("추세 · 이동 평균 · 달별", () => {
-    const s = dailySeries(b, "total", "2026-10-01", 14);
-    expect(s).toHaveLength(14);
-    expect(s.every((p) => p.v === 50000)).toBe(true);
-    expect(movingAverage(s, 7)[13].v).toBe(50000);
-    const mo = monthlySeries(b, "total", "2026-10-01", 2);
-    expect(mo.cur.map((p) => [p.x, p.v])).toEqual([
-      ["2026-09", 30 * 50000],
-      ["2026-10", 50000],
+describe("누계", () => {
+  const reports: DayReport[] = [...days("2025-01-01", "2025-12-31"), ...days("2026-01-01", "2026-10-01")].map((d) => ({ date: d, cafe: cafe(d, { 바리스타: 50000, cups: 10 }) }));
+  const b = new Board(reports);
+  it("대시보드: 당월 · 올해 · 작년 같은 기간", () => {
+    const d = dashboard(b, "2026-10-01");
+    expect([d.weekday, d.prevWeek.date, d.month.total, d.year.total, d.lyDate, d.lyMonth.total, d.lyYear.total]).toEqual(["목", "2026-09-24", 50000, 274 * 50000, "2025-10-01", 50000, 274 * 50000]);
+    expect(d.year.visitors).toBe(274 * 10);
+  });
+  it("당월 상세: 이번 달은 마감일까지 · 작년 같은 달은 한 달 전체 (지난달 없음)", () => {
+    const v = monthView(b, "2026-10-01");
+    expect(v.days).toHaveLength(31);
+    expect(v.cur.slice(0, 2)).toEqual([50000, null]);
+    expect(v.ly[30]).toBe(31 * 50000);
+    expect([v.month.visitors, v.lyMonth.visitors, v.lyFull.total]).toEqual([10, 10, 31 * 50000]);
+  });
+  it("올해 상세: 작년 12달 회색 · 올해 마감월까지 · 연말 예상 = 올해 누계 × 작년 전체 ÷ 작년 같은 기간", () => {
+    const v = yearView(b, "2026-10-01");
+    expect(v.cur[9]).toBe(274 * 50000);
+    expect(v.cur[10]).toBeNull();
+    expect(v.ly[11]).toBe(365 * 50000);
+    expect(v.estimate).toEqual({ value: Math.round((274 * 50000 * 365 * 50000) / (274 * 50000)), how: "작년 흐름 기준" });
+    expect([v.month.visitors, v.lyMonthFull.visitors]).toEqual([10, 310]);
+  });
+  it("작년 자료가 일부뿐이면 비교 안 함 · 연말 예상은 올해 하루 평균으로", () => {
+    const part = new Board(reports.filter((r) => r.date >= "2025-12-01"));
+    expect(comparable(part.range("2025-01-01", "2025-10-01"))).toBe(false);
+    expect(yearView(part, "2026-10-01").estimate?.how).toBe("올해 하루 평균 기준");
+  });
+});
+
+describe("키즈 입장권 상세 (네이버 · 현장 · 이벤트)", () => {
+  const reports: DayReport[] = [
+    { date: "2025-10-01", kids: kids("2025-10-01", { issued: 10, walkIn: 2, eventFree: 1 }), naver: naver("2025-10-01", [1, 2]) },
+    { date: "2025-10-20", kids: kids("2025-10-20", { issued: 10, walkIn: 3 }) },
+    { date: "2026-10-01", kids: kids("2026-10-01", { issued: 20, walkIn: 4, eventFree: 2 }), naver: naver("2026-10-01", [3, 4, 0, 1], [1]) },
+  ];
+  const b = new Board(reports);
+  it("시간대별 합 · 날마다 · 달마다 (작년 전체 · 올해 마감일까지)", () => {
+    expect(naverSlots(b, "2026-10-01", "2026-10-01").tickets.slice(0, 4)).toEqual([3, 4, 0, 1]);
+    expect(naverSlots(b, "2025-10-01", "2025-10-31")).toMatchObject({ days: 1 });
+    const d = monthDaily(b, "walkIn", "2026-10-01");
+    expect([d.cur[0], d.cur[1], d.ly[0], d.ly[19], d.ly[1]]).toEqual([4, null, 2, 3, null]);
+    const y = yearMonthly(b, "naver", "2026-10-01");
+    expect([y.cur[9], y.cur[10], y.ly[9]]).toEqual([8, null, 3 + 7]);
+    expect(yearMonthly(b, "eventFree", "2026-10-01", true).ly[11]).toBe(1);
+  });
+});
+
+describe("시간대 분석 (섹터 상세)", () => {
+  // 목요일 다섯 번: 점심(12~14시)은 줄고 오후(15~17시)는 늘어남
+  const thu = ["2026-09-03", "2026-09-10", "2026-09-17", "2026-09-24", "2026-10-01"];
+  const reports: DayReport[] = thu.map((d, w) => ({
+    date: d,
+    cafe: cafe(d, {
+      바리스타: 0,
+      hourly: { 바리스타: [50000, 50000, 200000 - w * 25000, 200000 - w * 25000, 80000, 60000 + w * 25000, 60000 + w * 25000, 40000, 50000, 50000, 30000, 10000], cups: [10, 10, 30, 30, 12, 10, 10, 6, 8, 8, 4, 1] },
+      cups: 139,
+      products: [
+        ["[ICE] 아메리카노", "바리스타", 50, 325000],
+        ["[ICE]쿨민트", "바리스타", 1, 6500],
+        ["연하게", "바리스타", 3, 0],
+        ["아이스티", "바리스타", 2, 15000],
+      ],
+    }),
+  }));
+  // 매출 합은 시간대 합과 같게
+  for (const r of reports) r.cafe!.sectors.바리스타 = r.cafe!.hourly!.sectors.바리스타.reduce((a, b) => a + b, 0);
+  const b = new Board(reports);
+
+  it("마감일 막대: 시간대 매출 · 막대 위 추정 인원 (잔 × 0.96)", () => {
+    const h = hourDay(b, "2026-10-01", "바리스타")!;
+    expect(h.sales[2]).toBe(100000);
+    expect(h.people[2]).toBe(29);
+    expect(hourDay(b, "2026-10-02", "바리스타")).toBeNull();
+  });
+  it("지난 4주 같은 요일 평균 · 시간마다 오름/내림", () => {
+    const a = weeksAverage(b, "2026-10-01", "바리스타");
+    expect(a.dates).toEqual(["2026-09-24", "2026-09-17", "2026-09-10", "2026-09-03"]);
+    expect(a.sales[2]).toBe((200000 + 175000 + 150000 + 125000) / 4);
+    const t = weeksTrend(b, "2026-10-01", "바리스타");
+    expect(t.days.map((d) => d.weeksAgo)).toEqual([4, 3, 2, 1, 0]);
+    expect([t.dir[2], t.dir[5], t.dir[0]]).toEqual([-1, 1, 0]);
+  });
+  it("분석 문장: 선호 이동 · 피크 · 매출 속도 · 다음 주 예측", () => {
+    const lines = hourlyInsights(b, "2026-10-01", "바리스타", {});
+    expect(lines[0]).toContain("점심(12~14시)에서 오후(15~17시)로 옮겨가고 있습니다");
+    expect(lines.some((l) => l.startsWith("점심 피크(12~14시) 4주 평균") && l.includes("흐름 ▼ 주마다"))).toBe(true);
+    expect(lines.some((l) => l.includes("날씨 자료가 없어"))).toBe(true);
+    expect(lines.some((l) => l.startsWith("매출 속도:"))).toBe(true);
+    expect(lines.some((l) => l.startsWith("다음 주 10/8(목) 예상"))).toBe(true);
+    const f = forecastNext(b, "2026-10-01", "바리스타")!;
+    expect(f.date).toBe("2026-10-08");
+    expect(f.n).toBe(5);
+    expect(hourlyInsights(b, "2026-10-02", "바리스타", {})[0]).toContain("시간대 자료가 없습니다");
+  });
+  it("하위 5개: 옵션·0원 빼고 적게 팔린 순, 그달은 최근 90일 안에 팔린 적 있는 상품의 0개 포함", () => {
+    expect(bottomProducts(b, "2026-10-01", "바리스타", "day").map((p) => [p.name, p.qty])).toEqual([
+      ["[ICE]쿨민트", 1],
+      ["아이스티", 2],
+      ["[ICE] 아메리카노", 50],
     ]);
-    expect(mo.ly.map((p) => p.v)).toEqual([30 * 50000, 50000]);
+    const nb = new Board([...reports, { date: "2026-08-20", cafe: cafe("2026-08-20", { 바리스타: 7000, products: [["여름사냥", "바리스타", 1, 8000]] }) }]);
+    expect(bottomProducts(nb, "2026-10-01", "바리스타", "month")[0]).toMatchObject({ name: "여름사냥", qty: 0 });
   });
-
-  it("누계 선 — 이번 달은 기준일까지, 작년은 달 전체", () => {
-    const mc = monthCumulative(b, "2026-10-01");
-    expect(mc.days).toHaveLength(31);
-    expect(mc.cur.slice(0, 2)).toEqual([50000, null]);
-    expect(mc.ly[30]).toBe(31 * 50000);
-    const yc = yearCumulative(b, "2026-10-01");
-    expect(yc.cur[8]).toBe(273 * 50000);
-    expect(yc.cur[9]).toBe(274 * 50000);
-    expect(yc.cur[10]).toBeNull();
-    expect(yc.ly[11]).toBe(365 * 50000);
-  });
-
-  it("분석 설명 — 숫자로만", () => {
-    const lines = analyze(b, "total", "2026-10-01");
-    expect(lines[0]).toContain("지난주");
-    expect(lines.some((l) => l.includes("이달 누계"))).toBe(true);
-    expect(analyze(b, "visitors", "2026-10-01").some((l) => l.includes("× 0.96"))).toBe(true);
-    expect(analyze(b, "total", "2026-11-01")[0]).toContain("자료가 없습니다");
+  it("키즈 입장료 시간대 = (네이버 예약 시간 30분 두 칸 + 현장 결제 시각) × 단가", () => {
+    const kb = new Board([{ date: "2026-10-01", kids: kids("2026-10-01", { issued: 9, walkIn: 2, walkInH: [0, 1, 1] }), naver: naver("2026-10-01", [1, 2, 3, 1]) }]);
+    const h = hourDay(kb, "2026-10-01", "키즈입장료")!;
+    expect(h.people.slice(0, 3)).toEqual([3, 5, 1]);
+    expect(h.total).toBe((7 + 2) * 12000);
   });
 });
 
-describe("누계 상세", () => {
-  const batches: DayBatch[] = [];
-  const days = (from: string, to: string) => {
-    const out: string[] = [];
-    for (let d = new Date(from + "T00:00:00Z"); d <= new Date(to + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
-    return out;
-  };
-  for (const d of [...days("2025-10-01", "2025-10-31"), "2026-09-01", "2026-10-01"]) batches.push(batch("cafe", d, [line("아메리카노", 10, 50000, "바리스타")]));
-  const b = boardOf(batches);
-  it("당월 — 작년 같은 기간 · 작년 그 달 전체 · 지난달 같은 기간", () => {
-    const v = cumulative(b, "month", "2026-10-01");
-    expect([v.cur.total, v.ly.total, v.lyFull.total, v.prev?.total]).toEqual([50000, 50000, 31 * 50000, 50000]);
-    expect(v.lines.some((l) => l.includes("3.2%를 채웠습니다"))).toBe(true);
-  });
-  it("올해 — 1월 1일부터. 작년 자료가 일부(31일치)뿐이면 비교하지 않음", () => {
-    const v = cumulative(b, "year", "2026-10-01");
-    expect([v.cur.total, v.ly.total, v.lyFull.total, v.prev]).toEqual([100000, 50000, 31 * 50000, null]);
-    expect(comparable(v.ly)).toBe(false);
-    expect(v.lines.some((l) => l.includes("1일치뿐이라 비교하지 않았습니다"))).toBe(true);
-    expect(v.lines.some((l) => l.includes("채웠습니다"))).toBe(false);
-  });
-});
-
-describe("날씨와 함께 본 분석", () => {
-  it("그날 날씨·기간 한 줄, 비 온 날과 맑은 날 평균 비교", async () => {
-    const { analyzeWeather } = await import("../src");
-    const batches: DayBatch[] = [];
-    const weather: Record<string, any> = {};
-    for (let i = 1; i <= 30; i++) {
-      const d = `2026-09-${String(i).padStart(2, "0")}`;
-      const rainy = i % 5 === 0;
-      batches.push(batch("cafe", d, [line("아메리카노", 10, rainy ? 30000 : 60000, "바리스타")]));
-      weather[d] = { date: d, key: rainy ? "rain" : "sunny", label: rainy ? "비" : "맑음", icon: rainy ? "🌧️" : "☀️", tempMax: 25, tempMin: 15, rainMm: rainy ? 5 : 0, source: "observed" };
-    }
-    const lines = analyzeWeather(boardOf(batches), "total", "2026-09-30", weather);
-    expect(lines[0]).toContain("🌧️ 비, 최고 25° · 최저 15° · 강수 5mm (기상청 관측)");
-    expect(lines[1]).toContain("비·눈 온 날(6일) 하루 평균 30,000원");
-    expect(lines[1]).toContain("-50.0% 낮습니다");
+describe("체험판 자료", () => {
+  it("작년 1월 1일부터 어제까지 · 하루 숫자가 계산됨", () => {
+    const r = sampleUntilYesterday("2026-10-02");
+    expect(r[0].date).toBe("2025-01-01");
+    expect(r[r.length - 1].date).toBe("2026-10-01");
+    const b = new Board(r);
+    const m = b.day("2026-10-01");
+    expect(m.total).toBeGreaterThan(0);
+    expect(m.naverInput).toBe(1);
+    expect(hourDay(b, "2026-10-01", "키친")!.total).toBeCloseTo(m.box.키친, -3);
   });
 });

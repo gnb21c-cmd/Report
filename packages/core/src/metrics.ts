@@ -1,26 +1,27 @@
 /* ============================================================
-   대시보드 숫자 (순수 함수, 시험: test/metrics.test.ts)
+   대시보드 숫자 (순수 함수, 시험: test/metrics.test.ts) — C 가 합친 날짜별 보고 자료(DayReport)로 계산
 
    한 날의 숫자
-   - 바리스타 · 베이커리 · 키친 · 기타 = 카페 POS 실매출을 팀별로 (기타 = 카페 기타 + 키즈 POS 의 입장권 외 매출)
+   - 바리스타 · 베이커리 · 키친 = 카페아스타나 분류별 실매출
+   - 기타 = 카페아스타나 기타 + 아스타나키즈 입장권 외 매출 (추가 인원 · 간식 등)
    - 키즈입장료 = (네이버 입장권 + 현장 입장권) × 그날 단가 (평일 12,000 / 휴일 14,000)
-       · 네이버 입장권 = 키즈 POS 0원 입장권 수량 — 관리자가 고친 값이 있으면 그 값 (Adjusts)
-       · 현장 입장권 = 키즈 POS 에서 돈을 받은 입장권 수량 (환불은 -1 로 빠짐)
-   - 총매출 = 위 다섯 상자의 합
-   - 추정 방문자 = 음료·맥주 잔 수 × 0.96 (날마다 반올림), 1인 평균 = 총매출 ÷ 추정 방문자
+       · 네이버 입장권 = A 에 넣은 시간대별 판매 입장권 합. 아직 안 넣은 날은 키즈 POS 로 추정 (0원 입장 발행 − 현장)
+       · 현장 입장권 = 키즈 POS 에서 돈을 받은 입장권 (반품은 지워짐)
+       · 이벤트 무료입장 = 0원 쿠폰 입장 (팀 수만 셈, 입장료·잔 수에 안 들어감)
+   - 총매출 = 위 다섯 상자의 합 (상품권·교환권 결제는 결제 수단이라 빼지 않음)
+   - 카페아스타나 방문인원 = 카페 음료·맥주 잔 수 × 0.96 (날마다 반올림), 1인 평균소비 = 총매출 ÷ 방문인원
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
-import { addDays, addMonths, dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekday, weekdayLabel } from "./dates";
-import { kidsKind, teamOf } from "./classify";
-import { cupsPerItem, isCup, isOffDay, isVoucherPayment, kidsPrice, visitorsFromCups, VISITOR_FACTOR } from "./rules";
-import { count, pct, won } from "./format";
-import type { SalesIndex } from "./report";
-import { seasonOf, temp, WEATHER_SOURCE_TEXT, type WeatherMap } from "./weather";
+import { dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekdayLabel } from "./dates";
+import { kidsPrice, visitorsFromCups } from "./rules";
+import { count, won } from "./format";
+import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
+import type { KidsKind, Sector } from "./classify";
 
 export type BoxKey = "바리스타" | "베이커리" | "키친" | "키즈입장료" | "기타";
 export const BOXES: BoxKey[] = ["바리스타", "베이커리", "키친", "키즈입장료", "기타"];
 
-export type MetricKey = "total" | BoxKey | "visitors" | "avgSpend" | "naver" | "walkIn" | "eventFree" | "tickets";
+export type MetricKey = "total" | BoxKey | "visitors" | "avgSpend" | "naver" | "walkIn" | "eventFree" | "newVisitors";
 
 export const METRIC_LABEL: Record<MetricKey, string> = {
   total: "총 매출",
@@ -29,89 +30,88 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   키친: "키친",
   키즈입장료: "키즈 입장료",
   기타: "기타",
-  visitors: "추정 방문자",
-  avgSpend: "1인 평균 소비",
-  naver: "네이버 예약",
-  walkIn: "현장 구매",
-  eventFree: "이벤트 무료입장",
-  tickets: "키즈 입장권",
+  visitors: "카페아스타나 방문인원",
+  avgSpend: "1인 평균소비",
+  naver: "네이버 입장권 판매수",
+  walkIn: "현장 입장권 판매수",
+  eventFree: "이벤트 무료입장팀 수",
+  newVisitors: "신규방문자 수",
 };
 
-/** 금액인지 (아니면 사람·장 수) */
+/** 금액인지 (아니면 사람·장·팀 수) */
 export function isMoney(key: MetricKey): boolean {
-  return !["visitors", "naver", "walkIn", "eventFree", "tickets"].includes(key);
+  return !["visitors", "naver", "walkIn", "eventFree", "newVisitors"].includes(key);
+}
+
+export function unitOf(key: MetricKey): string {
+  return key === "visitors" || key === "newVisitors" ? "명" : key === "eventFree" ? "팀" : "장";
 }
 
 export function formatMetric(key: MetricKey, v: number | null): string {
   if (v == null) return "—";
-  if (isMoney(key)) return won(v);
-  return count(v, key === "visitors" ? "명" : key === "eventFree" ? "팀" : "장");
+  return isMoney(key) ? won(v) : count(v, unitOf(key));
 }
-
-/** 관리자가 고친 네이버 입장권 수 (날짜별) */
-export interface KidsAdjust {
-  naver: number;
-  /** 고친 사람 (적은 이름) */
-  by?: string;
-  /** 고친 시각 ISO */
-  at?: string;
-}
-export type Adjusts = Record<string, KidsAdjust>;
 
 export interface Metrics {
   from: string;
   to: string;
-  /** 자료가 있는 날 수 (POS 별) */
-  has: { cafe: number; kids: number };
+  /** 자료가 있는 날 수 (조각별) */
+  has: { cafe: number; kids: number; naver: number };
+  /** 시간대 자료(영수증별 엑셀)가 있는 카페 날 수 */
+  hourlyDays: number;
   box: Record<BoxKey, number>;
   total: number;
-  /** POS 실매출 합 (카페 + 키즈, 참고용) */
+  /** POS 실매출 합 (카페 + 키즈, 상품권 결제 줄 포함 — 참고) */
   posNet: number;
+  /** 상품권·교환권 결제 (양수) */
+  voucher: number;
+  /** 카페 잔 수 */
   cups: number;
+  /** 카페아스타나 방문인원 */
   visitors: number;
   avgSpend: number | null;
-  /** 0원 입장 발행 수 (네이버 + 현장 손님 모두) */
+  /** 카페 팀(영수증 묶음) 수 */
+  teams: number;
+  /** 키즈 0원 입장 발행 */
   issued: number;
-  /** POS 로 계산한 네이버 예약 수 = 발행 − 현장 결제 */
+  /** 키즈 POS 로 추정한 네이버 = 발행 − 현장 */
   naverPos: number;
-  /** 이벤트 무료입장 (쿠폰) 팀 수 */
-  eventFree: number;
-  /** 계산에 쓴 네이버 입장권 수 (고친 값 우선) */
+  /** 계산에 쓴 네이버 입장권 (A 에 넣은 값 우선) */
   naver: number;
-  /** 네이버 수를 고친 날 수 */
-  naverAdjusted: number;
+  /** 네이버를 A 에 넣은 날 수 */
+  naverInput: number;
+  newVisitors: number;
   walkIn: number;
-  /** 현장 입장권 POS 실결제 금액 (참고용) */
   walkInPosNet: number;
-  /** 키즈 입장료 중 네이버 · 현장 몫 */
+  eventFree: number;
   fee: { naver: number; walkIn: number };
-  /** 키즈 POS 의 입장권 외 매출 (추가 인원 · 간식 등 — 기타에 들어감) */
   kidsOtherNet: number;
-  /** 상품권·교환권으로 결제한 금액 (양수로) — 결제 수단이라 매출에서 빼지 않음 */
-  voucher: number;
 }
 
 function empty(from: string, to: string): Metrics {
   return {
     from,
     to,
-    has: { cafe: 0, kids: 0 },
+    has: { cafe: 0, kids: 0, naver: 0 },
+    hourlyDays: 0,
     box: { 바리스타: 0, 베이커리: 0, 키친: 0, 키즈입장료: 0, 기타: 0 },
     total: 0,
     posNet: 0,
+    voucher: 0,
     cups: 0,
     visitors: 0,
     avgSpend: null,
+    teams: 0,
     issued: 0,
     naverPos: 0,
-    eventFree: 0,
     naver: 0,
-    naverAdjusted: 0,
+    naverInput: 0,
+    newVisitors: 0,
     walkIn: 0,
     walkInPosNet: 0,
+    eventFree: 0,
     fee: { naver: 0, walkIn: 0 },
     kidsOtherNet: 0,
-    voucher: 0,
   };
 }
 
@@ -122,13 +122,20 @@ export function valueOf(m: Metrics, key: MetricKey): number | null {
   if (key === "naver") return m.naver;
   if (key === "walkIn") return m.walkIn;
   if (key === "eventFree") return m.eventFree;
-  if (key === "tickets") return m.naver + m.walkIn;
+  if (key === "newVisitors") return m.newVisitors;
   return m.box[key];
 }
 
-/** 자료가 하나라도 있는지 */
+/** 매출 자료(카페 · 키즈)가 하나라도 있는지 */
 export function hasData(m: Metrics): boolean {
   return m.has.cafe + m.has.kids > 0;
+}
+
+/** 이 숫자의 자료가 있는지 (네이버 숫자는 네이버를 넣었거나 키즈 자료가 있으면) */
+export function hasValue(m: Metrics, key: MetricKey): boolean {
+  if (key === "naver" || key === "newVisitors") return m.has.naver > 0 || (key === "naver" && m.has.kids > 0);
+  if (key === "walkIn" || key === "eventFree") return m.has.kids > 0;
+  return hasData(m) || (key === "키즈입장료" && m.has.naver > 0);
 }
 
 /** 기간 중 자료가 있는 날의 비율 (0~1) */
@@ -142,55 +149,88 @@ export function comparable(m: Metrics): boolean {
   return coverage(m) >= 0.8;
 }
 
+export interface ProductRow {
+  name: string;
+  /** 카페: 분류 · 키즈: 종류 */
+  team: Sector | KidsKind;
+  store: "cafe" | "kids";
+  qty: number;
+  net: number;
+  /** 팔린 날 수 */
+  days: number;
+}
+
 export class Board {
+  readonly byDate = new Map<string, DayReport>();
+  readonly first: string | null;
+  readonly last: string | null;
   private cache = new Map<string, Metrics>();
 
-  constructor(
-    readonly sales: SalesIndex,
-    readonly adjusts: Adjusts = {},
-  ) {}
+  constructor(reports: DayReport[]) {
+    for (const r of reports) if (r && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) this.byDate.set(r.date, r);
+    const keys = [...this.byDate.keys()].sort();
+    this.first = keys[0] ?? null;
+    this.last = keys[keys.length - 1] ?? null;
+  }
+
+  report(date: string): DayReport | undefined {
+    return this.byDate.get(date);
+  }
+
+  /** 매출 자료(카페 · 키즈)가 온 가장 늦은 날 = 보고 기준일 */
+  latest(): string | null {
+    let max: string | null = null;
+    for (const [d, r] of this.byDate) if ((r.cafe || r.kids) && (!max || d > max)) max = d;
+    return max;
+  }
 
   day(date: string): Metrics {
     const hit = this.cache.get(date);
     if (hit) return hit;
     const m = empty(date, date);
-    const present = this.sales.present.get(date);
-    m.has.cafe = present?.has("cafe") ? 1 : 0;
-    m.has.kids = present?.has("kids") ? 1 : 0;
-    let cups = 0;
-    for (const s of this.sales.day(date)) {
-      m.posNet += s.net;
-      if (isVoucherPayment(s)) {
-        m.voucher -= s.net;
-        continue;
-      }
-      const team = teamOf(s.pos, s);
-      if (isCup(s.pos, s, team)) cups += s.qty * cupsPerItem(s.name);
-      if (s.pos === "cafe") {
-        m.box[team === "키즈" ? "기타" : team] += s.net;
-        continue;
-      }
-      const kind = kidsKind(s);
-      if (kind === "입장발행") m.issued += s.qty;
-      else if (kind === "이벤트무료") m.eventFree += s.qty;
-      else if (kind === "현장결제") {
-        m.walkIn += s.qty;
-        m.walkInPosNet += s.net;
-      } else {
-        m.kidsOtherNet += s.net;
-        m.box.기타 += s.net;
+    const r = this.byDate.get(date);
+    const cafe = r?.cafe;
+    const kids = r?.kids;
+    if (cafe) {
+      m.has.cafe = 1;
+      if (cafe.hourly) m.hourlyDays = 1;
+      m.box.바리스타 += cafe.sectors.바리스타;
+      m.box.베이커리 += cafe.sectors.베이커리;
+      m.box.키친 += cafe.sectors.키친;
+      m.box.기타 += cafe.sectors.기타;
+      m.posNet += cafe.posNet;
+      m.voucher += cafe.voucher;
+      m.cups += cafe.cups;
+      m.teams += cafe.teams;
+    }
+    if (kids) {
+      m.has.kids = 1;
+      const k = kids.kids;
+      m.posNet += kids.posNet;
+      m.voucher += kids.voucher;
+      // 키즈 상품 분류에는 섹터가 없으므로 sectors 는 0 — 혹시 들어 있으면 기타로
+      m.box.기타 += kids.sectors.바리스타 + kids.sectors.베이커리 + kids.sectors.키친 + kids.sectors.기타;
+      if (k) {
+        m.issued += k.issued;
+        m.walkIn += k.walkIn;
+        m.walkInPosNet += k.walkInNet;
+        m.eventFree += k.eventFree;
+        m.kidsOtherNet += k.other;
+        m.box.기타 += k.other;
       }
     }
     m.naverPos = Math.max(0, m.issued - m.walkIn);
-    const adj = this.adjusts[date];
-    m.naver = adj && Number.isFinite(adj.naver) ? Math.max(0, Math.round(adj.naver)) : m.naverPos;
-    m.naverAdjusted = adj ? 1 : 0;
+    if (r?.naver) {
+      m.has.naver = 1;
+      m.naverInput = 1;
+      m.naver = sum(r.naver.tickets);
+      m.newVisitors = sum(r.naver.newVisitors);
+    } else m.naver = m.naverPos;
     const { price } = kidsPrice(date);
     m.fee = { naver: m.naver * price, walkIn: m.walkIn * price };
     m.box.키즈입장료 = m.fee.naver + m.fee.walkIn;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;
-    m.cups = cups;
-    m.visitors = visitorsFromCups(cups);
+    m.visitors = visitorsFromCups(m.cups);
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
     this.cache.set(date, m);
     return m;
@@ -200,29 +240,63 @@ export class Board {
     const m = empty(from, to);
     if (from > to) return m;
     for (const d of dayRange(from, to)) {
+      if (!this.byDate.has(d)) continue;
       const x = this.day(d);
       m.has.cafe += x.has.cafe;
       m.has.kids += x.has.kids;
+      m.has.naver += x.has.naver;
+      m.hourlyDays += x.hourlyDays;
       for (const b of BOXES) m.box[b] += x.box[b];
       m.total += x.total;
       m.posNet += x.posNet;
+      m.voucher += x.voucher;
       m.cups += x.cups;
       m.visitors += x.visitors;
+      m.teams += x.teams;
       m.issued += x.issued;
       m.naverPos += x.naverPos;
-      m.eventFree += x.eventFree;
       m.naver += x.naver;
-      m.naverAdjusted += x.naverAdjusted;
+      m.naverInput += x.naverInput;
+      m.newVisitors += x.newVisitors;
       m.walkIn += x.walkIn;
       m.walkInPosNet += x.walkInPosNet;
+      m.eventFree += x.eventFree;
       m.fee.naver += x.fee.naver;
       m.fee.walkIn += x.fee.walkIn;
       m.kidsOtherNet += x.kidsOtherNet;
-      m.voucher += x.voucher;
     }
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
     return m;
   }
+
+  /** 상품별 합계 — 그 상자(섹터)의 상품만 */
+  products(from: string, to: string, box: BoxKey): ProductRow[] {
+    const map = new Map<string, ProductRow>();
+    if (from > to) return [];
+    for (const d of dayRange(from, to)) {
+      const r = this.byDate.get(d);
+      if (!r) continue;
+      for (const part of [r.cafe, r.kids])
+        for (const p of part?.products || []) {
+          if (!productInBox(part!, p, box)) continue;
+          const key = `${part!.store}|${p[0]}`;
+          let row = map.get(key);
+          if (!row) map.set(key, (row = { name: p[0], team: p[1], store: part!.store, qty: 0, net: 0, days: 0 }));
+          row.qty += p[2];
+          row.net += p[3];
+          row.days++;
+        }
+    }
+    return [...map.values()];
+  }
+}
+
+/** 상품이 그 상자(섹터) 것인지 */
+export function productInBox(part: StorePart, p: ProductTuple, box: BoxKey): boolean {
+  if (part.store === "cafe") return p[1] === box;
+  if (box === "키즈입장료") return p[1] === "현장결제" || p[1] === "입장발행";
+  if (box === "기타") return p[1] === "추가인원" || p[1] === "기타";
+  return false;
 }
 
 /* ---------- 대시보드 ---------- */
@@ -233,13 +307,13 @@ export interface Dashboard {
   day: Metrics;
   /** 지난주 같은 요일 */
   prevWeek: { date: string; m: Metrics };
-  /** 당월 누계 (1일 ~ 기준일) */
+  /** 당월 누계 (1일 ~ 마감일) */
   month: Metrics;
-  /** 올해 누계 (1월 1일 ~ 기준일) */
+  /** 올해 누계 (1월 1일 ~ 마감일) */
   year: Metrics;
-  /** 작년 같은 달 누계 (1일 ~ 작년 같은 날) */
+  /** 작년 같은 달 같은 기간 (1일 ~ 작년 같은 날) */
   lyMonth: Metrics;
-  /** 작년 같은 기간 누계 (작년 1월 1일 ~ 작년 같은 날) */
+  /** 작년 같은 기간 (작년 1월 1일 ~ 작년 같은 날) */
   lyYear: Metrics;
   lyDate: string;
   price: { price: number; kind: "평일" | "휴일" };
@@ -247,7 +321,7 @@ export interface Dashboard {
 
 export function dashboard(board: Board, date: string): Dashboard {
   const ly = sameDayYearsAgo(date);
-  const pw = addDays(date, -7);
+  const pw = addDaysKey(date, -7);
   return {
     date,
     weekday: weekdayLabel(date),
@@ -262,87 +336,89 @@ export function dashboard(board: Board, date: string): Dashboard {
   };
 }
 
-/* ---------- 추세 (상세 화면 그래프) ---------- */
-
-export interface Point {
-  /** 날짜 YYYY-MM-DD 또는 달 YYYY-MM */
-  x: string;
-  v: number | null;
+function addDaysKey(key: string, n: number): string {
+  const d = new Date(key + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
-/** 하루씩 (자료 없는 날은 null) */
-export function dailySeries(board: Board, key: MetricKey, to: string, days: number): Point[] {
-  return dayRange(addDays(to, -(days - 1)), to).map((d) => {
-    const m = board.day(d);
-    return { x: d, v: hasData(m) ? valueOf(m, key) : null };
-  });
+const lastDay = (month: string) => `${month}-${String(daysInMonth(`${month}-01`)).padStart(2, "0")}`;
+
+/* ---------- 당월 누계 상세 (11-5) ---------- */
+
+export interface MonthView {
+  /** 1 ~ 그 달 마지막 날 */
+  days: number[];
+  /** 이번 달 날마다 쌓은 누계 (마감일까지, 그 뒤 null) */
+  cur: (number | null)[];
+  /** 작년 같은 달 날마다 쌓은 누계 (한 달 전체) */
+  ly: (number | null)[];
+  /** 이번 달 1일 ~ 마감일 */
+  month: Metrics;
+  /** 작년 같은 달 1일 ~ 같은 날 */
+  lyMonth: Metrics;
+  /** 작년 같은 달 전체 */
+  lyFull: Metrics;
+  day: Metrics;
 }
 
-/** 이동 평균 (앞쪽 n 일, 자료 있는 날만 평균) */
-export function movingAverage(points: Point[], n = 7): Point[] {
-  return points.map((p, i) => {
-    const win = points.slice(Math.max(0, i - n + 1), i + 1).filter((q) => q.v != null) as { x: string; v: number }[];
-    return { x: p.x, v: win.length >= Math.min(n, 3) ? Math.round(win.reduce((s, q) => s + q.v, 0) / win.length) : null };
-  });
-}
-
-/** 달별 — 올해(기준일이 든 달은 기준일까지)와 작년 같은 달(같은 기간) */
-export function monthlySeries(board: Board, key: MetricKey, date: string, months = 12): { cur: Point[]; ly: Point[] } {
-  const cur: Point[] = [];
-  const ly: Point[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const month = addMonths(monthOf(date), -i);
-    const from = `${month}-01`;
-    const end = `${month}-${String(daysInMonth(from)).padStart(2, "0")}`;
-    const to = end < date ? end : date;
-    const m = board.range(from, to);
-    cur.push({ x: month, v: hasData(m) ? valueOf(m, key) : null });
-    const lyMonth = addMonths(month, -12);
-    const lyFrom = `${lyMonth}-01`;
-    const lyTo = i === 0 ? sameDayYearsAgo(date) : `${lyMonth}-${String(daysInMonth(lyFrom)).padStart(2, "0")}`;
-    const lm = board.range(lyFrom, lyTo);
-    ly.push({ x: month, v: hasData(lm) ? valueOf(lm, key) : null });
+/** 날마다 쌓은 선 — 자료가 하나도 없으면 모두 null */
+function cumulate(board: Board, month: string, upto: number, total: number, key: MetricKey): (number | null)[] {
+  const last = daysInMonth(`${month}-01`);
+  let acc = 0;
+  let any = false;
+  const out: (number | null)[] = [];
+  for (let d = 1; d <= total; d++) {
+    if (d > last || d > upto) {
+      out.push(null);
+      continue;
+    }
+    const m = board.day(`${month}-${String(d).padStart(2, "0")}`);
+    any = any || hasData(m) || m.has.naver > 0;
+    acc += valueOf(m, key) || 0;
+    out.push(acc);
   }
-  return { cur, ly };
+  return any ? out : out.map(() => null);
 }
 
-/** 당월 누계를 날마다 쌓은 선 — 이번 달(기준일까지) · 작년 같은 달(한 달 전체) · 지난달 */
-export function monthCumulative(board: Board, date: string) {
+export function monthView(board: Board, date: string, key: MetricKey = "total"): MonthView {
   const total = daysInMonth(date);
   const ly = sameDayYearsAgo(date);
-  const pm = addMonths(monthOf(date), -1);
-  const pmDays = daysInMonth(`${pm}-01`);
   const lyMonth = monthOf(ly);
-  const lyDays = daysInMonth(`${lyMonth}-01`);
-  const mk = (month: string, last: number, upto: number) => {
-    let sum = 0;
-    let any = false;
-    const out: (number | null)[] = [];
-    for (let d = 1; d <= total; d++) {
-      if (d > last || d > upto) {
-        out.push(null);
-        continue;
-      }
-      const m = board.day(`${month}-${String(d).padStart(2, "0")}`);
-      any = any || hasData(m);
-      sum += m.total;
-      out.push(sum);
-    }
-    return any ? out : out.map(() => null);
-  };
-  const day = Number(date.slice(8, 10));
   return {
     days: Array.from({ length: total }, (_, i) => i + 1),
-    cur: mk(monthOf(date), total, day),
-    ly: mk(lyMonth, lyDays, lyDays),
-    prev: mk(pm, pmDays, pmDays),
+    cur: cumulate(board, monthOf(date), Number(date.slice(8, 10)), total, key),
+    ly: cumulate(board, lyMonth, 31, total, key),
+    month: board.range(monthStart(date), date),
+    lyMonth: board.range(monthStart(ly), ly),
+    lyFull: board.range(`${lyMonth}-01`, lastDay(lyMonth)),
+    day: board.day(date),
   };
 }
 
-/** 올해 누계를 달마다 쌓은 선 — 올해(기준일까지) · 작년 */
-export function yearCumulative(board: Board, date: string) {
+/* ---------- 올해 누계 상세 (11-6) ---------- */
+
+export interface YearView {
+  months: number[];
+  /** 올해 달마다 쌓은 누계 (마감일이 든 달은 마감일까지) */
+  cur: (number | null)[];
+  /** 작년 달마다 쌓은 누계 (12달 전체) */
+  ly: (number | null)[];
+  /** 연말(12월) 예상 누계 */
+  estimate: { value: number; how: string } | null;
+  year: Metrics;
+  lyYear: Metrics;
+  lyFull: Metrics;
+  /** 마감일이 든 달 1일 ~ 마감일 */
+  month: Metrics;
+  /** 작년 같은 달 전체 */
+  lyMonthFull: Metrics;
+}
+
+export function yearView(board: Board, date: string): YearView {
   const y = date.slice(0, 4);
-  const ly = String(Number(y) - 1);
+  const lyY = String(Number(y) - 1);
+  const ly = sameDayYearsAgo(date);
   const curMonth = Number(date.slice(5, 7));
   const cur: (number | null)[] = [];
   const last: (number | null)[] = [];
@@ -353,178 +429,96 @@ export function yearCumulative(board: Board, date: string) {
   for (let mo = 1; mo <= 12; mo++) {
     const mm = String(mo).padStart(2, "0");
     if (mo <= curMonth) {
-      const to = mo === curMonth ? date : `${y}-${mm}-${String(daysInMonth(`${y}-${mm}-01`)).padStart(2, "0")}`;
-      const m = board.range(`${y}-${mm}-01`, to);
+      const m = board.range(`${y}-${mm}-01`, mo === curMonth ? date : lastDay(`${y}-${mm}`));
       anyA = anyA || hasData(m);
       a += m.total;
       cur.push(a);
     } else cur.push(null);
-    const lm = board.range(`${ly}-${mm}-01`, `${ly}-${mm}-${String(daysInMonth(`${ly}-${mm}-01`)).padStart(2, "0")}`);
+    const lm = board.range(`${lyY}-${mm}-01`, lastDay(`${lyY}-${mm}`));
     anyB = anyB || hasData(lm);
     b += lm.total;
     last.push(b);
   }
-  return { months: Array.from({ length: 12 }, (_, i) => i + 1), cur: anyA ? cur : cur.map(() => null), ly: anyB ? last : last.map(() => null) };
+  const year = board.range(`${y}-01-01`, date);
+  const lyYear = board.range(`${lyY}-01-01`, ly);
+  const lyFull = board.range(`${lyY}-01-01`, `${lyY}-12-31`);
+  let estimate: YearView["estimate"] = null;
+  if (anyA && year.total > 0) {
+    if (comparable(lyYear) && comparable(lyFull) && lyYear.total > 0) estimate = { value: Math.round((year.total * lyFull.total) / lyYear.total), how: "작년 흐름 기준" };
+    else {
+      const days = dayRange(`${y}-01-01`, date).length;
+      const all = dayRange(`${y}-01-01`, `${y}-12-31`).length;
+      estimate = { value: Math.round((year.total / days) * all), how: "올해 하루 평균 기준" };
+    }
+  }
+  return {
+    months: Array.from({ length: 12 }, (_, i) => i + 1),
+    cur: anyA ? cur : cur.map(() => null),
+    ly: anyB ? last : last.map(() => null),
+    estimate,
+    year,
+    lyYear,
+    lyFull,
+    month: board.range(monthStart(date), date),
+    lyMonthFull: board.range(`${monthOf(ly)}-01`, lastDay(monthOf(ly))),
+  };
 }
 
-/* ---------- 분석 설명 (상세 화면 아래) ---------- */
+/* ---------- 키즈 입장권 상세 (11-8 · 현장 · 이벤트) ---------- */
 
-const change = (now: number | null, before: number | null): number | null => (now == null || before == null || !(before > 0) ? null : Math.round(((now - before) / before) * 1000) / 10);
-const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
-const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}(${weekdayLabel(d)})`;
-const updown = (p: number | null, flat = 3) => (p == null ? "" : Math.abs(p) < flat ? "비슷합니다" : p > 0 ? `${pct(p)} 높습니다` : `${pct(p)} 낮습니다`);
-
-/** 상세 화면 분석 문장들 — 숫자에서 바로 만든 설명 (추측 없음) */
-export function analyze(board: Board, key: MetricKey, date: string): string[] {
-  const f = (v: number | null) => formatMetric(key, v);
-  const label = METRIC_LABEL[key];
-  const out: string[] = [];
-  const today = board.day(date);
-  const v = hasData(today) ? valueOf(today, key) : null;
-  if (v == null) return [`${md(date)} 자료가 없습니다 (휴무 또는 마감 송부 전).`];
-
-  // 1) 지난주 같은 요일 · 최근 4주 같은 요일 평균
-  const pw = board.day(addDays(date, -7));
-  const pwv = hasData(pw) ? valueOf(pw, key) : null;
-  if (pwv != null) out.push(`${md(date)} ${label} ${f(v)} — 지난주 ${md(addDays(date, -7))} ${f(pwv)}보다 ${updown(change(v, pwv))}.`);
-  const same = [7, 14, 21, 28].map((n) => board.day(addDays(date, -n))).filter(hasData).map((m) => valueOf(m, key)).filter((x): x is number => x != null);
-  const sameAvg = mean(same);
-  if (same.length >= 2 && sameAvg != null) out.push(`최근 ${same.length}주 같은 ${weekdayLabel(date)}요일 평균 ${f(Math.round(sameAvg))}과 비교하면 ${updown(change(v, sameAvg))}.`);
-
-  // 2) 최근 7일 흐름
-  const s14 = dailySeries(board, key, date, 14).map((p) => p.v);
-  const last7 = s14.slice(7).filter((x): x is number => x != null);
-  const prev7 = s14.slice(0, 7).filter((x): x is number => x != null);
-  const a7 = mean(last7);
-  const b7 = mean(prev7);
-  if (a7 != null && b7 != null && last7.length >= 4 && prev7.length >= 4) {
-    const p = change(a7, b7);
-    const word = p == null ? "" : Math.abs(p) < 3 ? "비슷한 흐름입니다" : p > 0 ? `오르는 흐름입니다 (${pct(p)})` : `내려가는 흐름입니다 (${pct(p)})`;
-    out.push(`최근 7일 하루 평균 ${f(Math.round(a7))}, 그 전 7일 ${f(Math.round(b7))} — ${word}.`);
-  }
-
-  // 3) 최근 30일 최고 · 최저, 주말 대 평일
-  const s30 = dailySeries(board, key, date, 30).filter((p) => p.v != null) as { x: string; v: number }[];
-  if (s30.length >= 7) {
-    const hi = s30.reduce((a, b) => (b.v > a.v ? b : a));
-    const lo = s30.reduce((a, b) => (b.v < a.v ? b : a));
-    out.push(`최근 30일 가장 높은 날 ${md(hi.x)} ${f(hi.v)}, 가장 낮은 날 ${md(lo.x)} ${f(lo.v)}.`);
-    const off = mean(s30.filter((p) => isOffDay(p.x)).map((p) => p.v));
-    const on = mean(s30.filter((p) => !isOffDay(p.x)).map((p) => p.v));
-    if (off != null && on != null && on > 0 && key !== "avgSpend") out.push(`최근 30일 주말·공휴일 하루 평균은 평일의 ${(off / on).toFixed(1)}배입니다.`);
-  }
-
-  // 4) 누계 비교 (금액·수량 — 1인 평균 제외)
-  if (key !== "avgSpend") {
-    const month = valueOf(board.range(monthStart(date), date), key);
-    const pmMonth = addMonths(monthOf(date), -1);
-    const pmTo = `${pmMonth}-${String(Math.min(Number(date.slice(8)), daysInMonth(`${pmMonth}-01`))).padStart(2, "0")}`;
-    const pmR = board.range(`${pmMonth}-01`, pmTo);
-    const ly = sameDayYearsAgo(date);
-    const lyR = board.range(monthStart(ly), ly);
-    let line = `이달 누계 ${f(month)}`;
-    if (comparable(pmR)) line += ` — 지난달 같은 기간 ${f(valueOf(pmR, key))}보다 ${updown(change(month, valueOf(pmR, key)))}`;
-    if (comparable(lyR)) line += `${comparable(pmR) ? ", " : " — "}작년 같은 달 같은 기간 ${f(valueOf(lyR, key))}보다 ${updown(change(month, valueOf(lyR, key)))}`;
-    out.push(line + ".");
-  }
-
-  // 5) 항목별 설명
-  if (["바리스타", "베이커리", "키친", "키즈입장료", "기타"].includes(key) && today.total > 0)
-    out.push(`이날 총 매출 중 ${label} 비중은 ${((v / today.total) * 100).toFixed(1)}%입니다.`);
-  if (key === "키즈입장료" || key === "tickets" || key === "naver" || key === "walkIn" || key === "eventFree") {
-    const t = today.naver + today.walkIn;
-    const { price, kind } = kidsPrice(date);
-    out.push(`${kind} 단가 ${won(price)} × 입장권 ${count(t, "장")} (네이버 ${count(today.naver, "장")} · 현장 ${count(today.walkIn, "장")}) = ${won(t * price)}.`);
-    if (t > 0) out.push(`입장권 중 네이버 예약 비중은 ${((today.naver / t) * 100).toFixed(0)}%입니다.`);
-    out.push(`네이버 예약 = 입장 발행 ${count(today.issued, "장")} − 현장 구매 ${count(today.walkIn, "장")} = ${count(today.naverPos, "장")}${today.eventFree ? ` · 이벤트 무료입장 ${count(today.eventFree, "팀")}은 입장료에서 뺌` : ""}.`);
-    if (today.naverAdjusted) out.push(`네이버 예약은 ${count(today.naverPos, "장")}을 ${count(today.naver, "장")}으로 고친 값으로 계산했습니다.`);
-  }
-  if (key === "visitors") out.push(`음료·맥주 ${count(today.cups, "잔")} × ${VISITOR_FACTOR} = ${count(today.visitors, "명")} (두 잔 마시는 손님을 감안한 추정).`);
-  if (key === "avgSpend") out.push(`총 매출 ${won(today.total)} ÷ 추정 방문자 ${count(today.visitors, "명")} = ${won(v)}.`);
-  if ((key === "기타" || key === "total") && today.voucher > 0)
-    out.push(`상품권·교환권 결제 ${won(today.voucher)}은 결제 수단이라 매출에서 빼지 않았습니다 (POS 실매출에는 빠져 있음).`);
-  if (key === "기타" && today.kidsOtherNet !== 0) out.push(`기타에는 키즈 POS 의 입장권 외 매출(추가 인원·간식 등) ${won(today.kidsOtherNet)}이 들어 있습니다.`);
-  if (key === "total" && today.walkInPosNet !== today.fee.walkIn)
-    out.push(`키즈 현장 입장권은 POS 실결제 ${won(today.walkInPosNet)} 대신 단가 계산 ${won(today.fee.walkIn)}으로 넣었습니다 (네이버 입장권 ${won(today.fee.naver)} 포함).`);
-  return out;
+/** 기간의 네이버 시간대별 합 (A 에 넣은 날만) */
+export function naverSlots(board: Board, from: string, to: string): { tickets: number[]; newVisitors: number[]; days: number } {
+  const tickets = NAVER_SLOTS.map(() => 0);
+  const newVisitors = NAVER_SLOTS.map(() => 0);
+  let days = 0;
+  if (from <= to)
+    for (const d of dayRange(from, to)) {
+      const n = board.report(d)?.naver;
+      if (!n) continue;
+      days++;
+      n.tickets.forEach((v, i) => (tickets[i] += v || 0));
+      n.newVisitors.forEach((v, i) => (newVisitors[i] += v || 0));
+    }
+  return { tickets, newVisitors, days };
 }
 
-/** 요일 이름 (월~일) 순서용 */
-export function weekdayOrder(date: string): number {
-  return (weekday(date) + 6) % 7;
+/** 그 달 1일 ~ 말일 날마다의 값 — 이번 달은 마감일까지 · 작년 같은 달은 전체 (자료 없는 날 null) */
+export function monthDaily(board: Board, key: MetricKey, date: string): { days: number[]; cur: (number | null)[]; ly: (number | null)[] } {
+  const total = daysInMonth(date);
+  const lyMonth = monthOf(sameDayYearsAgo(date));
+  const upto = Number(date.slice(8, 10));
+  const pick = (month: string, limit: number) =>
+    Array.from({ length: total }, (_, i) => {
+      if (i + 1 > limit || i + 1 > daysInMonth(`${month}-01`)) return null;
+      const m = board.day(`${month}-${String(i + 1).padStart(2, "0")}`);
+      return hasValue(m, key) ? valueOf(m, key) : null;
+    });
+  return { days: Array.from({ length: total }, (_, i) => i + 1), cur: pick(monthOf(date), upto), ly: pick(lyMonth, 31) };
 }
 
-/* ---------- 누계 상세 ---------- */
-
-export interface CumulativeView {
-  kind: "month" | "year";
-  /** 올해(이달) 누계 */
-  cur: Metrics;
-  /** 작년 같은 기간 */
-  ly: Metrics;
-  /** 작년 그 달(그 해) 전체 */
-  lyFull: Metrics;
-  /** 지난달 같은 기간 (월 누계일 때만) */
-  prev: Metrics | null;
-  lines: string[];
-}
-
-/** 당월 누계 · 올해 누계 상세 — 비교 숫자와 분석 문장 */
-export function cumulative(board: Board, kind: "month" | "year", date: string): CumulativeView {
-  const ly = sameDayYearsAgo(date);
-  const from = kind === "month" ? monthStart(date) : `${date.slice(0, 4)}-01-01`;
-  const lyFrom = kind === "month" ? monthStart(ly) : `${ly.slice(0, 4)}-01-01`;
-  const lyEnd = kind === "month" ? `${monthOf(ly)}-${String(daysInMonth(ly)).padStart(2, "0")}` : `${ly.slice(0, 4)}-12-31`;
-  const cur = board.range(from, date);
-  const lyR = board.range(lyFrom, ly);
-  const lyFull = board.range(lyFrom, lyEnd);
-  let prev: Metrics | null = null;
-  if (kind === "month") {
-    const pm = addMonths(monthOf(date), -1);
-    const pmTo = `${pm}-${String(Math.min(Number(date.slice(8)), daysInMonth(`${pm}-01`))).padStart(2, "0")}`;
-    prev = board.range(`${pm}-01`, pmTo);
-  }
-  const what = kind === "month" ? "이달" : "올해";
-  const days = dayRange(from, date).length;
-  const lines: string[] = [];
-  lines.push(`${what} ${md(from)}~${md(date)} ${days}일 누계 ${won(cur.total)}, 하루 평균 ${won(Math.round(cur.total / Math.max(1, days)))}.`);
-  if (comparable(lyR)) lines.push(`작년 같은 기간 ${won(lyR.total)}보다 ${updown(change(cur.total, lyR.total))}.`);
-  else if (hasData(lyR)) lines.push(`작년 같은 기간은 자료가 ${Math.max(lyR.has.cafe, lyR.has.kids)}일치뿐이라 비교하지 않았습니다 (지난 엑셀을 넣으면 비교됩니다).`);
-  else lines.push("작년 같은 기간 자료가 없습니다 (지난 엑셀을 넣으면 비교됩니다).");
-  if (prev && comparable(prev)) lines.push(`지난달 같은 기간 ${won(prev.total)}보다 ${updown(change(cur.total, prev.total))}.`);
-  if (comparable(lyFull) && lyFull.total > 0)
-    lines.push(`작년 ${kind === "month" ? `${Number(ly.slice(5, 7))}월 한 달` : "한 해"} 전체 ${won(lyFull.total)}의 ${((cur.total / lyFull.total) * 100).toFixed(1)}%를 채웠습니다.`);
-  if (cur.total > 0) {
-    const parts = BOXES.map((b) => `${b === "키즈입장료" ? "키즈 입장료" : b} ${((cur.box[b] / cur.total) * 100).toFixed(0)}%`).join(" · ");
-    lines.push(`구성: ${parts}.`);
-  }
-  if (cur.visitors > 0) lines.push(`추정 방문자 ${count(cur.visitors, "명")}, 1인 평균 ${won(cur.avgSpend || 0)}.`);
-  if (cur.naver + cur.walkIn > 0) lines.push(`키즈 입장권 ${count(cur.naver + cur.walkIn, "장")} (네이버 ${count(cur.naver, "장")} · 현장 ${count(cur.walkIn, "장")}).`);
-  return { kind, cur, ly: lyR, lyFull, prev, lines };
-}
-
-/* ---------- 날씨와 함께 본 분석 ---------- */
-
-/** 그날 날씨·기간 한 줄 + 최근 90일 비·눈 온 날과 맑은·구름 낀 날의 평균 비교 (날씨 자료가 있는 날만) */
-export function analyzeWeather(board: Board, key: MetricKey, date: string, weather: WeatherMap): string[] {
-  const out: string[] = [];
-  const w = weather[date];
-  const s = seasonOf(date);
-  if (w)
-    out.push(
-      `이날 날씨 ${w.icon} ${w.label}, 최고 ${temp(w.tempMax)} · 최저 ${temp(w.tempMin)}${w.rainMm ? ` · 강수 ${w.rainMm}mm` : ""} (${WEATHER_SOURCE_TEXT[w.source]}) · ${s.emoji} ${s.kind}${s.name ? `(${s.name})` : ""}.`,
-    );
-  else out.push(`이날 날씨 자료가 없습니다 · ${s.emoji} ${s.kind}${s.name ? `(${s.name})` : ""}.`);
-  const wet: number[] = [];
-  const dry: number[] = [];
-  for (const p of dailySeries(board, key, date, 90)) {
-    const x = weather[p.x];
-    if (p.v == null || !x) continue;
-    (x.key === "rain" || x.key === "heavyrain" || x.key === "snow" ? wet : dry).push(p.v);
-  }
-  const a = mean(wet);
-  const b = mean(dry);
-  if (wet.length >= 3 && dry.length >= 3 && a != null && b != null && b > 0)
-    out.push(`최근 90일 비·눈 온 날(${wet.length}일) 하루 평균 ${formatMetric(key, Math.round(a))} — 맑거나 흐린 날 ${formatMetric(key, Math.round(b))}보다 ${updown(change(a, b))}.`);
-  return out;
+/** 1~12월 달마다의 값 — 올해는 마감일까지 · 작년은 12달 전체 (cumulative 면 쌓은 값) */
+export function yearMonthly(board: Board, key: MetricKey, date: string, cumulative = false): { cur: (number | null)[]; ly: (number | null)[] } {
+  const y = date.slice(0, 4);
+  const lyY = String(Number(y) - 1);
+  const curMonth = Number(date.slice(5, 7));
+  const run = (year: string, limitMonth: number, end: string | null) => {
+    let acc = 0;
+    let any = false;
+    const out: (number | null)[] = [];
+    for (let mo = 1; mo <= 12; mo++) {
+      if (mo > limitMonth) {
+        out.push(null);
+        continue;
+      }
+      const mm = `${year}-${String(mo).padStart(2, "0")}`;
+      const m = board.range(`${mm}-01`, mo === limitMonth && end ? end : lastDay(mm));
+      const has = hasValue(m, key);
+      any = any || has;
+      const v = valueOf(m, key) || 0;
+      acc += v;
+      out.push(cumulative ? acc : has ? v : null);
+    }
+    return any ? out : out.map(() => null);
+  };
+  return { cur: run(y, curMonth, date), ly: run(lyY, 12, null) };
 }
