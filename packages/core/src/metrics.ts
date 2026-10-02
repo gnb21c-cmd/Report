@@ -12,7 +12,7 @@
    ============================================================ */
 import { addDays, addMonths, dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekday, weekdayLabel } from "./dates";
 import { kidsKind, teamOf } from "./classify";
-import { cupsPerItem, isCup, isOffDay, kidsPrice, visitorsFromCups, VISITOR_FACTOR } from "./rules";
+import { cupsPerItem, isCup, isOffDay, isVoucherPayment, kidsPrice, visitorsFromCups, VISITOR_FACTOR } from "./rules";
 import { count, pct, won } from "./format";
 import type { SalesIndex } from "./report";
 import { seasonOf, temp, WEATHER_SOURCE_TEXT, type WeatherMap } from "./weather";
@@ -87,6 +87,8 @@ export interface Metrics {
   fee: { naver: number; walkIn: number };
   /** 키즈 POS 의 입장권 외 매출 (추가 인원 · 간식 등 — 기타에 들어감) */
   kidsOtherNet: number;
+  /** 상품권·교환권으로 결제한 금액 (양수로) — 결제 수단이라 매출에서 빼지 않음 */
+  voucher: number;
 }
 
 function empty(from: string, to: string): Metrics {
@@ -109,6 +111,7 @@ function empty(from: string, to: string): Metrics {
     walkInPosNet: 0,
     fee: { naver: 0, walkIn: 0 },
     kidsOtherNet: 0,
+    voucher: 0,
   };
 }
 
@@ -157,6 +160,10 @@ export class Board {
     let cups = 0;
     for (const s of this.sales.day(date)) {
       m.posNet += s.net;
+      if (isVoucherPayment(s)) {
+        m.voucher -= s.net;
+        continue;
+      }
       const team = teamOf(s.pos, s);
       if (isCup(s.pos, s, team)) cups += s.qty * cupsPerItem(s.name);
       if (s.pos === "cafe") {
@@ -211,6 +218,7 @@ export class Board {
       m.fee.naver += x.fee.naver;
       m.fee.walkIn += x.fee.walkIn;
       m.kidsOtherNet += x.kidsOtherNet;
+      m.voucher += x.voucher;
     }
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
     return m;
@@ -433,6 +441,8 @@ export function analyze(board: Board, key: MetricKey, date: string): string[] {
   }
   if (key === "visitors") out.push(`음료·맥주 ${count(today.cups, "잔")} × ${VISITOR_FACTOR} = ${count(today.visitors, "명")} (두 잔 마시는 손님을 감안한 추정).`);
   if (key === "avgSpend") out.push(`총 매출 ${won(today.total)} ÷ 추정 방문자 ${count(today.visitors, "명")} = ${won(v)}.`);
+  if ((key === "기타" || key === "total") && today.voucher > 0)
+    out.push(`상품권·교환권 결제 ${won(today.voucher)}은 결제 수단이라 매출에서 빼지 않았습니다 (POS 실매출에는 빠져 있음).`);
   if (key === "기타" && today.kidsOtherNet !== 0) out.push(`기타에는 키즈 POS 의 입장권 외 매출(추가 인원·간식 등) ${won(today.kidsOtherNet)}이 들어 있습니다.`);
   if (key === "total" && today.walkInPosNet !== today.fee.walkIn)
     out.push(`키즈 현장 입장권은 POS 실결제 ${won(today.walkInPosNet)} 대신 단가 계산 ${won(today.fee.walkIn)}으로 넣었습니다 (네이버 입장권 ${won(today.fee.naver)} 포함).`);

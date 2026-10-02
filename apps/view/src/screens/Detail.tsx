@@ -257,7 +257,8 @@ function TotalCard({ board, date }: { board: Board; date: string }) {
           </tr>
         </tbody>
       </table>
-      <p className="note">참고: POS 실매출 합계 {won(m.posNet)} — 네이버 예약 입장권은 POS 에 0원으로 찍혀서, 입장권 수 × 단가로 계산해 키즈 입장료에 넣습니다.</p>
+      {m.voucher > 0 && <p className="note">상품권·교환권 결제 {won(m.voucher)} — 미리 산 현금성 상품권으로 낸 것이라 매출에서 빼지 않았습니다.</p>}
+      <p className="note">참고: POS 실매출 합계 {won(m.posNet)} — 네이버 예약 입장권은 POS 에 0원으로 찍혀서 입장권 수 × 단가로 넣고, 상품권 결제는 빼지 않아 차이가 납니다.</p>
     </section>
   );
 }

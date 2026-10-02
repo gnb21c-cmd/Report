@@ -50,6 +50,12 @@ export function cupsPerItem(name: string): number {
   return m ? Math.max(1, Number(m[1])) : 1;
 }
 
+/** 현금성 상품권으로 결제한 줄 ('[종이쿠폰]만원권' · '[아키 2만원] 교환권', 음수) — 상품이 아니라 결제 수단
+ *  상품은 이미 제값으로 팔린 것으로 잡혀 있으므로, 이 음수 줄은 매출에서 빼지 않고 '상품권 결제' 로 따로 보여 줌 */
+export function isVoucherPayment(line: Pick<SaleLine, "name" | "net">): boolean {
+  return line.net < 0 && /종이쿠폰|상품권|교환권|금액권/.test(line.name || "");
+}
+
 export function visitorsFromCups(cups: number): number {
   return Math.max(0, Math.round(cups * VISITOR_FACTOR));
 }
