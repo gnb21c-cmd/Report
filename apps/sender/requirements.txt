@@ -1,3 +1,0 @@
-# 매장 POS PC 용 exe 에 넣는 것 (빌드: .github/workflows/build-sender.yml)
-fdb==2.0.2         # OK포스 DB 읽기 (Firebird, 읽기 전용 트랜잭션) — 계정을 받으면
-xlrd==2.0.2        # 엑셀 폴더 방식: OK포스 "상품별 (일자별)" (.xls)

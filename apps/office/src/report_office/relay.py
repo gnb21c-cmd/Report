@@ -1,10 +1,12 @@
-"""클라우드 보관함(Firebase) 에 올리기 — 우리가 운영하는 서버 없이, Google 이 운영하는 보관함을 우편함처럼 씀
+"""클라우드 보관함(Firebase) 에 올리기 — 따로 운영하는 서버 없이, Google 이 운영하는 보관함을 우편함처럼 씀
+(사무실 PC C 는 사무실 공유기 안에 있어 폰이 밖에서 바로 들어올 수 없으므로, C 가 여기에 올리고 폰은 여기서 받음)
 
-- 로그인: 이 PC 전용 계정(이메일·비밀번호) → 1시간짜리 출입증(idToken)
+- 로그인: C 전용 계정(이메일·비밀번호) → 1시간짜리 출입증(idToken)
 - 매장 자료는 boards/{열쇠}/ 아래 (열쇠 = 보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
-- 하루치: boards/{열쇠}/days/{pos}_{date} 문서 하나를 통째로 덮어씀 (rows 는 JSON 글자 한 칸)
-- 상태: boards/{열쇠}/devices/{pos} — 마지막 송부·프로그램 판·남은 묶음·오류 (보고 앱 설정에 보임)
-보안 규칙(firebase/firestore.rules)이 이 계정은 자기 POS 문서만 쓰게 막음
+- 보고: boards/{열쇠}/reports/{날짜} — C 가 합친 그날 보고 (report = JSON 글자 한 칸, at = 올린 시각)
+- 날씨: boards/{열쇠}/weather/{날짜}
+- 상태: boards/{열쇠}/devices/office — 마지막으로 올린 시각 · 판 · 못 올린 날 · 오류 (보고 앱 설정에 보임)
+보안 규칙(firebase/firestore.rules)이 senders 명단에 있는 계정만 쓰게 막음
 """
 from __future__ import annotations
 
@@ -49,13 +51,13 @@ def _post(url: str, body: dict, token: str | None = None, method: str = "POST", 
 def explain(code: int, msg: str) -> str:
     low = msg.upper()
     if "INVALID_PASSWORD" in low or "EMAIL_NOT_FOUND" in low or "INVALID_LOGIN_CREDENTIALS" in low:
-        return "보내기 계정(이메일·비밀번호)이 맞지 않습니다 — 설정을 확인해 주세요."
+        return "올리기 계정(이메일·비밀번호)이 맞지 않습니다 — 설정을 확인해 주세요."
     if "USER_DISABLED" in low:
-        return "보내기 계정이 사용 중지되었습니다 — 관리자에게 문의해 주세요."
+        return "올리기 계정이 사용 중지되었습니다 — 관리자에게 문의해 주세요."
     if "API_KEY" in low or "API KEY" in low:
         return "클라우드 보관함 API 키가 맞지 않습니다 — 설정을 확인해 주세요."
     if code == 403 or "PERMISSION" in low:
-        return "이 PC 계정으로는 쓸 수 없는 곳입니다 (보안 규칙) — 설정의 pos 와 계정을 확인해 주세요."
+        return "이 계정으로는 쓸 수 없는 곳입니다 (보안 규칙) — Firebase senders 문서의 board 와 매장 열쇠를 확인해 주세요."
     if code == 404:
         return "클라우드 보관함(프로젝트)을 찾지 못했습니다 — projectId 를 확인해 주세요."
     return f"클라우드 보관함 오류 {code}: {msg[:200]}"
@@ -80,18 +82,13 @@ def fields(d: dict) -> dict:
     return {"fields": {k: _value(v) for k, v in d.items()}}
 
 
-def day_doc(pos: str, date: str, rows: list, source: str, sender: str, version: str, now: dt.datetime) -> dict:
-    """days/{pos}_{date} 문서 내용 (보고 앱 apps/view/src/data/firebase.ts 가 읽는 모양)"""
+def report_doc(report: dict, version: str, now: dt.datetime) -> dict:
+    """reports/{date} 문서 내용 (보고 앱 apps/view/src/data/firebase.ts toReport 가 읽는 모양)"""
     return {
-        "pos": pos,
-        "date": date,
-        "rows": json.dumps(rows, ensure_ascii=False, separators=(",", ":")),
-        "count": len(rows),
-        "net": sum(int(r.get("net") or 0) for r in rows),
-        "source": source[:120],
-        "sender": sender,
+        "date": report["date"],
+        "report": json.dumps(report, ensure_ascii=False, separators=(",", ":")),
         "version": version,
-        "sentAt": now,
+        "at": now,
     }
 
 
@@ -111,7 +108,7 @@ class FirebaseRelay:
         res = self.post(AUTH_URL.format(key=self.api_key), {"email": self.email, "password": self.password, "returnSecureToken": True})
         self._token = res.get("idToken")
         if not self._token:
-            raise RelayError("보내기 계정으로 로그인하지 못했습니다.", retry=True)
+            raise RelayError("올리기 계정으로 로그인하지 못했습니다.", retry=True)
         self._until = self.clock() + max(60, int(res.get("expiresIn") or 3600) - 300)
         return self._token
 
@@ -119,12 +116,12 @@ class FirebaseRelay:
         url = DOC_URL.format(project=self.project, path=path)
         return self.post(url, fields(data), token=self.token(), method="PATCH")
 
-    def put_day(self, pos: str, date: str, rows: list, source: str, version: str, now: dt.datetime | None = None):
+    def put_report(self, report: dict, version: str, now: dt.datetime | None = None):
         now = now or dt.datetime.now(dt.timezone.utc)
-        return self.put(f"boards/{self.board}/days/{pos}_{date}", day_doc(pos, date, rows, source, self.email, version, now))
+        return self.put(f"boards/{self.board}/reports/{report['date']}", report_doc(report, version, now))
 
-    def put_status(self, pos: str, status: dict):
-        return self.put(f"boards/{self.board}/devices/{pos}", {**status, "at": dt.datetime.now(dt.timezone.utc)})
+    def put_status(self, status: dict):
+        return self.put(f"boards/{self.board}/devices/office", {**status, "at": dt.datetime.now(dt.timezone.utc)})
 
     def put_weather(self, day: dict):
         """boards/{열쇠}/weather/{날짜} — 보고 앱이 at 으로 새로 온 것만 받음"""

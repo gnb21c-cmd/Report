@@ -2,10 +2,9 @@ import datetime as dt
 import json
 import unittest
 
-from report_sender.outbox import Outbox
-from report_sender.runner import Sender
-from report_sender.weather import Kma, days_to_fetch, latest_forecast_base, parse_asos, parse_forecast, parse_precip
-from test_runner import CONF, FakeRelay, FakeSource, row
+from report_office.server import Office
+from report_office.store import Store
+from report_office.weather import Kma, days_to_fetch, latest_forecast_base, parse_asos, parse_forecast, parse_precip
 
 
 def fc(date, time, cat, val):
@@ -72,29 +71,39 @@ class FakeKma:
         return [{"date": "2026-10-01", "key": "rain", "label": "비", "icon": "🌧️", "tempMax": 18.0, "tempMin": 12.0, "rainMm": 3, "source": "forecast", "basis": "202610010500"}]
 
 
-class WeatherRelay(FakeRelay):
+class WeatherRelay:
     def __init__(self):
-        super().__init__()
         self.weather = []
+        self.reports = []
 
     def put_weather(self, d):
         self.weather.append((d["date"], d["source"]))
 
+    def put_report(self, r, version):
+        self.reports.append(r["date"])
 
-class SenderWeatherTest(unittest.TestCase):
+    def put_status(self, s):
+        pass
+
+
+CONF = {"name": "시험", "port": 8770, "officePin": "", "firebase": {"apiKey": "k", "projectId": "p", "email": "e@x", "password": "pw", "board": "b" * 20}, "weather": {"serviceKey": "x"}}
+
+
+class OfficeWeatherTest(unittest.TestCase):
     def test_backfill_then_only_new(self):
-        ob, kma = Outbox(":memory:"), FakeKma()
-        relay = WeatherRelay()
-        s = Sender(CONF, outbox=ob, source=FakeSource({"2026-10-01": [row("자유입장권", 12000)]}), relay=relay, today=lambda: dt.date(2026, 10, 1), kma=kma, now=lambda: dt.datetime(2026, 10, 1, 22, 10))
-        res = s.run()
+        store, kma, relay = Store(":memory:"), FakeKma(), WeatherRelay()
+        o = Office(CONF, store, relay=relay, kma=kma, now=lambda: dt.datetime(2026, 10, 1, 22, 10))
+        o.tick()
         self.assertEqual(relay.weather, [("2026-09-29", "observed"), ("2026-09-30", "observed"), ("2026-10-01", "forecast")])
-        self.assertEqual(res.weather, 3)
-        # 다음 날: 어제(10/1) 관측값만 받아 예보를 바꾸고, 오늘 예보
-        relay2 = WeatherRelay()
-        s2 = Sender(CONF, outbox=ob, source=FakeSource({}), relay=relay2, today=lambda: dt.date(2026, 10, 2), kma=kma, now=lambda: dt.datetime(2026, 10, 2, 9, 0))
-        s2.run()
+        # 다음 날: 어제(10/1) 관측값만 받아 예보를 바꿈 (관측은 예보를 바꾸고, 예보는 관측을 못 바꿈)
+        relay.weather.clear()
+        o.now = lambda: dt.datetime(2026, 10, 2, 9, 0)
+        o.weather_due = True
+        o.tick()
         self.assertEqual(kma.asked[-1], ("2026-10-01", "2026-10-01"))
-        self.assertEqual(relay2.weather, [("2026-10-01", "observed")])  # 가짜 예보는 10/1 것뿐이라 10/2 예보는 없음
+        self.assertEqual(relay.weather, [("2026-10-01", "observed")])
+        self.assertFalse(store.put_weather({"date": "2026-10-01", "source": "forecast", "key": "rain"}))
+        self.assertEqual(store.weather("2026-10-01")["source"], "observed")
 
 
 if __name__ == "__main__":

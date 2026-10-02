@@ -16,3 +16,4 @@ apps/view/dist-demo
 apps/view/dist-office
 apps/entry/dist*
 apps/office/web/
+.office-dev
