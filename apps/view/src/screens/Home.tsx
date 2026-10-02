@@ -7,7 +7,7 @@
    ⑤ 키즈 입장권: 네이버(고칠 수 있음) · 현장
    상자를 누르면 그 숫자의 추세 그래프 · 분석 설명 화면으로
    ============================================================ */
-import { BOXES, changePct, comparable, count, holidayName, pct, POS_LABEL, shortLabel, won, type Board, type Dashboard, type MetricKey, type Metrics } from "@report/core";
+import { BOXES, changePct, comparable, count, holidayName, pct, POS_LABEL, shortLabel, won, wonMan, type Board, type Dashboard, type MetricKey, type Metrics } from "@report/core";
 
 export type Open = (v: { name: "metric"; key: MetricKey } | { name: "cum"; kind: "month" | "year" }) => void;
 
@@ -68,16 +68,13 @@ export function Home({ board, d, open }: { board: Board; d: Dashboard; open: Ope
         <Delta now={day.total} before={d.prevWeek.m.total} label={`지난주 ${d.weekday}요일`} />
       </button>
 
-      {/* 팀별 섹터 버튼 — 한 줄, 넘치면 옆으로 밀어서 */}
+      {/* 팀별 섹터 버튼 — 다섯 개가 한 화면 폭에 (금액은 만 단위, 정확한 금액은 눌러서 상세에서) */}
       <div className="sectors" role="list">
         {BOXES.map((b) => (
-          <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "metric", key: b })}>
-            <span className="sec-top">
-              <span className="sec-label">{b === "키즈입장료" ? "키즈입장료" : b}</span>
-              <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : ""}</span>
-              <Chevron />
-            </span>
-            <span className="sec-value">{won(day.box[b])}</span>
+          <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "metric", key: b })} aria-label={`${b} ${won(day.box[b])}`}>
+            <span className="sec-label">{b === "키즈입장료" ? "키즈입장" : b}</span>
+            <span className="sec-value">{wonMan(day.box[b])}</span>
+            <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : "—"}</span>
           </button>
         ))}
       </div>

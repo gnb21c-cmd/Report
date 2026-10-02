@@ -352,62 +352,40 @@ button.stat {
   margin: 2px 0 2px;
   overflow-wrap: anywhere;
 }
-/* 팀별 섹터 버튼: 한 줄. 폰 폭에서는 3개 남짓 보이고 옆으로 밀면 나머지 */
+/* 팀별 섹터 버튼: 다섯 개가 한 줄, 한 화면 폭에 */
 .sectors {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  margin: 0 -16px;
-  padding: 0 16px;
-  scroll-padding: 0 16px;
-}
-.sectors::-webkit-scrollbar {
-  display: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
 }
 .sector {
-  flex: 0 0 max(116px, calc((100% - 18px) / 4));
-  scroll-snap-align: start;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text-primary);
-  padding: 9px 6px 9px 10px;
+  padding: 8px 4px 7px;
   display: grid;
-  gap: 6px;
-  text-align: left;
+  justify-items: center;
+  gap: 2px;
   font-weight: 400;
-}
-.sec-top {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  min-width: 0;
 }
 .sec-label {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 12.5px;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sec-pct {
-  font-size: 11px;
-  color: var(--muted);
-}
-.sec-top .chev {
-  width: 14px;
-  height: 14px;
+  letter-spacing: -0.3px;
 }
 .sec-value {
-  justify-self: end;
-  padding-right: 4px;
   font-weight: 700;
   font-size: 15px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.sec-pct {
+  font-size: 11px;
+  color: var(--muted);
 }
 .stats {
   display: grid;

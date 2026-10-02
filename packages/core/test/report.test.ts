@@ -85,3 +85,10 @@ describe("날짜", () => {
     expect(sameDayYearsAgo("2028-02-29")).toBe("2027-02-28");
   });
 });
+
+describe("좁은 칸 금액", () => {
+  it("만 · 억 단위", async () => {
+    const { wonMan } = await import("../src");
+    expect([wonMan(901600), wonMan(3500000), wonMan(12345678), wonMan(125000000), wonMan(9000), wonMan(0)]).toEqual(["90.2만", "350만", "1235만", "1.25억", "9,000원", "0원"]);
+  });
+});

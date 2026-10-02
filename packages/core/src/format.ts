@@ -34,3 +34,13 @@ export function changePct(now: number | null, before: number | null): number | n
   if (now == null || before == null || !(before > 0)) return null;
   return Math.round(((now - before) / before) * 1000) / 10;
 }
+
+/** 좁은 칸용 금액: 90.2만 · 350만 · 1.25억 */
+export function wonMan(n: number): string {
+  const a = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  const one = (v: number, d: number) => v.toFixed(d).replace(/\.?0+$/, "");
+  if (a >= 1e8) return `${sign}${one(a / 1e8, 2)}억`;
+  if (a >= 1e4) return `${sign}${one(a / 1e4, a >= 1e7 ? 0 : 1)}만`;
+  return `${sign}${Math.round(a).toLocaleString("ko-KR")}원`;
+}
