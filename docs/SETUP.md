@@ -52,6 +52,19 @@ cd ../../firebase && npx firebase-tools deploy --only hosting,firestore:rules --
   - 날씨가 실패해도 매출 송부는 그대로 됩니다 (보내기 창에 "⚠ 날씨: …" 로만 표시)
 - 키는 GitHub 비밀 값 `KMA_SERVICE_KEY` 로 넣어 두면 A 설치 묶음에 들어갑니다 (또는 `PosReport.exe setup --kma-key …`).
 
+## ⓪ 매장 시험 (Firebase 전에 먼저, PC 마다 10분)
+
+보관함을 만들기 전에 **A 가 매장 POS 자료를 제대로 읽는지**부터 확인합니다. 시험 모드는 아무것도 보내지 않습니다.
+
+1. GitHub → **Actions** → **Build sender** → 맨 위 초록 체크 실행 → 아래 **Artifacts** 의 `pos-report-sender` 내려받기 → USB 로 POS PC 에 옮겨 **압축 모두 풀기**
+2. `install.bat` 더블클릭 → [예] → 이 PC 가 카페(1)/키즈(2) → 이메일·API 키 묻는 곳은 **Enter** (= 시험 모드)
+3. OK포스 백오피스 → "상품별 (일자별)" → **오늘** 조회 → 엑셀로 `C:\PosReport\엑셀` 에 저장 (조회줄수 5000)
+4. 바탕화면 **매출 보내기** → [보내기] → 창에 "✔ 10월 2일 상품 54개 · 실매출 ○○원 읽음"
+5. 바탕화면에 생긴 **`매출보내기_시험결과_날짜.txt`** 를 보내 주세요 (카페 · 키즈 각각)
+   - 상품명 · 대분류 · 수량 · 금액만 들어 있습니다 (카드번호·전화번호 없음)
+   - 이 파일로 팀 나누기, 키즈 입장권(네이버 0원 코드 · 현장 입장권) 상품명, 잔으로 셀 음료를 실제 이름에 맞춥니다
+6. 확인 뒤 보관함을 만들면 `install.bat` 을 다시 실행해 계정만 넣으면 됩니다 (그때부터 실제로 보냄)
+
 ## ③ POS PC 에 A 설치 (매장, PC 마다 10분)
 
 1. GitHub → Actions → **Build sender** → Run workflow → 끝나면 `pos-report-sender` 내려받기 → USB 로 POS PC 에 옮겨 압축 풀기
