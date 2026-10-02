@@ -354,8 +354,19 @@ button.stat {
 }
 .hero-split .wx {
   justify-self: end;
-  align-self: stretch;
-  align-content: start;
+  align-self: center;
+}
+/* 폰처럼 좁은 화면: 2 × 2 날씨 칸을 총 매출 아래에 한 줄 폭으로 */
+@media (max-width: 520px) {
+  .hero-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-split .wx {
+    justify-self: stretch;
+    grid-template-columns: 1fr 1fr;
+    padding-top: 12px;
+    border-top: 1px solid var(--grid);
+  }
 }
 .hero-main {
   background: none;
@@ -386,29 +397,29 @@ button.stat {
   display: block;
   white-space: normal;
 }
-/* 날씨 칸 — 70대도 한눈에: 큰 이모지 · 큰 글자 */
+/* 날씨 칸 — 2 × 2: [기간] [날씨] / [최고] [최저]. 70대도 한눈에: 큰 이모지 · 큰 글자 */
 .wx {
   display: grid;
-  gap: 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--grid);
+  grid-template-columns: auto auto;
+  gap: 14px 18px;
+  align-items: center;
+  align-content: center;
   color: var(--text-primary);
   white-space: nowrap;
-  align-content: center;
 }
 .wx-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 .wx-emoji {
-  width: 30px;
+  width: 28px;
   text-align: center;
   font-size: 26px;
   line-height: 1;
 }
 .wx-text {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -416,7 +427,7 @@ button.stat {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-right: 3px;
+  margin-right: 4px;
 }
 .wx-text small {
   color: var(--muted);
@@ -424,12 +435,11 @@ button.stat {
   font-weight: 500;
 }
 .season {
-  justify-self: stretch;
+  justify-self: start;
   text-align: center;
-  margin-top: 2px;
   font-size: 16px;
   font-weight: 800;
-  padding: 5px 10px;
+  padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--border);
 }
@@ -451,15 +461,10 @@ button.stat {
   color: var(--text-secondary);
 }
 .wx.compact {
-  border-left: 0;
-  padding-left: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-top: 10px;
-}
-.wx.compact .season {
-  justify-self: start;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--grid);
 }
 .hero-top {
   display: flex;
