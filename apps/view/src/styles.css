@@ -341,11 +341,21 @@ button.stat {
   flex-shrink: 0;
 }
 /* 총 매출 + 날씨 */
+/* 붙여 주신 시안 위치: 왼쪽 위에 날짜·총 매출, 오른쪽 끝 위부터 날씨 세로 칸 */
 .hero-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: center;
+  align-items: start;
+}
+.hero-split .hero-main {
+  align-content: start;
+  gap: 6px;
+}
+.hero-split .wx {
+  justify-self: end;
+  align-self: stretch;
+  align-content: start;
 }
 .hero-main {
   background: none;
