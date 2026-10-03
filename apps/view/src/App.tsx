@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, cashBook, dashboard, todayKst, type CashPart } from "@report/core";
+import { addDays, Board, cashBook, dashboard, settlements, todayKst, type CashPart } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -32,7 +32,8 @@ export function App() {
   }, [board]);
   const latest = useMemo(() => board.latest(), [board]);
   // 자금: 앞 보고의 금일 잔고를 이어서 계산
-  const book = useMemo(() => cashBook(d.reports.map((r) => r.cash).filter((c): c is CashPart => !!c)), [d.reports]);
+  const cashParts = useMemo(() => d.reports.map((r) => r.cash).filter((c): c is CashPart => !!c), [d.reports]);
+  const book = useMemo(() => cashBook(cashParts), [cashParts]);
   const today = todayKst();
   const [date, setDate] = useState<string>(latest || addDays(today, -1));
   const [view, setView] = useState<View>({ name: "home" });
@@ -92,7 +93,7 @@ export function App() {
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={book.get(date)} />}
+        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={book.get(date)} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} />}
       </main>
     </div>
   );

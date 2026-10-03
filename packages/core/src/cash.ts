@@ -263,3 +263,41 @@ export function money(v: number, c: Currency, dash = true): string {
   const sym = c === "USD" ? "$" : c === "JPY" ? "¥" : "";
   return `${neg ? "-" : ""}${sym}${s}`;
 }
+
+/* ---------- 정산 총계 · 지급 수수료 ----------
+   통장에 들어오는 매출 정산금은 카드사 · VAN · PG(네이버) 수수료가 빠진 돈.
+   보고의 매출(누계)은 수수료가 나가기 전 금액 → 1/1 부터 '누계 매출 − 정산 총계' = 그동안 나간 수수료 전체
+   정산으로 보는 입금: 카드가맹점 · 네이버페이(Npay) 정산 · 배달앱 정산 · 금고에 넣은 현금매출
+   (계좌 사이 이체 · 임대료 · 지원금 · 이자 · 캐시백 · 잔고 맞춤 등은 매출이 아니라 뺌) */
+export type SettleKind = "card" | "naver" | "delivery" | "cash";
+export const SETTLE_LABEL: Record<SettleKind, string> = { card: "카드", naver: "네이버페이", delivery: "배달앱", cash: "현금매출" };
+
+export function isSettlement(account: string, r: Pick<CashRow, "inWho" | "inMemo" | "inAmt">): SettleKind | null {
+  if (!num(r.inAmt)) return null;
+  const who = (r.inWho || "").replace(/\s/g, "");
+  const memo = (r.inMemo || "").replace(/\s/g, "");
+  if (/카드가맹점|카드매출|카드정산/.test(who)) return "card";
+  if (/네이버페이|Npay|N페이|네이버정산/i.test(who)) return "naver";
+  if (/배달의민족|배민|쿠팡이츠|요기요/.test(who)) return "delivery";
+  if (account.startsWith("cash") && /현금매출/.test(memo)) return "cash";
+  return null;
+}
+
+/** from ~ to 의 매출 정산 입금 합 (원화 계좌만) */
+export function settlements(parts: CashPart[], from: string, to: string): { total: number; by: Record<SettleKind, number>; days: number } {
+  const by: Record<SettleKind, number> = { card: 0, naver: 0, delivery: 0, cash: 0 };
+  let days = 0;
+  for (const p of parts) {
+    if (!p || p.date < from || p.date > to) continue;
+    days++;
+    for (const a of CASH_ACCOUNTS) {
+      if (currencyOf(a.group) !== "KRW") continue;
+      for (const r of p.rows?.[a.id] || []) {
+        const k = isSettlement(a.id, r);
+        if (k) by[k] += num(r.inAmt);
+      }
+    }
+  }
+  const total = by.card + by.naver + by.delivery + by.cash;
+  return { total: Math.round(total), by, days };
+}

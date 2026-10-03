@@ -1167,3 +1167,7 @@ tr.sum td {
 .cb-num.out {
   color: var(--cur);
 }
+.stats .stat .note.settle-note {
+  white-space: normal;
+  text-align: right;
+}

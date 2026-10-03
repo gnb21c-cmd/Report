@@ -6,9 +6,10 @@
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
    ⑤ 네이버 입장권 판매수 · 현장 입장권 판매수 · 이벤트 무료입장팀 수 (→ 각 상세)
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
+   ⑦ 1/1~ 정산 총계 · 지급 수수료 (누계 매출 − 정산 총계 = 카드 · VAN · PG 수수료 전체) — 누계 줄 바로 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { BOXES, changePct, comparable, count, holidayName, money, pct, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics } from "@report/core";
+import { BOXES, changePct, comparable, count, holidayName, money, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -51,7 +52,9 @@ export const Chevron = () => (
 
 export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타", 베이커리: "베이커리", 키친: "키친", 키즈입장료: "키즈입장", 기타: "기타" };
 
-export function Home({ d, open, weather, cash }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary }) {
+export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
+
+export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; settle?: Settle }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -131,6 +134,8 @@ export function Home({ d, open, weather, cash }: { d: Dashboard; open: Open; wea
         </button>
       </div>
 
+      {settle && settle.days > 0 && <SettleRow d={d} s={settle} />}
+
       <div className="stats">
         <div className="stat">
           <div className="stat-label">카페아스타나 방문인원</div>
@@ -189,6 +194,28 @@ function CashBar({ inn, out }: { inn: number; out: number }) {
           <span className="cb-fill out" style={{ width: `${(out / max) * 100}%` }} />
         </span>
         <span className="cb-num out">−{money(out, "KRW", false)}</span>
+      </div>
+    </div>
+  );
+}
+
+/** 1/1 ~ 마감일 정산 총계 · 지급 수수료 (누계 매출 − 정산) */
+function SettleRow({ d, s }: { d: Dashboard; s: Settle }) {
+  const sales = d.year.total;
+  const fee = sales - s.total;
+  const parts = (Object.keys(SETTLE_LABEL) as SettleKind[]).filter((k) => s.by[k]).map((k) => `${SETTLE_LABEL[k]} ${wonMan(s.by[k])}`);
+  const thin = fee < 0 || d.year.has.cafe < s.days * 0.8;
+  return (
+    <div className="stats">
+      <div className="stat">
+        <div className="stat-label">정산 총계 (1/1~마감일)</div>
+        <div className="stat-value">{won(s.total)}</div>
+        <span className="note settle-note">{parts.join(" · ") || "정산 입금 없음"}</span>
+      </div>
+      <div className="stat">
+        <div className="stat-label">지급 수수료 (1/1~마감일)</div>
+        <div className={`stat-value${fee < 0 ? " minus" : ""}`}>{won(fee)}</div>
+        <span className="note settle-note">{thin ? `매출 자료가 ${count(d.year.has.cafe, "일")}뿐이라 아직 안 맞음` : `누계 매출의 ${sales > 0 ? ((fee / sales) * 100).toFixed(1) : "0"}% · 누계 − 정산`}</span>
       </div>
     </div>
   );

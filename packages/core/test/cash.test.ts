@@ -83,3 +83,24 @@ describe("자금요약", () => {
     expect(money(0, "JPY", false)).toBe("¥0.00");
   });
 });
+
+describe("정산 총계 · 지급 수수료 (1/1 ~ 마감일)", () => {
+  it("매출 정산 입금만 더함 — 카드가맹점 · 네이버페이 · 배달 · 금고 현금매출 (계좌이체 · 임대료 · 이자 등은 뺌)", async () => {
+    const { settlements, isSettlement } = await import("../src/cash");
+    expect(isSettlement("nh", row({ inWho: "카드가맹점", inMemo: "7/14 입금액", inAmt: 1 }))).toBe("card");
+    expect(isSettlement("shinhan", row({ inWho: "네이버페이정산", inMemo: "카페아스타나 제품예약", inAmt: 1 }))).toBe("naver");
+    expect(isSettlement("shinhan", row({ inWho: "Npay정산", inMemo: "아스타나 키즈 예약", inAmt: 1 }))).toBe("naver");
+    expect(isSettlement("shinhan", row({ inWho: "배달의 민족", inMemo: "배달 매출 정산", inAmt: 1 }))).toBe("delivery");
+    expect(isSettlement("cashAlpha", row({ inWho: "카페아스타나", inMemo: "7/7 현금매출", inAmt: 1 }))).toBe("cash");
+    expect(isSettlement("cashCafe", row({ inWho: "아스타나키즈", inMemo: "키즈 시재금 추가", inAmt: 1 }))).toBeNull();
+    expect(isSettlement("shinhan", row({ inWho: "알파비젼㈜", inMemo: "계좌이체(농협→신한)", inAmt: 1 }))).toBeNull();
+    expect(isSettlement("shinhan", row({ inWho: "하은옥", inMemo: "임대료", inAmt: 1 }))).toBeNull();
+    expect(isSettlement("nh", row({ inWho: "(잔고 맞춤)", inMemo: "", inAmt: 1 }))).toBeNull();
+    const a = { ...sheet(), date: "2025-12-31" };
+    const b: CashPart = { ...sheet(), date: "2026-01-02", rows: { nh: [row({ inWho: "카드가맹점", inAmt: 1000000 })], shinhan: [row({ inWho: "네이버페이정산", inAmt: 300000 }), row({ inWho: "알파비젼㈜", inMemo: "계좌이체", inAmt: 5000000 })], cashAlpha: [row({ inWho: "카페아스타나", inMemo: "1/2 현금매출", inAmt: 50000 })] } };
+    const s = settlements([a, b], "2026-01-01", "2026-01-31");
+    expect(s.total).toBe(1350000);
+    expect(s.by).toEqual({ card: 1000000, naver: 300000, delivery: 0, cash: 50000 });
+    expect(s.days).toBe(1);
+  });
+});
