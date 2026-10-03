@@ -21,6 +21,7 @@ import {
   STORE_LABEL,
   sum,
   won,
+  type NaverPart,
   type StoreId,
 } from "@report/core";
 import { readRows } from "./excel";
@@ -99,6 +100,15 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     setBusy(false);
   };
   const good = rows.filter((r) => r.parts.length);
+  // 네이버는 10:00~17:30 캡처와 18:00~19:30(야간 무제한) 캡처가 따로 오므로 같은 날짜를 파일끼리 합침
+  const mergeNaver = (parts: PastPart[]): PastPart[] => {
+    const by = new Map<string, NaverPart>();
+    for (const p of parts as NaverPart[]) {
+      const o = by.get(p.date);
+      by.set(p.date, o ? { ...o, tickets: o.tickets.map((v, i) => v + (p.tickets[i] || 0)) } : p);
+    }
+    return [...by.values()].sort((a, b) => a.date.localeCompare(b.date));
+  };
   const n = good.reduce((s, r) => s + r.parts.length, 0);
 
   const send = async () => {
@@ -108,7 +118,8 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     let skipped = 0;
     try {
       // 한 번에 너무 크지 않게 300개씩
-      const all = good.flatMap((r) => r.parts);
+      const flat = good.flatMap((r) => r.parts);
+      const all = kind === "naver" ? mergeNaver(flat) : flat;
       const products = Object.assign({}, ...good.map((r) => r.products || {}));
       for (let i = 0; i < all.length; i += 300) {
         const r = await api.importPast({ by: me, parts: all.slice(i, i + 300), products: i === 0 && Object.keys(products).length ? products : undefined });
@@ -155,7 +166,8 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
         {kind === "naver" && (
           <ol className="steps">
             <li>네이버 예약 화면을 주 단위로 띄워 캡처 → Claude 가 표로 정리해 드림 (엑셀 · CSV)</li>
-            <li>표 모양: 첫 칸 날짜, 머리글 10:00 · 10:30 … 19:30 (판매 입장권 수). 신규방문자는 지난 자료에 없어 0 으로 둡니다</li>
+            <li>표 모양: 첫 칸 날짜, 머리글 10:00 · 10:30 … 19:30 (판매 입장권 수). 10:00~17:30 표와 18:00~19:30(야간 무제한) 표를 따로 올려도 같은 날짜는 합쳐짐</li>
+            <li>신규방문자는 지난 자료로는 알 수 없어 '—' 로 보입니다 (A 에 직접 넣는 날부터)</li>
             <li>A 에서 이미 네이버를 넣은 날은 바꾸지 않습니다</li>
           </ol>
         )}

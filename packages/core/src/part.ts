@@ -76,6 +76,8 @@ export interface NaverPart {
   tickets: number[];
   /** 신규 방문자 수 (마감 현재 방문 완료 횟수 1인 사람) */
   newVisitors: number[];
+  /** 지난 자료(캡처 정리) — 신규방문자는 알 수 없음 (방문 횟수가 계속 쌓여 그날 1회째였는지 지금은 모름) */
+  noNew?: boolean;
 }
 
 export interface PartMeta {

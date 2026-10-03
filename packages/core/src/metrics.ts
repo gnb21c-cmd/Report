@@ -81,6 +81,8 @@ export interface Metrics {
   /** 네이버를 A 에 넣은 날 수 */
   naverInput: number;
   newVisitors: number;
+  /** 신규방문자를 아는 날 수 (A 에 직접 넣은 날 — 지난 자료 정리표는 모름) */
+  newKnown: number;
   walkIn: number;
   walkInPosNet: number;
   eventFree: number;
@@ -107,6 +109,7 @@ function empty(from: string, to: string): Metrics {
     naver: 0,
     naverInput: 0,
     newVisitors: 0,
+    newKnown: 0,
     walkIn: 0,
     walkInPosNet: 0,
     eventFree: 0,
@@ -133,7 +136,8 @@ export function hasData(m: Metrics): boolean {
 
 /** 이 숫자의 자료가 있는지 (네이버 숫자는 네이버를 넣었거나 키즈 자료가 있으면) */
 export function hasValue(m: Metrics, key: MetricKey): boolean {
-  if (key === "naver" || key === "newVisitors") return m.has.naver > 0 || (key === "naver" && m.has.kids > 0);
+  if (key === "newVisitors") return m.newKnown > 0;
+  if (key === "naver") return m.has.naver > 0 || m.has.kids > 0;
   if (key === "walkIn" || key === "eventFree") return m.has.kids > 0;
   return hasData(m) || (key === "키즈입장료" && m.has.naver > 0);
 }
@@ -225,6 +229,7 @@ export class Board {
       m.naverInput = 1;
       m.naver = sum(r.naver.tickets);
       m.newVisitors = sum(r.naver.newVisitors);
+      m.newKnown = r.naver.noNew ? 0 : 1;
     } else m.naver = m.naverPos;
     const { price } = kidsPrice(date);
     m.fee = { naver: m.naver * price, walkIn: m.walkIn * price };
@@ -258,6 +263,7 @@ export class Board {
       m.naver += x.naver;
       m.naverInput += x.naverInput;
       m.newVisitors += x.newVisitors;
+      m.newKnown += x.newKnown;
       m.walkIn += x.walkIn;
       m.walkInPosNet += x.walkInPosNet;
       m.eventFree += x.eventFree;

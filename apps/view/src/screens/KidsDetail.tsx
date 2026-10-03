@@ -88,7 +88,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
   const daily = monthDaily(board, "naver", date);
   const monthly = yearMonthly(board, "naver", date);
   const yearly = yearMonthly(board, "naver", date, true);
-  const ratio = day.naver > 0 && day.naverInput ? Math.round((day.newVisitors / day.naver) * 1000) / 10 : null;
+  const ratio = day.naver > 0 && day.newKnown ? Math.round((day.newVisitors / day.naver) * 1000) / 10 : null;
   const has = (m: Metrics) => m.has.naver + m.has.kids > 0;
   const lyY = ly.slice(0, 4);
   const lines = (cur: (number | null)[], last: (number | null)[]): Line[] => [
@@ -106,7 +106,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
         )}
         <div className="stats three">
           <Stat label="마감일 총판매수량" value={count(day.naver, "장")} note={has(lyDay) ? `작년 같은 날 ${count(lyDay.naver, "장")}` : undefined} />
-          <Stat label="신규방문자 수" value={day.naverInput ? count(day.newVisitors, "명") : "—"} note="방문 완료 1회째" />
+          <Stat label="신규방문자 수" value={day.newKnown ? count(day.newVisitors, "명") : "—"} note={day.naverInput && !day.newKnown ? "지난 자료라 알 수 없음" : "방문 완료 1회째"} />
           <Stat label="총인원 대비 신규 비율" value={ratio == null ? "—" : `${ratio}%`} note="신규 ÷ 판매수량" />
         </div>
 
@@ -171,7 +171,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
             { label: "올해 누계", now: year, before: lyYear, pick: (m) => m.naver, has },
           ]}
         />
-        {month.has.naver > 0 && <p className="note center-note">이달 신규방문자 {count(month.newVisitors, "명")} · 판매수 대비 {month.naver > 0 ? ((month.newVisitors / month.naver) * 100).toFixed(1) : "0"}%</p>}
+        {month.newKnown > 0 && <p className="note center-note">이달 신규방문자 {count(month.newVisitors, "명")} (A 에 넣은 {count(month.newKnown, "일")})</p>}
       </main>
     </>
   );

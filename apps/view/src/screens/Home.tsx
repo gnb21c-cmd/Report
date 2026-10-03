@@ -127,7 +127,7 @@ export function Home({ d, open, weather }: { d: Dashboard; open: Open; weather?:
         <button className="stat tap" onClick={() => open({ name: "naver" })}>
           <div className="stat-label">네이버 입장권 판매수</div>
           <div className="stat-value">{count(day.naver, "장")}</div>
-          <span className="note">{day.naverInput ? `신규 ${count(day.newVisitors, "명")}` : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}</span>
+          <span className="note">{day.newKnown ? `신규 ${count(day.newVisitors, "명")}` : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "kids", key: "walkIn" })}>
           <div className="stat-label">현장 입장권 판매수</div>

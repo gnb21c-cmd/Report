@@ -1,7 +1,7 @@
 /* ============================================================
    네이버 지난 자료 — 주 단위 화면을 캡처해 정리한 표 (CSV · 엑셀)
    한 줄 = 하루: [날짜, 10:00, 10:30, … , 19:30] 판매 입장권 수 (빈칸 = 0)
-   신규방문자 칸은 지난 자료에 없음 → 0 으로 둠 (신규 비율은 A 에 넣은 날만 의미 있음)
+   신규방문자는 지난 자료로는 알 수 없음 (손님 방문 횟수가 계속 쌓임) → noNew 로 표시, B 는 '—'
    + 영수증별 엑셀 여러 개를 한꺼번에 올릴 때 매장 짐작 (guessStore)
    ============================================================ */
 import { guessSector, kidsKind } from "./classify";
@@ -39,7 +39,7 @@ export function parseNaverPast(rows: unknown[][]): NaverPastRow[] {
 }
 
 export function naverPastPart(r: NaverPastRow): NaverPart {
-  return { v: 1, date: r.date, tickets: r.tickets, newVisitors: NAVER_SLOTS.map(() => 0) };
+  return { v: 1, date: r.date, tickets: r.tickets, newVisitors: NAVER_SLOTS.map(() => 0), noNew: true };
 }
 
 /** 영수증 줄을 보고 매장 짐작 — 입장권이 대부분이면 키즈, 음료 · 빵 · 식사면 카페, 둘 다 많으면 [전체] (null) */

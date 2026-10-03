@@ -198,7 +198,7 @@ describe("네이버 지난 자료 · 매장 짐작", async () => {
     const r = parseNaverPast(rows);
     expect(r.map((x) => x.date)).toEqual(["2025-10-01", "2025-10-02"]);
     expect(r[0].tickets.slice(0, 3)).toEqual([3, 0, 3]);
-    expect(naverPastPart(r[0]).newVisitors).toHaveLength(20);
+    expect(naverPastPart(r[0])).toMatchObject({ noNew: true });
     expect(() => parseNaverPast([["아무거나"]])).toThrow(/10:00/);
   });
   it("매장 짐작", () => {
