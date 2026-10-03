@@ -9,7 +9,7 @@
    ⑦ OO년 정산 총금액 · OO년 지급 수수료 (1/1~마감일) (누계 매출 − 정산 총계 = 카드 · VAN · PG 수수료 전체) — 누계 줄 바로 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { BOXES, changePct, comparable, count, holidayName, money, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, holidayName, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -63,7 +63,12 @@ export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: O
   return (
     <>
       {nothing ? (
-        <div className="banner">{shortLabel(d.date)} 자료가 없습니다 — 휴무이거나 아직 사무실에서 입력 전입니다.</div>
+        <div className="banner">
+          {/* 오늘은 아직 마감 전 — 다음 날 아침 사무실 입력 뒤에 보임 */}
+          {d.date === todayKst()
+            ? `선택하신 일자는 오늘(마감 전)입니다. ${Number(addDays(d.date, 1).slice(8, 10))}일 10시 후 확인해 주세요.`
+            : `${shortLabel(d.date)} 자료가 없습니다 — 휴무이거나 아직 사무실에서 입력 전입니다.`}
+        </div>
       ) : (
         (day.has.cafe === 0 || day.has.kids === 0) && (
           <div className="banner" role="alert">
