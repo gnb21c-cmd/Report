@@ -276,3 +276,13 @@ describe("마감일 비교 — 시간대별 총매출", () => {
     expect(dayHourly(b, "2026-10-02")).toBeNull();
   });
 });
+
+describe("볼 수 있는 마지막 마감일 — 다음 날 오전 10시부터", async () => {
+  const { closedDay } = await import("../src");
+  it("10/3 낮에는 10/2 까지 · 10/4 오전 9시 59분도 10/2 · 10시부터 10/3", () => {
+    expect(closedDay(new Date("2026-10-03T05:00:00Z"))).toBe("2026-10-02"); // 10/3 14:00 KST
+    expect(closedDay(new Date("2026-10-04T00:59:00Z"))).toBe("2026-10-02"); // 10/4 09:59 KST
+    expect(closedDay(new Date("2026-10-04T01:00:00Z"))).toBe("2026-10-03"); // 10/4 10:00 KST
+    expect(closedDay(new Date("2026-10-03T16:00:00Z"))).toBe("2026-10-02"); // 10/4 01:00 KST
+  });
+});

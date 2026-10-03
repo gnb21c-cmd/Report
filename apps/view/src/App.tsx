@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, cashBook, cashOnDay, dashboard, settlements, todayKst, type CashPart } from "@report/core";
+import { addDays, Board, cashBook, cashOnDay, closedDay, dashboard, settlements, type CashPart } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -31,12 +31,19 @@ export function App() {
     for (const [date, r] of board.byDate) m.set(date, new Set([r.cafe && "cafe", r.kids && "kids", r.naver && "naver"].filter(Boolean) as string[]));
     return m;
   }, [board]);
-  const latest = useMemo(() => board.latest(), [board]);
+  // 볼 수 있는 마지막 날 — 오늘은 마감 전이라 빼고, 전날 자료는 다음 날 오전 10시부터 (5분마다 다시 봄)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5 * 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const closed = closedDay(new Date(now));
+  const boardLatest = useMemo(() => board.latest(), [board]);
+  const latest = boardLatest && boardLatest > closed ? closed : boardLatest;
   // 자금: 앞 보고의 금일 잔고를 이어서 계산
   const cashParts = useMemo(() => d.reports.map((r) => r.cash).filter((c): c is CashPart => !!c), [d.reports]);
   const book = useMemo(() => cashBook(cashParts), [cashParts]);
-  const today = todayKst();
-  const [date, setDate] = useState<string>(latest || addDays(today, -1));
+  const [date, setDate] = useState<string>(latest || closed);
   const [view, setView] = useState<View>({ name: "home" });
   const homeScroll = useRef(0);
 
@@ -69,7 +76,7 @@ export function App() {
   if (d.phase === "setup") return <Notice title="설정이 필요합니다" text="클라우드 보관함 주소(VITE_FIREBASE_API_KEY · VITE_FIREBASE_PROJECT_ID)를 넣고 다시 만들어 주세요. docs/SETUP.md 참고." />;
   if (d.phase === "nokey") return <Notice title="설치 주소로 열어 주세요" text="받으신 설치 주소(…/b/열쇠/)로 열어야 매장 자료가 보입니다. 주소를 다시 확인해 주세요." />;
 
-  const to = latest && latest > today ? latest : today;
+  const to = closed;
   const from = board.first && board.first < addDays(to, -60) ? board.first : addDays(to, -60);
   const nav = { date, minDate: from, maxDate: to, onDate: setDate, onBack: back };
   // 휴일(보고 없음)은 가장 최근 잔액 그대로 · 입출금 0

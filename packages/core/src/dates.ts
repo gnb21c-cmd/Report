@@ -72,6 +72,15 @@ export function todayKst(now: Date = new Date()): string {
   return toKey(new Date(now.getTime() + 9 * 3600_000));
 }
 
+/** 마감 자료를 보여 주기 시작하는 시각 (한국 시간) — 사무실이 아침에 전날 자료를 올림 */
+export const REPORT_OPEN_HOUR = 10;
+
+/** 지금 볼 수 있는 마지막 마감일 — 오전 10시부터는 어제, 그 전은 그제 (오늘은 아직 마감 전이라 안 보임) */
+export function closedDay(now: Date = new Date()): string {
+  const k = new Date(now.getTime() + 9 * 3600_000);
+  return addDays(toKey(k), k.getUTCHours() >= REPORT_OPEN_HOUR ? -1 : -2);
+}
+
 /** 10월 1일 (수) */
 export function shortLabel(key: string): string {
   const [, m, d] = key.split("-").map(Number);
