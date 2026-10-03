@@ -1,4 +1,4 @@
-# A(…/a/) · B(…/b/<열쇠>/) 화면과 보안 규칙을 클라우드(Firebase Hosting · Firestore)에 올림
+# A(…/a/) · B(…/b/<열쇠>/) 화면을 클라우드(Firebase Hosting)에 올림 — 보안 규칙은 Firebase 콘솔 규칙 탭에 붙여 넣음 (기본 서비스 계정에 규칙 권한이 없어서)
 # main 에 올라가면 저절로, 또는 Actions → Deploy → Run workflow
 # 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secret FIREBASE_SERVICE_ACCOUNT (Firebase 서비스 계정 비공개 키 JSON)
 name: Deploy
@@ -37,5 +37,5 @@ jobs:
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          npx -y firebase-tools@13 deploy --only hosting,firestore:rules --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
+          npx -y firebase-tools@13 deploy --only hosting --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
           rm -f "$RUNNER_TEMP/sa.json"
