@@ -1,6 +1,6 @@
 /* ============================================================
    자금 현황 — 사무실 A 가 올린 '자금요약' · '자금 변동 내역'을 폰 크기로
-   - 맨 위: 잔액 합계 · 대출 제외 자금
+   - 맨 위: 잔액 합계(증권계좌 빼고) · 증권계좌 · 대출 제외 자금
    - 계좌별 금일 잔고 (움직인 계좌는 전일 · 입금 · 출금도)
    - 보고 시점 환율 (직전 보고 대비)
    - 그날 입출금 내역 (거래처 · 적요 · 금액)
@@ -53,12 +53,18 @@ function Body({ sum, part, meta }: { sum: CashSummary; part: CashPart; meta?: Pa
           <span className="ch-value">{krw(sum.total)}</span>
         </div>
         <div className="ch-sub">
-          원화 {krw(sum.krw.close)}
+          원화 {krw(sum.krw.close - sum.securities)}
           {sum.usdKrw ? ` · 달러 환산 ${krw(sum.usdKrw)}` : ""}
           {sum.jpyKrw ? ` · 엔화 환산 ${krw(sum.jpyKrw)}` : ""}
         </div>
+        <div className="ch-row sec">
+          <span className="ch-label">법인 증권계좌 (별도)</span>
+          <span className="ch-value small">{krw(sum.securities)}</span>
+        </div>
         <div className="ch-row net">
-          <span className="ch-label">대출 제외 자금</span>
+          <span className="ch-label">
+            대출 제외 자금 <small className="muted">잔액 + 증권 − 대출</small>
+          </span>
           <span className={`ch-value small ${sum.net < 0 ? "minus" : ""}`}>{sum.net < 0 ? `(${money(-sum.net, "KRW", false)})원` : krw(sum.net)}</span>
         </div>
         {part.loans.length > 0 && (

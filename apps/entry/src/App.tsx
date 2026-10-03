@@ -290,7 +290,7 @@ export function App() {
       kind: k,
       body: { ...base, parts: { cash: p } },
       lines: [
-        `원화 합계 ${money(s.krw.close, "KRW", false)}원 · 잔액 합계 ${money(s.total, "KRW", false)}원`,
+        `잔액 합계 ${money(s.total, "KRW", false)}원 (증권계좌 ${money(s.securities, "KRW", false)}원 별도)`,
         `입금 ${money(s.krw.in, "KRW", false)}원 · 출금 ${money(s.krw.out, "KRW", false)}원 (원화)`,
         cashCtx.openFrom ? `전일 잔고는 ${shortLabel(cashCtx.openFrom)} 마감 잔고에서 이어받음` : "전일 잔고는 직접 넣은 값 (처음)",
         replaced(k),

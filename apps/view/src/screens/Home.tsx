@@ -99,7 +99,7 @@ export function Home({ d, open, weather, cash }: { d: Dashboard; open: Open; wea
       {/* 자금 현황 — 섹터 상자 바로 아래. 누르면 계좌 · 적요까지 자세히 */}
       <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
         <div className="stat-label">
-          자금 현황 · 잔액 합계 <Chevron />
+          자금 현황 · 잔액 합계 <small className="muted">증권계좌 별도</small> <Chevron />
         </div>
         {cash ? (
           <>

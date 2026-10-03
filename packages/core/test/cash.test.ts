@@ -35,7 +35,9 @@ describe("자금요약", () => {
     expect(s.group.usd.close).toBe(62.99);
     expect(s.usdKrw).toBe(85824);
     expect(s.jpyKrw).toBe(0);
-    expect(s.total).toBe(346242761);
+    // 잔액 합계는 증권계좌(2억)를 빼고 따로 — 대출 제외 자금은 증권계좌 포함 (엑셀과 같음)
+    expect(s.securities).toBe(200000000);
+    expect(s.total).toBe(146242761);
     expect(s.net).toBe(-693757239);
   });
 

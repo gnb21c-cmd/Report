@@ -5,7 +5,8 @@
    - 전일 잔고 = 그 전에 올라간 자금 보고의 금일 잔고 (빠진 날이 있으면 그 앞의 가장 늦은 날)
      자금 보고가 하나도 없을 때(맨 처음)만 A 에서 직접 넣은 값을 씀
    - 외화는 그 나라 돈으로 적고, 보고일 환율로 원화 환산 (엔화는 100엔당 환율)
-   - 잔액 합계(ⓐ+ⓑ+ⓒ+ⓓ+외화 환산) − 대출 = 대출 제외 자금
+   - 잔액 합계 = 현금ⓐ + 보통예금ⓑ + 마이너스 통장ⓓ + 외화 환산 — 법인 증권계좌ⓒ(2억)는 빼고 따로 보여 줌
+   - 대출 제외 자금 = 잔액 합계 + 증권계좌 − 대출 (엑셀과 같음)
    클라우드: reports/{날짜} 의 칸 cash (A 가 올림, B 가 읽음)
    ============================================================ */
 
@@ -104,7 +105,9 @@ export interface CashSummary {
   krw: { open: number; in: number; out: number; close: number };
   usdKrw: number;
   jpyKrw: number;
-  /** 잔액 합계 (원화 + 외화 환산) */
+  /** 법인 증권계좌 금일 잔고 (잔액 합계와 따로) */
+  securities: number;
+  /** 잔액 합계 (원화 + 외화 환산, 증권계좌 뺌) */
   total: number;
   loans: number;
   /** 대출 제외 자금 */
@@ -198,7 +201,8 @@ export function cashSummary(p: CashPart, opts: { open?: Record<string, number>; 
   const rates = { usd: num(p.rates?.usd), jpy: num(p.rates?.jpy) };
   const usdKrw = Math.round(group.usd.close * rates.usd);
   const jpyKrw = Math.round((group.jpy.close * rates.jpy) / 100);
-  const total = krw.close + usdKrw + jpyKrw;
+  const securities = group.securities.close;
+  const total = krw.close - securities + usdKrw + jpyKrw;
   const loans = (p.loans || []).reduce((s, l) => s + num(l.amount), 0);
   const pr = opts.prevRates;
   const diff = (now: number, before?: number) => (before && now ? Math.round((now - before) * 100) / 100 : null);
@@ -209,9 +213,10 @@ export function cashSummary(p: CashPart, opts: { open?: Record<string, number>; 
     krw,
     usdKrw,
     jpyKrw,
+    securities,
     total,
     loans,
-    net: total - loans,
+    net: total + securities - loans,
     rates,
     rateChange: { usd: diff(rates.usd, pr?.usd), jpy: diff(rates.jpy, pr?.jpy) },
     openFrom: opts.openFrom === undefined ? null : opts.openFrom,

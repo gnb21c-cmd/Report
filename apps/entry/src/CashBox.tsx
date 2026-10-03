@@ -268,13 +268,17 @@ export function CashTable(props: {
           {fx("usd")}
           {fx("jpy")}
           <tr className="grand">
-            <th colSpan={6}>잔액 합계 (원화 + 외화 보고일 환율 환산)</th>
+            <th colSpan={6}>잔액 합계 (ⓐ+ⓑ+ⓓ + 외화 보고일 환율 환산 · 증권계좌 제외)</th>
             <td className="num">{money(sum.total, "KRW", false)}원</td>
+          </tr>
+          <tr className="sec-row">
+            <th colSpan={6}>법인 증권계좌 ⓒ (잔액 합계와 별도)</th>
+            <td className="num">{money(sum.securities, "KRW", false)}원</td>
           </tr>
           <tr className="net">
             <td colSpan={6} className="loans">
               <div className="loans-in">
-              <b>대출 제외 자금</b>
+              <b>대출 제외 자금</b> <small className="muted">(잔액 합계 + 증권계좌 − 대출)</small>
               {d.loans.map((l, i) => (
                 <span key={i} className="loan">
                   <input className="loan-label" disabled={locked} placeholder="대출 이름 (예: 신한 311-…)" value={l.label} onChange={(e) => set({ loans: d.loans.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />

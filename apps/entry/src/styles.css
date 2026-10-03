@@ -1171,3 +1171,9 @@ table.detail {
     font-size: 16px;
   }
 }
+.cash tr.sec-row th,
+.cash tr.sec-row td {
+  background: #f3f5f8;
+  font-weight: 600;
+  color: var(--ink-2);
+}
