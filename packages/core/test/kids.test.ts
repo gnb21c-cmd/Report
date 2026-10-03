@@ -99,3 +99,24 @@ describe("2026-03-31 까지 — 키즈 매출 없음 (교환권 방식), 인원�
     expect(p.voucher).toBe(30000);
   });
 });
+
+describe("2026-03 까지 키즈 현장 손님 — '현장 구매 30,000원' (실제 2025-12-20 파일)", () => {
+  it("현장 구매는 현장 입장 인원 (결제 시각 칸에), 매출은 3월까지 0", async () => {
+    const { Board } = await import("../src");
+    expect(kidsKind({ name: "현장 구매 30,000원", qty: 1, gross: 30000, net: 30000 })).toBe("현장결제");
+    expect(kidsKind({ name: "[분실] 열쇠뭉치 교체비", qty: 1, gross: 10000, net: 10000 })).toBe("기타");
+    const date = "2025-12-20";
+    const p = kidsDay(date, [
+      line({ time: "19:20:34", name: "현장 구매 30,000원", qty: 1, gross: 30000, net: 30000 }),
+      line({ receipt: "0002", time: "20:03:21", name: "현장 구매 30,000원", qty: 1, gross: 30000, net: 30000 }),
+      line({ receipt: "0003", time: "12:30:00", name: "2시 20분 퇴장 [12시30분입장]", qty: 10 }),
+    ]);
+    expect(p.kids!.walkIn).toBe(2);
+    expect(p.kids!.issued).toBe(10);
+    expect(p.kids!.hourly!.walkIn[9]).toBe(1); // 19시
+    expect(p.kids!.hourly!.walkIn[10]).toBe(1); // 20시
+    const m = new Board([{ date, kids: p }]).day(date);
+    expect(m.walkIn).toBe(2);
+    expect(m.box.키즈입장료 + m.box.기타).toBe(0);
+  });
+});

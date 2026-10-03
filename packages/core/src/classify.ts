@@ -56,6 +56,7 @@ export const KIDS_KINDS: KidsKind[] = ["입장발행", "현장결제", "이벤�
 const TICKET = /입장|이용|자유|시간권|퇴장|네이버/;
 const EXTRA = /추가/;
 const EVENT = /쿠폰|이벤트|무료/;
+const WALKIN_OLD = /현장\s*구매/;
 
 /**
  * 아스타나키즈 상품 한 줄의 종류 (2026-10-02 사장님이 정한 기준, 실제 자료 10/1 · 9/27)
@@ -64,6 +65,7 @@ const EVENT = /쿠폰|이벤트|무료/;
  * - 돈을 받은 입장권 ('[평일] 1시간 50분 입장권' 12,000 · '[휴일] …' 14,000) → 현장 결제
  * - 0원 입장 발행 ('[평일] 무제한 이용' · '야간자유입장권' · '3시 20분 퇴장 [1시30분 입장]' …) → 입장 발행
  *   발행은 네이버 예약과 현장 결제 손님 모두에게 나감 → 네이버를 A 에서 넣지 않은 날은 발행 − 현장 으로 추정
+ * - '현장 구매 30,000원' (2026-03 까지 교환권 방식의 현장 손님) → 현장 결제 (인원만, 매출은 rules.kidsSales)
  * - 이름에 '입장'이 없어도 한 장 정가가 입장료(평일 12,000 · 휴일 14,000)면 → 현장 결제 (2026-10-03 사장님 기준)
  * - 그 밖 (간식·음료 등) → 기타
  */
@@ -73,6 +75,8 @@ export function kidsKind(line: Pick<SaleLine, "name" | "gross" | "net"> & { cat1
   if (EXTRA.test(name)) return "추가인원";
   if (free && (EVENT.test(name) || /쿠폰/.test(line.cat1 || ""))) return "이벤트무료";
   if (!free && isTicketPrice(line.gross, line.qty)) return "현장결제";
+  // 2026-03 까지 현장 손님은 '현장 구매 30,000원' (카페 교환권 포함) 으로 결제 → 현장 입장 인원
+  if (!free && WALKIN_OLD.test(name)) return "현장결제";
   if (!TICKET.test(name)) return "기타";
   return free ? "입장발행" : "현장결제";
 }
