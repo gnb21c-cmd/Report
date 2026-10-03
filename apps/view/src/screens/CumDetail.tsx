@@ -1,8 +1,8 @@
 /* ============================================================
    누계 상세 (분석 글 없음)
-   당월누계 (11-5): 작년 같은 달 같은 기간 누계 · 날마다 쌓은 선 (작년 같은 달 한 달 전체 = 회색, 이번 달 마감일까지 = 빨강)
+   당월 매출 합계 (11-5): 작년 같은 달 같은 기간 누계 · 날마다 쌓은 선 (작년 같은 달 한 달 전체 = 회색, 이번 달 마감일까지 = 빨강)
                    · 방문자 (마감일 · 당월 누적 · 작년 동월 동기간) · 1인 평균 (마감일 · 누적)
-   올해누계 (11-6): 작년 같은 기간 누계 · 달마다 쌓은 선 (작년 12달 = 회색, 올해 = 빨강) · 12월에 연말 예상 점
+   OO년 총 매출 합계 (11-6): 작년 같은 기간 누계 · 달마다 쌓은 선 (작년 12달 = 회색, 올해 = 빨강) · 12월에 연말 예상 점
                    · 방문자 (마감월 누적 · 작년 같은 달 · 1/1~마감일 · 작년 1/1~같은 날)
    ‹ › 는 한 달씩 (고른 달 마지막 날까지 — 마감일이 든 달은 마감일). 지난달로 가면 그 달 한 달치가 다 그려짐
    ============================================================ */
@@ -33,7 +33,7 @@ export function MonthDetail(props: { board: Board } & Nav) {
   ];
   return (
     <>
-      <MonthHeader title="당월누계" {...props} date={date} onDate={setDate} />
+      <MonthHeader title="당월 매출 합계" {...props} date={date} onDate={setDate} />
       <main className="content">
         <section className="card hero">
           <div className="stat-label">
@@ -103,7 +103,7 @@ export function YearDetail(props: { board: Board } & Nav) {
   const marks = vLine.estimate ? [{ i: 11, v: vLine.estimate.value, color: "var(--cur)", label: `연말 예상 ${wonShort(vLine.estimate.value)}` }] : [];
   return (
     <>
-      <MonthHeader title="올해누계" {...props} date={date} onDate={setDate} />
+      <MonthHeader title={`${date.slice(2, 4)}년 총 매출 합계`} {...props} date={date} onDate={setDate} />
       <main className="content">
         <section className="card hero">
           <div className="stat-label">

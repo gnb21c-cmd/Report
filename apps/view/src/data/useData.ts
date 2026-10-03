@@ -28,7 +28,7 @@ const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
 /** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
 const DATA_SHAPE = "report.dataShape";
-const SHAPE = "2026-10-extra";
+const SHAPE = "2026-10-extra-2"; // 2: 같은 시각 문서를 건너뛰던 받기 고침 → 한 번 더 처음부터
 
 const LABEL: Record<WeatherKey, [string, string]> = { sunny: ["맑음", "☀️"], cloudy: ["구름", "☁️"], rain: ["비", "🌧️"], heavyrain: ["강우", "⛈️"], snow: ["눈", "❄️"] };
 /** 체험판: 기상청에서 받아 둔 실제 날씨 (2025-01-01 ~ 만든 날) */

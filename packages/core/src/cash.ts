@@ -267,9 +267,8 @@ export function money(v: number, c: Currency, dash = true): string {
   return `${neg ? "-" : ""}${sym}${s}`;
 }
 
-/* ---------- 정산 총계 · 지급 수수료 ----------
-   통장에 들어오는 매출 정산금은 카드사 · VAN · PG(네이버) 수수료가 빠진 돈.
-   보고의 매출(누계)은 수수료가 나가기 전 금액 → 1/1 부터 '누계 매출 − 정산 총계' = 그동안 나간 수수료 전체
+/* ---------- 정산완료 합계 (현금/신용) ----------
+   1/1 ~ 마감일 통장에 들어온 매출 정산금 (카드사 · PG 수수료가 빠진 돈, 입금은 매출보다 1~4영업일 늦음)
    정산으로 보는 입금: 카드가맹점 · 네이버페이(Npay) 정산 · 배달앱 정산 · 금고에 넣은 현금매출
    (계좌 사이 이체 · 임대료 · 지원금 · 이자 · 캐시백 · 잔고 맞춤 등은 매출이 아니라 뺌) */
 export type SettleKind = "card" | "naver" | "delivery" | "cash";
@@ -284,17 +283,6 @@ export function isSettlement(account: string, r: Pick<CashRow, "inWho" | "inMemo
   if (/배달의민족|배민|쿠팡이츠|요기요/.test(who)) return "delivery";
   if (account.startsWith("cash") && /현금매출/.test(memo)) return "cash";
   return null;
-}
-
-/** 지급 수수료를 볼 때 매출을 어디까지 셀지 — 카드 대금은 보통 1~2영업일 뒤 들어오므로 마감일부터 거슬러 두 번째 영업일까지.
- *  (정산은 마감일까지 그대로) 연휴 · 주말에 입금이 멈춰 수수료가 부풀었다 줄었다 하는 것을 막음 — 2026 자료로 시험해 가장 고름 */
-export function feeSalesTo(date: string): string {
-  let x = addDays(date, 1);
-  for (let k = 0; k < 2; ) {
-    x = addDays(x, -1);
-    if (!isOffDay(x)) k++;
-  }
-  return x;
 }
 
 /** from ~ to 의 매출 정산 입금 합 (원화 계좌만) */

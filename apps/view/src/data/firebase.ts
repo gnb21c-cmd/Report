@@ -95,14 +95,27 @@ export function toReport(f: Record<string, any>): DayReport | null {
 async function since(cfg: FirebaseConfig, board: string, coll: string, after: string | null): Promise<{ docs: Record<string, any>[]; last: string | null }> {
   const docs: Record<string, any>[] = [];
   let cursor = after;
-  for (let page = 0; page < 40; page++) {
-    const query: any = { structuredQuery: { from: [{ collectionId: coll }], orderBy: [{ field: { fieldPath: "at" }, direction: "ASCENDING" }], limit: 300 } };
-    if (cursor) query.structuredQuery.where = { fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN", value: { timestampValue: cursor } } };
+  // 다음 묶음은 (올린 시각, 문서 이름) 바로 다음부터 — ④ 로 한꺼번에 넣으면 수백 개가 같은 시각이라, 시각만으로 이으면 300개 경계에서 나머지를 건너뜀
+  let page: { at: string; name: string } | null = null;
+  for (let n = 0; n < 200; n++) {
+    const query: any = {
+      structuredQuery: {
+        from: [{ collectionId: coll }],
+        orderBy: [
+          { field: { fieldPath: "at" }, direction: "ASCENDING" },
+          { field: { fieldPath: "__name__" }, direction: "ASCENDING" },
+        ],
+        limit: 300,
+      },
+    };
+    if (after) query.structuredQuery.where = { fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN", value: { timestampValue: after } } };
+    if (page) query.structuredQuery.startAt = { values: [{ timestampValue: page.at }, { referenceValue: page.name }], before: false };
     const res = await call(`${base(cfg, board)}:runQuery?key=${cfg.apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(query) });
     const got = (Array.isArray(res) ? res : []).map((r: any) => r.document).filter(Boolean);
     for (const d of got) {
       const f = fieldsOf(d);
       cursor = f.at || cursor;
+      if (f.at) page = { at: f.at, name: d.name };
       docs.push(f);
     }
     if (got.length < 300) break;

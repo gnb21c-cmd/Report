@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, cashBook, cashOnDay, closedDay, dashboard, feeSalesTo, settlements, type CashPart } from "@report/core";
+import { addDays, Board, cashBook, cashOnDay, closedDay, dashboard, settlements, type CashPart } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -104,7 +104,7 @@ export function App() {
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} feeSales={{ to: feeSalesTo(date), total: board.range(`${date.slice(0, 4)}-01-01`, feeSalesTo(date)).total }} />}
+        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} />}
       </main>
     </div>
   );

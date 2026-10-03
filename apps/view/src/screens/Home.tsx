@@ -2,14 +2,13 @@
    대시보드 — 달력에서 고른 마감일의 숫자
    ① 마감일 총 매출 + 날씨 (상세 없음)
    ② 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 (한 줄 상자 다섯 개 → 섹터 상세)
-   ③ 당월 매출 합계 · OO년 매출 합계 (→ 누계 상세, 해는 마감일 따라)
+   ③ 당월 매출 합계 · 전년도 같은 기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
    ⑤ 네이버 입장권 판매수 · 현장 입장권 판매수 · 이벤트 무료입장팀 수 (→ 각 상세)
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
-   ⑦ OO년 정산 총금액 · OO년 지급 수수료 (1/1~마감일) (매출 − 정산 총계 = 카드 · VAN · PG 수수료 전체, 매출은 두 번째 영업일까지 — 입금 시차) — 누계 줄 바로 아래
+   ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { md } from "./parts";
 import { addDays, BOXES, changePct, comparable, count, holidayName, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
@@ -56,7 +55,7 @@ export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타",
 
 export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
 
-export function Home({ d, open, weather, cash, cashFrom, settle, feeSales }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle; feeSales?: { to: string; total: number } }) {
+export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -126,6 +125,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle, feeSales }: { d
         )}
       </button>
 
+      {/* 1. 당월 매출 합계 · 2. 전년도 같은 기간 매출 합계 / 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 */}
       <div className="stats">
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
@@ -136,14 +136,32 @@ export function Home({ d, open, weather, cash, cashFrom, settle, feeSales }: { d
         </button>
         <button className="stat tap" onClick={() => open({ name: "year" })}>
           <div className="stat-label">
-            {d.date.slice(2, 4)}년 매출 합계 <Chevron />
+            전년도 같은 기간 매출 합계 <Chevron />
+          </div>
+          <div className="stat-value">{comparable(d.lyYear) ? won(d.lyYear.total) : "—"}</div>
+          <span className="note">
+            {d.lyYear.from.slice(2).replace(/-/g, ".")} ~ {d.lyDate.slice(5).replace("-", ".")}
+          </span>
+        </button>
+      </div>
+      <div className="stats">
+        <button className="stat tap" onClick={() => open({ name: "year" })}>
+          <div className="stat-label">
+            {d.date.slice(2, 4)}년 총 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.year.total)}</div>
           <Delta now={d.year.total} before={comparable(d.lyYear) ? d.lyYear.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyYear)} />
         </button>
+        {settle && settle.days > 0 ? (
+          <SettleBox d={d} s={settle} />
+        ) : (
+          <div className="stat">
+            <div className="stat-label">{d.date.slice(2, 4)}년 (현금/신용) 정산완료 합계</div>
+            <div className="stat-value">—</div>
+            <span className="note">자금 보고가 아직 없습니다</span>
+          </div>
+        )}
       </div>
-
-      {settle && settle.days > 0 && <SettleRow d={d} s={settle} fs={feeSales || { to: d.date, total: d.year.total }} />}
 
       <div className="stats">
         <div className="stat">
@@ -208,25 +226,14 @@ function CashBar({ inn, out }: { inn: number; out: number }) {
   );
 }
 
-/** 1/1 ~ 마감일 정산 총계 · 지급 수수료 (매출 − 정산)
- *  카드 대금은 1~2영업일 뒤 들어오므로 매출은 두 번째 영업일까지만 셈 (core feeSalesTo) — 연휴 · 주말에 출렁이지 않게 */
-function SettleRow({ d, s, fs }: { d: Dashboard; s: Settle; fs: { to: string; total: number } }) {
-  const sales = fs.total;
-  const fee = sales - s.total;
+/** 26년 (현금/신용) 정산완료 합계 — 1/1 ~ 마감일 통장에 들어온 매출 정산 (카드 · 네이버페이 · 배달앱 · 현금매출) */
+function SettleBox({ d, s }: { d: Dashboard; s: Settle }) {
   const parts = (Object.keys(SETTLE_LABEL) as SettleKind[]).filter((k) => s.by[k]).map((k) => `${SETTLE_LABEL[k]} ${wonMan(s.by[k])}`);
-  const thin = fee < 0 || d.year.has.cafe < s.days * 0.8;
   return (
-    <div className="stats">
-      <div className="stat">
-        <div className="stat-label">{d.date.slice(2, 4)}년 정산 총금액</div>
-        <div className="stat-value">{won(s.total)}</div>
-        <span className="note settle-note">{parts.join(" · ") || "정산 입금 없음"}</span>
-      </div>
-      <div className="stat">
-        <div className="stat-label">{d.date.slice(2, 4)}년 지급 수수료</div>
-        <div className={`stat-value${fee < 0 ? " minus" : ""}`}>{won(fee)}</div>
-        <span className="note settle-note">{thin ? `매출 자료가 ${count(d.year.has.cafe, "일")}뿐이라 아직 안 맞음` : `매출(~${md(fs.to)})의 ${sales > 0 ? ((fee / sales) * 100).toFixed(1) : "0"}% · 매출 − 정산 · 입금 시차 맞춤`}</span>
-      </div>
+    <div className="stat">
+      <div className="stat-label">{d.date.slice(2, 4)}년 (현금/신용) 정산완료 합계</div>
+      <div className="stat-value">{won(s.total)}</div>
+      <span className="note settle-note">{parts.join(" · ") || "정산 입금 없음"}</span>
     </div>
   );
 }

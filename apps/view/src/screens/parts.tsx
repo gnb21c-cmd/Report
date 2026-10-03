@@ -63,7 +63,7 @@ function monthEnd(date: string, n: number): string {
   return new Date(Date.UTC(y, m + n, 0)).toISOString().slice(0, 10);
 }
 
-/** 달 단위로 움직이는 머리 (당월누계 · 올해누계) — ‹ › 한 달씩. 고른 날 = 그 달 마지막 날 (마감일이 든 달은 마감일) */
+/** 달 단위로 움직이는 머리 (당월 매출 합계 · OO년 총 매출 합계) — ‹ › 한 달씩. 고른 날 = 그 달 마지막 날 (마감일이 든 달은 마감일) */
 export function MonthHeader({ title, date, onBack, onDate, minDate, maxDate }: { title: string } & Nav) {
   const go = (n: number) => {
     const d = monthEnd(date, n);
