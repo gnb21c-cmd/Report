@@ -5,7 +5,7 @@
    ③ 지난 4주 같은 요일 평균 (같은 눈금)
    ④ 시간대별 4주 같은 요일 추세 (선 · 시간마다 ▲ ▼)
    ⑤ 분석 (선호 시간 이동 · 피크 · 비슷한 날씨 · 매출 속도 · 다음 주 예측)
-   ⑥ 적게 팔린 상품 5개 (그날 · 이달)
+   ⑥ 적게 팔린 상품 5개 (그날 · 이달) — 기타는 뺌 (자판기 · 네컷 · 주차 등 상품이 아님)
    ============================================================ */
 import { useMemo, useState } from "react";
 import {
@@ -121,7 +121,7 @@ export function SectorDetail(props: { board: Board; box: BoxKey; weather: Weathe
           </ul>
         </section>
 
-        <BottomCard board={board} box={box} date={date} />
+        {box !== "기타" && <BottomCard board={board} box={box} date={date} />}
       </main>
     </>
   );
