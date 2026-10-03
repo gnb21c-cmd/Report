@@ -11,8 +11,12 @@ import { useState } from "react";
 import {
   cashBook,
   cleanCashPart,
+  EXTRA_KINDS,
   EXTRA_LABEL,
+  extraTotal,
   extraUpdates,
+  type ExtraPart,
+  type ExtraUpdate,
   parseNiceSheet,
   type NiceSheet,
   money,
@@ -44,7 +48,7 @@ const TABS: [Kind, string][] = [
   ["daily", "① 상품별 (일자별) — 1년치 하루 합계"],
   ["receipt", "② 영수증별 — 여러 날 파일"],
   ["naver", "③ 네이버 지난 자료"],
-  ["cash", "④ Claude 정리 파일 (자금 · 매출)"],
+  ["cash", "④ Claude 정리 파일 (자금 · 매출 · 자판기)"],
   ["extra", "⑤ 자판기 · 네컷 · 주차 (나이스)"],
 ];
 
@@ -56,6 +60,8 @@ interface Row {
   products?: Record<string, string>;
   /** ⑤ 나이스 엑셀 */
   nice?: NiceSheet;
+  /** ④ Claude 가 정리한 자판기 · 네컷 · 주차 (날짜마다 세 종류 모두 바꿈) */
+  updates?: ExtraUpdate[];
 }
 
 /** 파일 하나 → 보낼 조각들 + 한 줄 설명 */
@@ -100,7 +106,20 @@ async function readOne(kind: Kind, f: File, table: Record<string, string>, store
         };
         return { file: f.name, ok: true, text: `${span("cafe")} / ${span("kids")}`, parts, products: j.products && typeof j.products === "object" ? j.products : undefined };
       }
-      if (!j || j.kind !== "cash" || !Array.isArray(j.parts) || !j.parts.length) throw new SheetError("Claude 가 정리한 파일(자금 · 매출) 모양이 아닙니다.");
+      if (j && j.kind === "extra" && Array.isArray(j.parts) && j.parts.length) {
+        // 자판기 · 인생네컷 · 주차: 나이스(또는 KIS) 승인 내역을 Claude 가 날짜별로 정리한 것
+        const parts = (j.parts as ExtraPart[]).filter((p) => p && /^\d{4}-\d{2}-\d{2}$/.test(p.date || "")).sort((a, b) => a.date.localeCompare(b.date));
+        const updates = parts.map((p) => ({ date: p.date, part: { v: 1 as const, date: p.date, vending: Number(p.vending) || 0, photo: Number(p.photo) || 0, parking: Number(p.parking) || 0 }, kinds: EXTRA_KINDS }));
+        const tot = (k: (typeof EXTRA_KINDS)[number]) => updates.reduce((a, u) => a + u.part[k], 0);
+        return {
+          file: f.name,
+          ok: true,
+          text: `자판기 · 네컷 · 주차 ${parts[0].date} ~ ${parts[parts.length - 1].date} · ${count(parts.length, "일")} · ${EXTRA_KINDS.map((k) => `${EXTRA_LABEL[k]} ${won(tot(k))}`).join(" · ")} · 합계 ${won(updates.reduce((a, u) => a + extraTotal(u.part), 0))}`,
+          parts: [],
+          updates,
+        };
+      }
+      if (!j || j.kind !== "cash" || !Array.isArray(j.parts) || !j.parts.length) throw new SheetError("Claude 가 정리한 파일(자금 · 매출 · 자판기) 모양이 아닙니다.");
       const parts = (j.parts as CashPart[]).filter((p) => /^\d{4}-\d{2}-\d{2}$/.test(p?.date || "")).map(cleanCashPart).sort((a, b) => a.date.localeCompare(b.date));
       const book = cashBook(parts);
       const last = book.get(parts[parts.length - 1].date)!;
@@ -162,8 +181,8 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     setRows(out);
     setBusy(false);
   };
-  const good = rows.filter((r) => r.parts.length || r.nice);
-  const updates = kind === "extra" ? extraUpdates(good.map((r) => r.nice!)) : [];
+  const good = rows.filter((r) => r.parts.length || r.nice || r.updates);
+  const updates = kind === "extra" ? extraUpdates(good.map((r) => r.nice!)) : good.flatMap((r) => r.updates || []);
   // 네이버는 10:00~17:30 캡처와 18:00~19:30(야간 무제한) 캡처가 따로 오므로 같은 날짜를 파일끼리 합침
   const mergeNaver = (parts: PastPart[]): PastPart[] => {
     const by = new Map<string, NaverPart>();
@@ -173,7 +192,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     }
     return [...by.values()].sort((a, b) => a.date.localeCompare(b.date));
   };
-  const n = kind === "extra" ? updates.length : good.reduce((s, r) => s + r.parts.length, 0);
+  const n = updates.length + good.reduce((s, r) => s + r.parts.length, 0);
 
   const send = async () => {
     setBusy(true);
@@ -181,17 +200,19 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     let saved = 0;
     let skipped = 0;
     try {
-      if (kind === "extra") {
+      if (updates.length) {
         const file = good.map((r) => r.file).join(", ").slice(0, 200);
         for (let i = 0; i < updates.length; i += 300) {
           const r = await api.importExtra({ by: me, updates: updates.slice(i, i + 300), file });
           saved += r.saved;
           setMsg(`보내는 중… ${count(Math.min(updates.length, i + 300))} / ${count(updates.length)}`);
         }
-        setMsg(`${count(saved, "일치")} 넣었습니다 (자판기 · 네컷 · 주차).`);
-        setRows([]);
-        onDone();
-        return;
+        if (kind === "extra" || !good.some((r) => r.parts.length)) {
+          setMsg(`${count(saved, "일치")} 넣었습니다 (자판기 · 네컷 · 주차).`);
+          setRows([]);
+          onDone();
+          return;
+        }
       }
       // 한 번에 너무 크지 않게 300개씩
       const flat = good.flatMap((r) => r.parts);
@@ -245,6 +266,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
             <li>매출 파일: 상품별(일자별) 엑셀 여러 개를 하나로 묶은 것 — ① 에 하나씩 올린 것과 같음 (영수증별로 이미 넣은 날은 그대로)</li>
             <li>전일 잔고는 맨 첫날만 쓰고 그 뒤는 앞 보고의 금일 잔고로 이어짐 · 엑셀과 다른 곳은 '(잔고 맞춤)' 줄로 표시</li>
             <li>자금 파일: A 에서 이미 자금을 올린 날은 바꾸지 않습니다</li>
+            <li>자판기 · 네컷 · 주차 파일: 그 날짜들의 세 가지를 파일 값으로 바꿉니다 (⑤ 에 나이스 엑셀을 올린 것과 같음)</li>
           </ol>
         )}
         {kind === "extra" && (
@@ -297,8 +319,8 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
                 {rows.map((r) => (
                   <tr key={r.file}>
                     <td>{r.file}</td>
-                    <td className={r.parts.length || r.nice ? (r.ok ? "" : "warn") : "error"}>
-                      {r.parts.length || r.nice ? (r.ok ? "✓ " : "⚠ ") : "✗ "}
+                    <td className={r.parts.length || r.nice || r.updates ? (r.ok ? "" : "warn") : "error"}>
+                      {r.parts.length || r.nice || r.updates ? (r.ok ? "✓ " : "⚠ ") : "✗ "}
                       {r.text}
                     </td>
                   </tr>
