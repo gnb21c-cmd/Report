@@ -25,7 +25,7 @@ export interface CashAccount {
 
 /** 자금요약 줄 순서 그대로 */
 export const CASH_ACCOUNTS: CashAccount[] = [
-  { id: "cashAlpha", group: "cash", name: "알파비전㈜", no: "금고시재", outWho: "수령인" },
+  { id: "cashAlpha", group: "cash", name: "알파비젼㈜", no: "금고시재", outWho: "수령인" },
   { id: "cashCafe", group: "cash", name: "카페 아스타나", no: "금고시재", outWho: "수령인" },
   { id: "nh", group: "deposit", name: "농협은행" },
   { id: "shinhan", group: "deposit", name: "신한은행" },

@@ -3,10 +3,14 @@
    ① 상품별 (일자별) 엑셀: 기간으로 받음 (카페는 조회줄수 때문에 한 달씩, 키즈는 6개월씩) → 하루 합계. 카페는 OK포스 대분류로 분류표도 채움
    ② 영수증별 매출 상세현황 엑셀: 하루치만 받아지므로 여러 날 파일을 한꺼번에 → 날짜 · 매장은 파일에서 알아냄 (시간대 분석은 최근 5주면 충분)
    ③ 네이버 지난 자료: 주 단위 화면 캡처를 정리한 표 (날짜 × 10:00~19:30)
+   ④ 자금 지난 자료: 날짜별 자금현황표 엑셀을 Claude 가 A 자금 모양으로 바꾼 파일 (.json) — 이미 넣은 날은 그대로 둠
    이미 A 에서 넣은 날(영수증별 · 네이버)은 상품별 · 네이버 정리표로 덮지 않음
    ============================================================ */
 import { useState } from "react";
 import {
+  cashBook,
+  cleanCashPart,
+  money,
   buildDailyPart,
   buildStorePart,
   count,
@@ -21,17 +25,19 @@ import {
   STORE_LABEL,
   sum,
   won,
+  type CashPart,
   type NaverPart,
   type StoreId,
 } from "@report/core";
 import { readRows } from "./excel";
 import { api, type PastPart } from "./api";
 
-type Kind = "daily" | "receipt" | "naver";
+type Kind = "daily" | "receipt" | "naver" | "cash";
 const TABS: [Kind, string][] = [
   ["daily", "① 상품별 (일자별) — 1년치 하루 합계"],
   ["receipt", "② 영수증별 — 여러 날 파일"],
   ["naver", "③ 네이버 지난 자료"],
+  ["cash", "④ 자금 지난 자료"],
 ];
 
 interface Row {
@@ -45,6 +51,20 @@ interface Row {
 /** 파일 하나 → 보낼 조각들 + 한 줄 설명 */
 async function readOne(kind: Kind, f: File, table: Record<string, string>, store: StoreId | "auto"): Promise<Row> {
   try {
+    if (kind === "cash") {
+      // Claude 가 정리한 파일: { kind: "cash", parts: CashPart[] }
+      let j: any;
+      try {
+        j = JSON.parse(await f.text());
+      } catch {
+        throw new SheetError("자금 지난 자료 파일(.json)이 아닙니다.");
+      }
+      if (!j || j.kind !== "cash" || !Array.isArray(j.parts) || !j.parts.length) throw new SheetError("자금 지난 자료 파일 모양이 아닙니다.");
+      const parts = (j.parts as CashPart[]).filter((p) => /^\d{4}-\d{2}-\d{2}$/.test(p?.date || "")).map(cleanCashPart).sort((a, b) => a.date.localeCompare(b.date));
+      const book = cashBook(parts);
+      const last = book.get(parts[parts.length - 1].date)!;
+      return { file: f.name, ok: true, text: `${parts[0].date} ~ ${last.date} · ${count(parts.length, "일")} · 마지막 날 잔액 합계 ${money(last.total, "KRW", false)}원`, parts };
+    }
     const rows = readRows(await f.arrayBuffer());
     if (kind === "naver") {
       const r = parseNaverPast(rows);
@@ -163,6 +183,13 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
             <li>받은 파일을 모두 골라 한 번에 올림 → 날짜(조회일자) · 매장은 파일마다 알아냄. 같은 날을 다시 올리면 그날이 바뀜</li>
           </ol>
         )}
+        {kind === "cash" && (
+          <ol className="steps">
+            <li>날짜별 자금현황표 엑셀을 Claude 에게 주면 A 자금 모양으로 바꾼 파일(.json)을 돌려 드립니다 → 그 파일을 여기에 올림</li>
+            <li>전일 잔고는 맨 첫날만 쓰고 그 뒤는 앞 보고의 금일 잔고로 이어짐 · 엑셀과 다른 곳은 '(잔고 맞춤)' 줄로 표시</li>
+            <li>A 에서 이미 자금을 올린 날은 바꾸지 않습니다</li>
+          </ol>
+        )}
         {kind === "naver" && (
           <ol className="steps">
             <li>네이버 예약 화면을 주 단위로 띄워 캡처 → Claude 가 표로 정리해 드림 (엑셀 · CSV)</li>
@@ -172,7 +199,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
           </ol>
         )}
         <div className="row">
-          {kind !== "naver" && (
+          {(kind === "daily" || kind === "receipt") && (
             <select value={store} onChange={(e) => setStore(e.target.value as StoreId | "auto")} aria-label="매장">
               <option value="auto">매장: 파일에서 알아냄</option>
               <option value="cafe">매장: {STORE_LABEL.cafe}</option>
@@ -181,7 +208,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
           )}
           <label className="button ghost">
             파일 고르기 (여러 개 가능)
-            <input type="file" multiple accept=".xls,.xlsx,.csv" hidden onChange={(e) => (void onFiles(e.target.files), (e.target.value = ""))} />
+            <input type="file" multiple accept={kind === "cash" ? ".json" : ".xls,.xlsx,.csv"} hidden onChange={(e) => (void onFiles(e.target.files), (e.target.value = ""))} />
           </label>
           {busy && <span className="muted">읽는 중…</span>}
         </div>

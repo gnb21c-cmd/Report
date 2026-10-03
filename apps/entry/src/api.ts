@@ -11,8 +11,8 @@ export const APP_VERSION = "0.4.0";
 export const CASH_LOOKBACK = 31;
 const daysBefore = (date: string) => Array.from({ length: CASH_LOOKBACK }, (_, i) => addDays(date, -(i + 1)));
 
-/** 지난 자료 한 조각 — 매장 하루치(상품별 · 영수증별) 또는 네이버 정리표 하루 */
-export type PastPart = StorePart | NaverPart;
+/** 지난 자료 한 조각 — 매장 하루치(상품별 · 영수증별) · 네이버 정리표 하루 · 자금 하루 */
+export type PastPart = StorePart | NaverPart | CashPart;
 
 export interface Info {
   /** 연결된 곳 이름 */
@@ -104,6 +104,15 @@ const real = {
     let skipped = 0;
     for (const p of body.parts) {
       const old = have.get(p.date);
+      if ("rates" in p) {
+        // 자금: A 에서 이미 올린 날은 그대로
+        if (old?.cash) {
+          skipped++;
+          continue;
+        }
+        pieces.push({ kind: "cash", date: p.date, part: p });
+        continue;
+      }
       if ("tickets" in p) {
         // 낮 · 밤 캡처를 따로 넣어도 같은 날로 합침 (A 에서 넣은 값은 그대로)
         const merged = mergeNaverPast(old?.naver, p);
@@ -198,6 +207,15 @@ const demo = {
     let skipped = 0;
     for (const p of body.parts) {
       const prev = s.reports[p.date] || null;
+      if ("rates" in p) {
+        if (prev?.cash) {
+          skipped++;
+          continue;
+        }
+        s.reports[p.date] = mergeReport(prev, p.date, body.by, { cash: p });
+        saved++;
+        continue;
+      }
       if ("tickets" in p) {
         const merged = mergeNaverPast(prev?.naver, p);
         if (!merged) {
