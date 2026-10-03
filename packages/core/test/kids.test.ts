@@ -192,3 +192,16 @@ describe("2026-03 까지 네이버 판매 장수 = POS 입장 발행 − 현장 
     expect(m.box.키즈입장료).toBe(120000);
   });
 });
+
+describe("'퍼피 정산' (2025-09 까지 아스타나퍼피 선결제 1만원 교환권) — 결제 수단", () => {
+  it("다른 POS · 네이버에서 이미 받은 돈이라 카페 매출에서 빼지 않음, 키즈 매출과도 무관", async () => {
+    const { isVoucherPayment, isKidsCoupon } = await import("../src");
+    expect(isVoucherPayment({ name: "퍼피 정산", net: -10000 })).toBe(true);
+    expect(isKidsCoupon({ name: "퍼피 정산", net: -10000 })).toBe(false);
+    const date = "2025-06-14";
+    const p = buildStorePart({ store: "cafe", date, file: "c", sheet: { from: date, to: date, lines: [line({ name: "수제돈까스", qty: 1, gross: 14000, net: 14000 }), line({ name: "퍼피 정산", qty: 1, gross: -10000, net: -10000 })], sheetNet: null } as any, sectorOf: () => "키친" as any }).part;
+    expect(p.sectors.키친).toBe(14000);
+    expect(p.voucher).toBe(10000);
+    expect(p.kidsCoupon || 0).toBe(0);
+  });
+});
