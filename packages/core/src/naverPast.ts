@@ -42,6 +42,14 @@ export function naverPastPart(r: NaverPastRow): NaverPart {
   return { v: 1, date: r.date, tickets: r.tickets, newVisitors: NAVER_SLOTS.map(() => 0), noNew: true };
 }
 
+/** 같은 날 네이버 지난 자료끼리 합치기 — 낮(10:00~17:30) · 밤(18:00~19:30) 캡처를 따로 넣어도 한 날로.
+    칸마다 큰 값 (같은 표를 두 번 넣어도 두 배가 되지 않음). A 에서 직접 넣은 값(신규 있음)은 지난 자료로 덮지 않음 → null */
+export function mergeNaverPast(old: NaverPart | null | undefined, add: NaverPart): NaverPart | null {
+  if (!old) return add;
+  if (!old.noNew) return null;
+  return { ...old, tickets: NAVER_SLOTS.map((_, i) => Math.max(old.tickets[i] || 0, add.tickets[i] || 0)) };
+}
+
 /** 영수증 줄을 보고 매장 짐작 — 입장권이 대부분이면 키즈, 음료 · 빵 · 식사면 카페, 둘 다 많으면 [전체] (null) */
 export function guessStore(lines: Pick<ReceiptLine, "name" | "gross" | "net" | "refund">[]): StoreId | null {
   const sales = lines.filter((l) => !l.refund);

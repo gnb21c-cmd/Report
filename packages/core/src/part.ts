@@ -231,7 +231,7 @@ function addLine(
     part.sectors[s] += l.net;
     if (isCup("cafe", { name: l.name, cat1, gross: l.gross, net: l.net }, s)) cups = l.qty * cupsPerItem(l.name);
   } else {
-    const k = kidsKind({ name: l.name, gross: l.gross, net: l.net, cat1 });
+    const k = kidsKind({ name: l.name, gross: l.gross, net: l.net, cat1, qty: l.qty });
     sector = k;
     const kids = part.kids!;
     if (k === "입장발행") kids.issued += l.qty;

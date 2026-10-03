@@ -2,7 +2,7 @@
    A 가 자료를 주고받는 곳 — 클라우드 보관함(Firebase, cloud.ts)에 직접
    - 체험판: 클라우드 없이 이 브라우저 저장소(localStorage)에 흉내
    ============================================================ */
-import { addDays, type CashPart, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
+import { addDays, mergeNaverPast, type CashPart, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
 import { addProducts, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readProducts, sessionEmail, writePieces, type Piece } from "./cloud";
 
 export const APP_VERSION = "0.4.0";
@@ -105,11 +105,15 @@ const real = {
     for (const p of body.parts) {
       const old = have.get(p.date);
       if ("tickets" in p) {
-        if (old?.naver) {
+        // 낮 · 밤 캡처를 따로 넣어도 같은 날로 합침 (A 에서 넣은 값은 그대로)
+        const merged = mergeNaverPast(old?.naver, p);
+        if (!merged) {
           skipped++;
           continue;
         }
-        pieces.push({ kind: "naver", date: p.date, part: p });
+        if (old) old.naver = merged;
+        else have.set(p.date, { date: p.date, naver: merged });
+        pieces.push({ kind: "naver", date: p.date, part: merged });
       } else {
         const prev = old?.[p.store];
         if (p.basis === "daily" && prev && prev.basis === "receipt") {
@@ -195,11 +199,12 @@ const demo = {
     for (const p of body.parts) {
       const prev = s.reports[p.date] || null;
       if ("tickets" in p) {
-        if (prev?.naver) {
+        const merged = mergeNaverPast(prev?.naver, p);
+        if (!merged) {
           skipped++;
           continue;
         }
-        s.reports[p.date] = mergeReport(prev, p.date, body.by, { naver: p });
+        s.reports[p.date] = mergeReport(prev, p.date, body.by, { naver: merged });
       } else {
         const old = prev?.[p.store];
         if (p.basis === "daily" && old && old.basis === "receipt") {
