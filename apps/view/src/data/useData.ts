@@ -1,9 +1,9 @@
-/* 자료 받기 상태 — 체험판이면 가짜 자료, 사무실 PC(C)에서 열면 C 에서, 아니면 설치 주소의 열쇠로 클라우드에서
+/* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 클라우드에서
    → 폰 저장소 → 새로 온 것만 받기 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sampleUntilYesterday, todayKst, type DayReport, type WeatherKey, type WeatherMap } from "@report/core";
 import { boardKey, firebaseConfig, firebaseSource } from "./firebase";
-import { officeSource, type OfficeStatus, type Source } from "./source";
+import type { OfficeStatus, Source } from "./source";
 import demoWeatherRaw from "./demoWeather.json";
 import { clearCached, loadCached, local, saveCached } from "./cache";
 
@@ -39,7 +39,6 @@ function demoWeather(): WeatherMap {
 /** 이 화면이 어디서 자료를 받는지 */
 function pickSource(): { source: Source | null; phase: Phase; kind: Source["kind"] } {
   if (__DEMO__) return { source: null, phase: "ready", kind: "demo" };
-  if (__OFFICE__) return { source: officeSource(), phase: "loading", kind: "office" };
   const cfg = firebaseConfig();
   if (!cfg) return { source: null, phase: "setup", kind: "cloud" };
   const board = boardKey();

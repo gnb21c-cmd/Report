@@ -1,11 +1,11 @@
 /* ============================================================
-   A — 사무실 입력 화면 (직원 PC 에서 전체 화면으로 엶, 화면은 사무실 PC C 가 보여 줌)
+   A — 사무실 입력 화면 (직원 PC 바탕화면 아이콘 → 인터넷 주소 …/a/ 를 전체 화면으로)
    맨 위 안내: "yy년 mm월 dd일 기준 -1일 전의 일자 (영업마감 현재) 기준 영업 데이터를 입력하세요"
    ① 네이버 예약 시간대 표 (10:00 ~ 19:30, 판매입장권 수 · 신규방문자 수)
    ② 영수증별 매출 상세현황 엑셀 두 개 (카페아스타나 · 아스타나키즈 따로)
    ③ 새 상품 분류 확인 (처음 보는 카페 상품만)  ④ 보고 미리보기
-   [임시저장] 계산 없이 이 PC 에만 보관   [입력완료 · 보고자료 업로드] A 에서 계산 → C 로 보냄 → C 가 폰(B)에 올림
-   각자 맡은 칸만 넣고 보내도 됨 — C 가 날짜별로 합침
+   [임시저장] 계산 없이 이 PC 에만 보관   [입력완료 · 보고자료 업로드] A 에서 계산 → 클라우드(Firebase)로 바로 → 폰(B)이 받음
+   각자 맡은 칸만 넣고 보내도 됨 — 날짜별 문서에서 보낸 칸만 바뀌어 합쳐짐
    ============================================================ */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -63,11 +63,13 @@ export function App() {
   const [showImport, setShowImport] = useState(false);
   const [showHow, setShowHow] = useState(false);
 
-  /* ---------- C 와 연결 ---------- */
+  /* ---------- 클라우드 연결 (로그인) ---------- */
   const refreshInfo = useCallback(async () => {
     try {
-      setInfo(await api.info());
+      const i = await api.info();
+      setInfo(i);
       setConn(null);
+      if (!i.email) setAskMe(true);
     } catch (e) {
       setConn((e as Error).message);
     }
@@ -83,11 +85,9 @@ export function App() {
     void refreshInfo();
     void refreshTable();
     void draftDates().then(setDrafts);
-    const t = setInterval(refreshInfo, 60_000);
-    return () => clearInterval(t);
   }, [refreshInfo, refreshTable]);
 
-  /* ---------- 날짜를 고르면: C 에 올라간 것 + 이 PC 의 임시저장 ---------- */
+  /* ---------- 날짜를 고르면: 클라우드에 올라간 것 + 이 PC 의 임시저장 ---------- */
   const loadDate = useCallback(async (d: string) => {
     setMsg(null);
     setDone(null);
@@ -106,7 +106,7 @@ export function App() {
     }
     setDay(info);
     const n = info?.report?.naver;
-    // C 에 올라간 값을 보여 줌 (0 은 빈칸으로)
+    // 클라우드에 올라간 값을 보여 줌 (0 은 빈칸으로)
     setTickets(n ? n.tickets.map((v) => (v ? String(v) : "")) : empty());
     setNewVisitors(n ? n.newVisitors.map((v) => (v ? String(v) : "")) : empty());
     const draft = await loadDraft(d);
@@ -263,15 +263,13 @@ export function App() {
       <header className="bar">
         <div className="title">
           <span className="logo">📊</span> 아스타나 매출 보고 입력 <small>(A)</small>
-          {__DEMO__ && <span className="demo">체험판 — C 없이 이 브라우저에만 저장</span>}
+          {__DEMO__ && <span className="demo">체험판 — 이 브라우저에만 저장</span>}
         </div>
         <div className="bar-right">
-          <span className={`conn ${conn ? "bad" : info ? "ok" : ""}`} title={conn || ""}>
-            ● {conn ? "C 연결 안 됨" : info ? `C 연결됨 · ${info.name}` : "C 확인 중"}
+          <span className={`conn ${conn ? "bad" : info?.email ? "ok" : ""}`} title={conn || ""}>
+            ● {conn ? "연결 안 됨" : info?.email ? `클라우드 연결됨 · ${info.email}` : "로그인 필요"}
           </span>
-          {info?.trial && <span className="pill warn">클라우드 설정 전 — 폰에는 아직 안 감</span>}
-          {!!info?.publish.pending && <span className="pill warn">폰에 못 올린 날 {info.publish.pending}일</span>}
-          <button className="ghost" onClick={() => setAskMe(true)} title="입력자 바꾸기">
+          <button className="ghost" onClick={() => setAskMe(true)} title="입력자 · 계정">
             👤 {me.name || "입력자?"}
           </button>
           {!__DEMO__ && (
@@ -322,11 +320,11 @@ export function App() {
                   {wx.rainMm ? ` · 강수 ${wx.rainMm}mm` : ""} <small>({wx.source === "observed" ? "관측" : "예보"})</small>
                 </b>
               ) : (
-                <span className="muted">C 가 받는 중이거나 아직 없음 (보내면 함께 기록)</span>
+                <span className="muted">아직 없음 (GitHub 가 1시간마다 기상청에서 받아 넣음)</span>
               )}
             </span>
             <span>
-              📥 C 에 올라간 것:{" "}
+              📥 클라우드에 올라간 것:{" "}
               {(["naver", "cafe", "kids"] as const).map((k) => {
                 const mm = server?.meta?.[k];
                 const has = !!server?.[k];
@@ -358,7 +356,7 @@ export function App() {
             <h2>① 네이버 예약 — 시간대별 판매입장권 수 · 신규방문자 수</h2>
             <span className="hint">
               네이버 예약 관리 화면을 보고 30분마다 넣어 주세요. 신규방문자 = 마감 현재 방문 완료 횟수가 1인 손님. 빈칸은 0. 엑셀에서 복사해 붙여넣어도 됩니다.
-              {server?.naver && !naverEdited ? ` (C 에 올라간 값을 보여 주는 중 — 고치면 새로 보냄)` : ""}
+              {server?.naver && !naverEdited ? ` (클라우드에 올라간 값을 보여 주는 중 — 고치면 새로 보냄)` : ""}
             </span>
           </div>
           <NaverGrid tickets={tickets} newVisitors={newVisitors} onChange={onGrid} />
@@ -448,7 +446,7 @@ export function App() {
           <section className="panel">
             <div className="panel-head">
               <h2>④ 보고 미리보기 — {shortLabel(date)}</h2>
-              <span className="hint">지금 입력 + C 에 이미 올라간 것을 합친 숫자 (폰에 이렇게 보입니다)</span>
+              <span className="hint">지금 입력 + 클라우드에 이미 올라간 것을 합친 숫자 (폰에 이렇게 보입니다)</span>
             </div>
             <table className="list preview">
               <tbody>
@@ -490,12 +488,12 @@ export function App() {
           <button className="link" onClick={() => setShowImport(true)}>
             지난 자료 한꺼번에 넣기 (상품별 · 영수증별 여러 파일 · 네이버)
           </button>
-          {info ? ` · C 프로그램 ${info.version}` : ""}
+          {info ? ` · 입력 화면 ${info.version}` : ""}
         </p>
       </main>
 
       <footer className="foot">
-        <div className={`foot-msg ${msg?.kind || ""}`}>{msg ? msg.text : draftAt ? `임시저장 ${when(draftAt)}` : dirty ? "저장하지 않은 입력이 있습니다." : "각자 맡은 칸만 넣고 보내도 됩니다 — C 가 날짜별로 합칩니다."}</div>
+        <div className={`foot-msg ${msg?.kind || ""}`}>{msg ? msg.text : draftAt ? `임시저장 ${when(draftAt)}` : dirty ? "저장하지 않은 입력이 있습니다." : "각자 맡은 칸만 넣고 보내도 됩니다 — 날짜별로 합쳐집니다."}</div>
         <button className="ghost huge" onClick={doDraft} disabled={busy}>
           💾 임시저장
         </button>
@@ -509,15 +507,16 @@ export function App() {
       {askMe && (
         <MeBox
           me={me}
-          needPin={!!info?.pin}
+          email={info?.email || null}
           onSave={(x) => {
             saveMe(x);
             setMe(x);
             setAskMe(false);
+            void refreshInfo();
             void refreshTable();
             void loadDate(date);
           }}
-          onCancel={me.name ? () => setAskMe(false) : undefined}
+          onCancel={me.name && info?.email ? () => setAskMe(false) : undefined}
         />
       )}
       {showImport && <ImportPast me={me.name} table={table} onClose={() => setShowImport(false)} onDone={() => (void refreshTable(), void loadDate(date))} />}
@@ -533,11 +532,11 @@ function partLine(k: "cafe" | "kids", p: StorePart): string {
 function ConfirmBox({ body, server, busy, onCancel, onSend }: { body: SubmitBody; server: DayInfo["report"]; busy: boolean; onCancel: () => void; onSend: () => void }) {
   const p = body.parts;
   const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-  const replace = (k: "cafe" | "kids" | "naver") => (server?.[k] ? ` — C 에 있던 것(${server.meta?.[k]?.by || ""} ${when(server.meta?.[k]?.at)})을 바꿈` : "");
+  const replace = (k: "cafe" | "kids" | "naver") => (server?.[k] ? ` — 클라우드에 있던 것(${server.meta?.[k]?.by || ""} ${when(server.meta?.[k]?.at)})을 바꿈` : "");
   return (
     <div className="modal-bg" role="dialog" aria-modal="true" aria-label="보내기 확인">
       <div className="modal">
-        <h2>{longDate(body.date)} 보고자료를 C 로 보낼까요?</h2>
+        <h2>{longDate(body.date)} 보고자료를 클라우드로 보낼까요?</h2>
         <ul className="send-list">
           {p.naver && (
             <li>
@@ -559,8 +558,8 @@ function ConfirmBox({ body, server, busy, onCancel, onSend }: { body: SubmitBody
           )}
           {body.products && <li>새 상품 {count(Object.keys(body.products).length, "개")}의 분류를 분류표에 저장</li>}
         </ul>
-        {!p.naver && <p className="muted">네이버 표는 손대지 않아 보내지 않습니다 (다른 분이 넣거나 C 에 있는 값 그대로).</p>}
-        {(!p.cafe || !p.kids) && <p className="muted">올리지 않은 매장 엑셀은 C 에 있는 것 그대로 둡니다.</p>}
+        {!p.naver && <p className="muted">네이버 표는 손대지 않아 보내지 않습니다 (다른 분이 넣거나 클라우드에 있는 값 그대로).</p>}
+        {(!p.cafe || !p.kids) && <p className="muted">올리지 않은 매장 엑셀은 클라우드에 있는 것 그대로 둡니다.</p>}
         <div className="row end">
           <button className="ghost huge" onClick={onCancel} disabled={busy}>
             취소
@@ -579,7 +578,7 @@ function DoneBox({ r, onClose }: { r: SubmitResult; onClose: () => void }) {
   return (
     <div className="modal-bg" role="dialog" aria-modal="true" aria-label="보내기 완료">
       <div className="modal">
-        <h2>✅ {longDate(r.report.date)} 보고자료를 C 에 올렸습니다</h2>
+        <h2>✅ {longDate(r.report.date)} 보고자료를 올렸습니다</h2>
         <p className={r.publish.ok ? "okmsg" : "warn"}>{r.publish.ok ? "폰(B)에도 올렸습니다. 폰에서 앱을 다시 열면 보입니다." : r.publish.message}</p>
         <table className="list">
           <tbody>
@@ -606,38 +605,80 @@ function DoneBox({ r, onClose }: { r: SubmitResult; onClose: () => void }) {
   );
 }
 
-function MeBox({ me, needPin, onSave, onCancel }: { me: Me; needPin: boolean; onSave: (m: Me) => void; onCancel?: () => void }) {
+function MeBox({ me, email, onSave, onCancel }: { me: Me; email: string | null; onSave: (m: Me) => void; onCancel?: () => void }) {
   const [name, setName] = useState(me.name);
-  const [pin, setPin] = useState(me.pin);
+  const [em, setEm] = useState(email || "");
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [logged, setLogged] = useState(email);
+  const submit = async () => {
+    setErr(null);
+    if (!name.trim()) return setErr("이름을 적어 주세요.");
+    if (!logged) {
+      setBusy(true);
+      try {
+        setLogged(await api.login(em, pw));
+      } catch (e) {
+        setBusy(false);
+        return setErr((e as Error).message);
+      }
+      setBusy(false);
+    }
+    onSave({ name: name.trim().slice(0, 20) });
+  };
   return (
-    <div className="modal-bg" role="dialog" aria-modal="true" aria-label="입력자">
+    <div className="modal-bg" role="dialog" aria-modal="true" aria-label="입력자 · 로그인">
       <form
         className="modal"
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim()) onSave({ name: name.trim().slice(0, 20), pin: pin.trim() });
+          void submit();
         }}
       >
         <h2>누가 입력하나요?</h2>
-        <p className="muted">이 PC 에 한 번만 적으면 됩니다. 보낸 자료에 이름이 함께 남습니다 (폰 설정 화면의 '최근 입력 현황').</p>
+        <p className="muted">이 PC 에서 처음 한 번만 합니다. 보낸 자료에 이름이 함께 남습니다 (폰 설정 화면의 '최근 입력 현황').</p>
         <label className="field">
           이름
-          <input autoFocus value={name} maxLength={20} placeholder="예: 김영희 · 사무실" onChange={(e) => setName(e.target.value)} />
+          <input autoFocus value={name} maxLength={20} placeholder="예: 김영희" onChange={(e) => setName(e.target.value)} />
         </label>
-        {(needPin || pin) && (
-          <label className="field">
-            사무실 비밀번호 (C 설치 때 정한 것)
-            <input type="password" value={pin} maxLength={20} onChange={(e) => setPin(e.target.value)} />
-          </label>
+        {logged ? (
+          <p className="muted">
+            로그인됨: <b>{logged}</b>{" "}
+            {!__DEMO__ && (
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  api.logout();
+                  setLogged(null);
+                }}
+              >
+                다른 계정으로
+              </button>
+            )}
+          </p>
+        ) : (
+          <>
+            <label className="field">
+              계정 이메일 (관리자에게 받은 것)
+              <input value={em} autoComplete="username" onChange={(e) => setEm(e.target.value)} placeholder="예: kim@astana.report" />
+            </label>
+            <label className="field">
+              비밀번호
+              <input type="password" value={pw} autoComplete="current-password" onChange={(e) => setPw(e.target.value)} />
+            </label>
+          </>
         )}
+        {err && <p className="error">⚠ {err}</p>}
         <div className="row end">
           {onCancel && (
             <button type="button" className="ghost huge" onClick={onCancel}>
               취소
             </button>
           )}
-          <button className="huge primary" disabled={!name.trim()}>
-            저장
+          <button className="huge primary" disabled={busy || !name.trim() || (!logged && (!em.trim() || !pw))}>
+            {busy ? "확인 중…" : logged ? "저장" : "로그인"}
           </button>
         </div>
       </form>

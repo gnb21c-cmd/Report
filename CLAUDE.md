@@ -11,11 +11,11 @@
 
 ## 명령
 
-- `pnpm test` (core + C 시험) / `pnpm typecheck`
+- `pnpm test` (core + 날씨 시험) / `pnpm typecheck`
 - `pnpm demo` — 체험판 HTML 두 장 (B `apps/view/dist-demo/index.html`, A `apps/entry/dist-demo/index.html`)
-- `pnpm office` — C 를 이 컴퓨터에서 시험 모드로 (http://localhost:8770/ · /b/)
-- C 시험만: `cd apps/office && PYTHONPATH=src python3 -m unittest discover -s tests`
-- 구조: A(`apps/entry`, 직원 PC 입력 · 계산) → C(`apps/office`, 사무실 PC 서버 · 보관 · 합치기 · 날씨) → Firebase → B(`apps/view`, 폰)
+- `pnpm build:hosting` — 올릴 화면 (B 안에 A 를 /a/ 로). 올리기는 main 에서 GitHub Deploy
+- 구조: A(`apps/entry`, 직원 PC 입력 · 계산 · Firebase 에 직접) → Firebase → B(`apps/view`, 폰). 날씨는 `apps/weather` (GitHub Actions). 서버 · 24시간 PC 없음
 - 계산 규칙은 `packages/core/src/rules.ts`(키즈 단가 · 방문인원 × 0.96 · 잔), `receipt.ts`(영수증 엑셀 · 반품 지우기), `part.ts`(매장 하루치), `metrics.ts`(대시보드 · 누계), `hourly.ts`(시간대 분석), 분류는 `classify.ts`. 바꾸면 `packages/core/test` 에 시험을 먼저 더한다.
-- 폰 앱은 로그인 없음 — 설치 주소 `/b/{열쇠}/` 의 열쇠로 `boards/{열쇠}` 를 읽는다. 열쇠 · 기상청 키는 저장소에 넣지 않는다.
-- A 가 보내는 모양(`packages/core/src/part.ts` StorePart · NaverPart · DayReport), C 가 받는 확인(`apps/office/src/report_office/store.py` check_part), C 가 올리는 칸(`relay.py report_doc`), B 가 읽는 칸(`apps/view/src/data/firebase.ts toReport`)은 같이 바꾼다.
+- 폰 앱은 로그인 없음 — 설치 주소 `/b/{열쇠}/` 의 열쇠로 `boards/{열쇠}` 를 읽는다. 열쇠 · 기상청 키 · 서비스 계정은 저장소에 넣지 않는다 (GitHub Secrets).
+- 보고 문서 모양(`boards/{열쇠}/reports/{날짜}` 칸 cafe · kids · naver = 조각 JSON)은 A 쓰기(`apps/entry/src/cloud.ts`), B 읽기(`apps/view/src/data/firebase.ts toReport`), 규칙(`firebase/firestore.rules`)을 같이 바꾼다.
+- 매출 자료 · 네이버 정리표(CSV)는 저장소에 넣지 않는다.

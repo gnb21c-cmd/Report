@@ -1,1 +1,0 @@
-# 사무실 PC(C) exe 에 넣는 것 — 표준 라이브러리만 씀 (빌드: .github/workflows/build-office.yml)

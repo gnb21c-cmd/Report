@@ -2,14 +2,13 @@
    클라우드 보관함(Firebase) 읽기 — 로그인 없음, 읽기만
    - 설치 주소 https://<프로젝트>.web.app/b/<열쇠>/ 의 '열쇠'로 그 매장 자료(boards/<열쇠>)를 읽음
      → 이 주소로 설치한 폰은 누구나 봄 (주소를 밖에 퍼뜨리지 않기. 새면 열쇠를 바꿈 — docs/SETUP.md)
-   - reports/<날짜>: 사무실 PC(C)가 그날 조각(카페 · 키즈 · 네이버)을 합쳐 올린 보고 자료 (report = JSON 글자)
+   - reports/<날짜>: 직원 PC 의 A 가 올린 그날 조각 (칸 cafe · kids · naver, 각자 맡은 칸만 바뀜)
      마지막으로 받은 뒤 새로 올라온 것만 (at 기준) → 폰 안(IndexedDB)에 쌓아 둠
-   - weather/<날짜>: C 가 기상청에서 받아 올린 날씨
-   - devices/office: C 상태 (마지막으로 올린 시각 · 판 · 오류)
-   C 가 쓰는 모양: apps/office/src/report_office/relay.py report_doc
+   - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
+   A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
 import type { DayReport, DayWeather, WeatherKey } from "@report/core";
-import type { OfficeStatus, Source } from "./source";
+import type { Source } from "./source";
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -72,15 +71,24 @@ function fieldsOf(doc: any): Record<string, any> {
   return out;
 }
 
-/** reports 문서 → 보고 자료 */
+/** reports 문서 → 보고 자료. 칸 cafe · kids · naver = 조각 JSON {p, by, at, file} (A 가 보낸 칸만 바뀜 — apps/entry/src/cloud.ts) */
 export function toReport(f: Record<string, any>): DayReport | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) return null;
-  try {
-    const r = JSON.parse(f.report || "{}");
-    return r && r.date === f.date ? { ...r, at: f.at || r.at } : null;
-  } catch {
-    return null;
+  const r: DayReport = { date: f.date, meta: {}, at: f.at || undefined };
+  let any = false;
+  for (const k of ["cafe", "kids", "naver"] as const) {
+    if (!f[k]) continue;
+    try {
+      const x = JSON.parse(f[k]);
+      if (!x || !x.p) continue;
+      (r as any)[k] = x.p;
+      r.meta![k] = { by: x.by || "", at: x.at || "", ...(x.file ? { file: x.file } : {}) };
+      any = true;
+    } catch {
+      /* 깨진 칸은 건너뜀 */
+    }
   }
+  return any ? r : null;
 }
 
 /** at(올린 시각) 이 after 뒤인 문서들 — 오래된 것부터 */
@@ -119,12 +127,7 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
       return { days: docs.map(weatherOf).filter((w): w is DayWeather => !!w), last };
     },
     async status() {
-      try {
-        const doc = await call(`${base(cfg, board)}/devices/office?key=${cfg.apiKey}`);
-        return fieldsOf(doc) as OfficeStatus;
-      } catch {
-        return null;
-      }
+      return null;
     },
   };
 }

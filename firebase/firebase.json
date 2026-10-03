@@ -1,12 +1,59 @@
 {
-  "firestore": { "rules": "firestore.rules" },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": "../apps/view/dist",
-    "ignore": ["firebase.json", "**/.*"],
-    "rewrites": [{ "source": "/b/**", "destination": "/index.html" }],
+    "ignore": [
+      "firebase.json",
+      "**/.*"
+    ],
+    "rewrites": [
+      {
+        "source": "/a",
+        "destination": "/a/index.html"
+      },
+      {
+        "source": "/a/**",
+        "destination": "/a/index.html"
+      },
+      {
+        "source": "/b/**",
+        "destination": "/index.html"
+      }
+    ],
     "headers": [
-      { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-      { "source": "**", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Referrer-Policy", "value": "no-referrer" }] }
+      {
+        "source": "/a/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          }
+        ]
+      }
     ]
   }
 }

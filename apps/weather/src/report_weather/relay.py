@@ -1,11 +1,7 @@
-"""클라우드 보관함(Firebase) 에 올리기 — 따로 운영하는 서버 없이, Google 이 운영하는 보관함을 우편함처럼 씀
-(사무실 PC C 는 사무실 공유기 안에 있어 폰이 밖에서 바로 들어올 수 없으므로, C 가 여기에 올리고 폰은 여기서 받음)
+"""클라우드 보관함(Firebase) 에 날씨 올리기 — GitHub 가 1시간마다 부름 (.github/workflows/weather.yml)
 
-- 로그인: C 전용 계정(이메일·비밀번호) → 1시간짜리 출입증(idToken)
-- 매장 자료는 boards/{열쇠}/ 아래 (열쇠 = 보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
-- 보고: boards/{열쇠}/reports/{날짜} — C 가 합친 그날 보고 (report = JSON 글자 한 칸, at = 올린 시각)
-- 날씨: boards/{열쇠}/weather/{날짜}
-- 상태: boards/{열쇠}/devices/office — 마지막으로 올린 시각 · 판 · 못 올린 날 · 오류 (보고 앱 설정에 보임)
+- 로그인: 날씨 전용 계정(weather@…, 이메일·비밀번호) → 1시간짜리 출입증(idToken)
+- 날씨: boards/{열쇠}/weather/{날짜} (열쇠 = 보고 앱 설치 주소 /b/{열쇠}/ 와 같은 값)
 보안 규칙(firebase/firestore.rules)이 senders 명단에 있는 계정만 쓰게 막음
 """
 from __future__ import annotations
@@ -29,7 +25,7 @@ class RelayError(Exception):
 
 
 def _post(url: str, body: dict, token: str | None = None, method: str = "POST", timeout: float = 20) -> dict:
-    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data=data, method=method, headers={"Content-Type": "application/json; charset=utf-8"})
     if token:
         req.add_header("Authorization", "Bearer " + token)
@@ -82,16 +78,6 @@ def fields(d: dict) -> dict:
     return {"fields": {k: _value(v) for k, v in d.items()}}
 
 
-def report_doc(report: dict, version: str, now: dt.datetime) -> dict:
-    """reports/{date} 문서 내용 (보고 앱 apps/view/src/data/firebase.ts toReport 가 읽는 모양)"""
-    return {
-        "date": report["date"],
-        "report": json.dumps(report, ensure_ascii=False, separators=(",", ":")),
-        "version": version,
-        "at": now,
-    }
-
-
 class FirebaseRelay:
     def __init__(self, fb: dict, clock=time.time, post=_post):
         self.api_key = str(fb.get("apiKey") or "")
@@ -116,14 +102,20 @@ class FirebaseRelay:
         url = DOC_URL.format(project=self.project, path=path)
         return self.post(url, fields(data), token=self.token(), method="PATCH")
 
-    def put_report(self, report: dict, version: str, now: dt.datetime | None = None):
-        now = now or dt.datetime.now(dt.timezone.utc)
-        return self.put(f"boards/{self.board}/reports/{report['date']}", report_doc(report, version, now))
-
-    def put_status(self, status: dict):
-        return self.put(f"boards/{self.board}/devices/office", {**status, "at": dt.datetime.now(dt.timezone.utc)})
-
     def put_weather(self, day: dict):
         """boards/{열쇠}/weather/{날짜} — 보고 앱이 at 으로 새로 온 것만 받음"""
         body = {k: day.get(k) for k in ("date", "key", "label", "icon", "tempMax", "tempMin", "rainMm", "source", "basis")}
         return self.put(f"boards/{self.board}/weather/{day['date']}", {**body, "at": dt.datetime.now(dt.timezone.utc)})
+
+    def weather_sources(self) -> dict:
+        """이미 올린 날씨 {날짜: observed|forecast}"""
+        out, page = {}, ""
+        for _ in range(50):
+            url = DOC_URL.format(project=self.project, path=f"boards/{self.board}/weather") + f"?pageSize=300&mask.fieldPaths=source{'&pageToken=' + page if page else ''}"
+            res = self.post(url, None, token=self.token(), method="GET")
+            for d in res.get("documents") or []:
+                out[d["name"].rsplit("/", 1)[-1]] = ((d.get("fields") or {}).get("source") or {}).get("stringValue", "")
+            page = res.get("nextPageToken") or ""
+            if not page:
+                break
+        return out

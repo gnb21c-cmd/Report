@@ -108,7 +108,7 @@ export function FileBox(props: { store: StoreId; loaded?: Loaded; result: Comput
       )}
       {props.onServer && (
         <div className="server-note">
-          C 에 올라간 자료: {props.onServer.file || "엑셀"} · {props.onServer.by} {when(props.onServer.at)}
+          클라우드에 올라간 자료: {props.onServer.file || "엑셀"} · {props.onServer.by} {when(props.onServer.at)}
           {l && !l.error ? " → 이번에 보내면 이 파일로 바뀝니다" : ""}
         </div>
       )}

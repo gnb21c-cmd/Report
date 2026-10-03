@@ -1,4 +1,4 @@
-/* 설정 — 최근 입력 현황(누가 언제) · 사무실 PC(C) 상태 · 계산 기준 · 폰 설치 방법 */
+/* 설정 — 최근 입력 현황(누가 언제) · 자료 받기 · 계산 기준 · 폰 설치 방법 */
 import { addDays, KIDS_PRICES, shortLabel, VISITOR_FACTOR, won, type Board, type PartMeta } from "@report/core";
 import type { OfficeStatus } from "../data/source";
 
@@ -17,11 +17,10 @@ function Who({ m, has }: { m?: PartMeta; has: boolean }) {
   );
 }
 
-export function Settings(props: { board: Board; status: OfficeStatus | null; source: "cloud" | "office" | "demo"; latest: string | null; syncedAt: string | null; syncing: boolean; onSync: () => void; onReload: () => void; onBack: () => void }) {
+export function Settings(props: { board: Board; status: OfficeStatus | null; source: "cloud" | "demo"; latest: string | null; syncedAt: string | null; syncing: boolean; onSync: () => void; onReload: () => void; onBack: () => void }) {
   const price = KIDS_PRICES[KIDS_PRICES.length - 1];
   const end = props.latest || addDays(new Date().toISOString().slice(0, 10), -1);
   const recent = Array.from({ length: 7 }, (_, i) => addDays(end, -i));
-  const st = props.status;
   return (
     <>
       <header className="detail-head">
@@ -69,26 +68,7 @@ export function Settings(props: { board: Board; status: OfficeStatus | null; sou
         </section>
 
         <section className="card">
-          <h2>사무실 PC (C)</h2>
-          <table>
-            <tbody>
-              <tr>
-                <td>마지막으로 올린 시각</td>
-                <td className="num">{time(st?.at)}</td>
-              </tr>
-              <tr>
-                <td>프로그램 판</td>
-                <td className="num">{st?.version || "—"}</td>
-              </tr>
-              {!!st?.pending && (
-                <tr>
-                  <td className="bad">아직 못 올린 날</td>
-                  <td className="num bad">{st.pending}일</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          {st?.lastError && <p className="note bad">⚠ {st.lastError}</p>}
+          <h2>자료 받기</h2>
           {props.source === "demo" ? (
             <p className="note">체험판입니다. 숫자는 모두 가짜 자료입니다 (날씨는 기상청 실제 값).</p>
           ) : (
@@ -103,7 +83,6 @@ export function Settings(props: { board: Board; status: OfficeStatus | null; sou
           )}
           <p className="note">
             마지막 확인 {time(props.syncedAt)}
-            {props.source === "office" ? " · 사무실 PC에서 바로 보는 중" : ""}
           </p>
         </section>
 

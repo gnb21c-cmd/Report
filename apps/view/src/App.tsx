@@ -83,7 +83,6 @@ export function App() {
       <header className="top">
         <CalendarStrip from={from} to={to} selected={date} present={present} latest={latest} onSelect={setDate} onSettings={() => open({ name: "settings" })} />
         {d.source === "demo" && <div className="demo-tag">체험판 · 가짜 자료</div>}
-        {d.source === "office" && <div className="demo-tag">사무실 PC(C)에서 바로 보는 중</div>}
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>

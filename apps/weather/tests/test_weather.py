@@ -2,9 +2,7 @@ import datetime as dt
 import json
 import unittest
 
-from report_office.server import Office
-from report_office.store import Store
-from report_office.weather import Kma, days_to_fetch, latest_forecast_base, parse_asos, parse_forecast, parse_precip
+from report_weather.weather import Kma, days_to_fetch, latest_forecast_base, parse_asos, parse_forecast, parse_precip
 
 
 def fc(date, time, cat, val):
@@ -71,39 +69,37 @@ class FakeKma:
         return [{"date": "2026-10-01", "key": "rain", "label": "비", "icon": "🌧️", "tempMax": 18.0, "tempMin": 12.0, "rainMm": 3, "source": "forecast", "basis": "202610010500"}]
 
 
-class WeatherRelay:
-    def __init__(self):
-        self.weather = []
-        self.reports = []
+class FakeRelay:
+    def __init__(self, have=None):
+        self.have = dict(have or {})
+        self.put = []
+
+    def weather_sources(self):
+        return dict(self.have)
 
     def put_weather(self, d):
-        self.weather.append((d["date"], d["source"]))
-
-    def put_report(self, r, version):
-        self.reports.append(r["date"])
-
-    def put_status(self, s):
-        pass
+        self.put.append((d["date"], d["source"]))
+        self.have[d["date"]] = d["source"]
 
 
-CONF = {"name": "시험", "port": 8770, "officePin": "", "firebase": {"apiKey": "k", "projectId": "p", "email": "e@x", "password": "pw", "board": "b" * 20}, "weather": {"serviceKey": "x"}}
+class RunTest(unittest.TestCase):
+    def run_once(self, relay, kma, now):
+        import importlib.util, pathlib, sys
+        # __main__ 은 불러오면 main() 을 돌리므로 run 만 꺼내 씀
+        src = pathlib.Path(__file__).resolve().parents[1] / "src" / "report_weather" / "__main__.py"
+        code = src.read_text(encoding="utf-8").replace("sys.exit(main())", "")
+        ns = {"__name__": "report_weather._t", "__package__": "report_weather"}
+        exec(compile(code, str(src), "exec"), ns)
+        return ns["run"](relay, kma, now)
 
-
-class OfficeWeatherTest(unittest.TestCase):
     def test_backfill_then_only_new(self):
-        store, kma, relay = Store(":memory:"), FakeKma(), WeatherRelay()
-        o = Office(CONF, store, relay=relay, kma=kma, now=lambda: dt.datetime(2026, 10, 1, 22, 10))
-        o.tick()
-        self.assertEqual(relay.weather, [("2026-09-29", "observed"), ("2026-09-30", "observed"), ("2026-10-01", "forecast")])
-        # 다음 날: 어제(10/1) 관측값만 받아 예보를 바꿈 (관측은 예보를 바꾸고, 예보는 관측을 못 바꿈)
-        relay.weather.clear()
-        o.now = lambda: dt.datetime(2026, 10, 2, 9, 0)
-        o.weather_due = True
-        o.tick()
+        relay, kma = FakeRelay(), FakeKma()
+        done = self.run_once(relay, kma, dt.datetime(2026, 10, 1, 22, 10))
+        self.assertEqual(done, [("2026-09-29", "observed"), ("2026-09-30", "observed"), ("2026-10-01", "forecast")])
+        # 다음 날: 어제(10/1) 관측만 받아 예보를 바꿈
+        done = self.run_once(relay, kma, dt.datetime(2026, 10, 2, 9, 0))
         self.assertEqual(kma.asked[-1], ("2026-10-01", "2026-10-01"))
-        self.assertEqual(relay.weather, [("2026-10-01", "observed")])
-        self.assertFalse(store.put_weather({"date": "2026-10-01", "source": "forecast", "key": "rain"}))
-        self.assertEqual(store.weather("2026-10-01")["source"], "observed")
+        self.assertEqual(done, [("2026-10-01", "observed")])  # 가짜 예보는 10/1 것뿐이고 10/1 은 이미 관측이라 건너뜀
 
 
 if __name__ == "__main__":

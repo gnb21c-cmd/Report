@@ -1,11 +1,10 @@
 rules_version = '2';
-// 매출 보고 클라우드 보관함 보안 규칙 (Firebase 콘솔 → Firestore → 규칙에 붙여 넣기)
+// 매출 보고 클라우드 보관함 보안 규칙 (Firebase 콘솔 → Firestore → 규칙에 붙여 넣기 · 또는 GitHub Deploy 가 저절로)
 //
-// 매장 자료는 boards/{열쇠}/ 아래에 둡니다. 열쇠 = 긴 무작위 글자 (docs/SETUP.md ①-6)
-//   보는 폰 (로그인 없음)   → 설치 주소 /b/{열쇠}/ 를 아는 폰만 읽음 (열쇠를 모르면 목록도 못 봄). 쓰기 없음
-//   사무실 PC (C)           → senders/{이메일} = { board: "{열쇠}" } 계정으로 로그인해
-//                             보고(reports) · 날씨(weather) · 상태(devices)만 씀
-//   senders 문서는 Firebase 콘솔에서만 만듦
+// 매장 자료는 boards/{열쇠}/ 아래에 둡니다. 열쇠 = 긴 무작위 글자 (docs/SETUP.md ③)
+//   보는 폰 (B, 로그인 없음) → 설치 주소 /b/{열쇠}/ 를 아는 폰만 보고(reports) · 날씨(weather)를 읽음. 쓰기 없음
+//   입력 계정 (A 직원 · 날씨) → senders/{이메일} = { board: "{열쇠}" } 명단에 있는 계정만 씀
+//   senders 문서는 Firebase 콘솔에서만 만듦 (A 는 로그인 때 자기 문서에서 열쇠를 읽음)
 service cloud.firestore {
   match /databases/{database}/documents {
     function email() {
@@ -16,19 +15,22 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/senders/$(email()))
         && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
     }
+    function piece(name) {
+      return !(name in request.resource.data) || (request.resource.data[name] is string && request.resource.data[name].size() < 900000);
+    }
 
     match /boards/{board} {
-      // 그날 보고 (C 가 카페 · 키즈 · 네이버 조각을 합친 것) — 문서 이름 = 날짜, report = JSON 글자
+      // 그날 보고 — 칸 cafe · kids · naver = 조각 JSON (A 가 보낸 칸만 바뀜)
       match /reports/{date} {
         allow read: if true;
         allow write: if isSender(board)
           && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
           && request.resource.data.date == date
-          && request.resource.data.report is string
-          && request.resource.data.report.size() < 900000;
+          && request.resource.data.keys().hasOnly(["date", "at", "cafe", "kids", "naver"])
+          && piece("cafe") && piece("kids") && piece("naver");
       }
 
-      // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜
+      // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜. GitHub 날씨 계정이 씀
       match /weather/{date} {
         allow read: if true;
         allow write: if isSender(board)
@@ -36,14 +38,16 @@ service cloud.firestore {
           && request.resource.data.date == date;
       }
 
-      // C 상태 (devices/office)
-      match /devices/{id} {
-        allow read: if true;
-        allow write: if isSender(board);
+      // 상품 분류표 · 정리한 영수증 줄 — 입력 계정만 (폰은 안 읽음)
+      match /config/{doc} {
+        allow read, write: if isSender(board);
+      }
+      match /lines/{id} {
+        allow read, write: if isSender(board);
       }
     }
 
-    // C 계정 명단 — 자기 문서만 읽기, 쓰기는 콘솔에서만
+    // 입력 계정 명단 — 자기 문서만 읽기, 쓰기는 콘솔에서만
     match /senders/{em} {
       allow read: if email() == em;
     }

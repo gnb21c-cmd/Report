@@ -221,7 +221,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
             닫기
           </button>
           <button disabled={!n || busy} onClick={send}>
-            {busy ? "보내는 중…" : `C 로 보내기 (${count(n, "일치")})`}
+            {busy ? "보내는 중…" : `클라우드로 보내기 (${count(n, "일치")})`}
           </button>
         </div>
       </div>
