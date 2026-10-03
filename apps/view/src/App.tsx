@@ -11,6 +11,7 @@ import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { LogScreen } from "./screens/LogScreen";
 import { CashDetail } from "./screens/CashDetail";
 import { SettleDetail } from "./screens/SettleDetail";
+import { VisitorsDetail } from "./screens/VisitorsDetail";
 import { DayDetail } from "./screens/DayDetail";
 
 function Notice({ title, text }: { title: string; text: string }) {
@@ -94,6 +95,7 @@ export function App() {
   else if (view.name === "year") body = <YearDetail board={board} {...nav} />;
   else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
+  else if (view.name === "visitors") body = <VisitorsDetail board={board} {...nav} />;
   else if (view.name === "settle") body = <SettleDetail cashParts={cashParts} {...nav} />;
   else if (view.name === "cash") {
     const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;

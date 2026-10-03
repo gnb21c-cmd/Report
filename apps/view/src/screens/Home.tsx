@@ -21,6 +21,7 @@ export type View =
   | { name: "kids"; key: "walkIn" | "eventFree" }
   | { name: "cash" }
   | { name: "settle" }
+  | { name: "visitors" }
   | { name: "settings" };
 export type Open = (v: View) => void;
 
@@ -108,11 +109,13 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
 
       {/* 그날 정보 — 방문인원 · 1인 평균소비 · 키즈 입장 (하루치라 섹터 바로 아래) */}
       <div className="stats">
-        <div className="stat">
-          <div className="stat-label">카페아스타나 방문인원</div>
+        <button className="stat tap" onClick={() => open({ name: "visitors" })}>
+          <div className="stat-label">
+            카페아스타나 방문인원 <Chevron />
+          </div>
           <div className="stat-value">{count(day.visitors, "명")}</div>
           <span className="note">음료·맥주 {count(day.cups, "잔")} × 0.96</span>
-        </div>
+        </button>
         <div className="stat">
           <div className="stat-label">1인 평균소비</div>
           <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>

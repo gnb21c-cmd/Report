@@ -283,3 +283,25 @@ describe("'9월 이벤트(시간제한X)/30,000원' — 이름에 금액이 붙�
     expect(kidsKind({ name: "[평일] 한가위 무제한 쿠폰", qty: 1, gross: 0, net: 0 })).toBe("이벤트무료");
   });
 });
+
+describe("대관 (어린이집 · 유치원 등) — 키즈입장 매출", async () => {
+  const { rentalIn, settlements } = await import("../src");
+  const cashPart = (date: string, rows: any) => ({ date, rates: { usd: 0, jpy: 0 }, open: {}, rows, loans: [] }) as any;
+  it("키즈 POS '대관' 상품은 3월 이전에도 키즈입장, 4월 이후엔 기타에서 키즈입장으로 옮김", () => {
+    const old = buildStorePart({ store: "kids", date: "2025-05-14", file: "k", sheet: { from: "2025-05-14", to: "2025-05-14", lines: [line({ name: "아스타나키즈 대관 [평일] 10시~12시", qty: 1, gross: 200000, net: 200000 })], sheetNet: null } as any, sectorOf: () => "기타" as any }).part;
+    const m1 = new Board([{ date: "2025-05-14", kids: old }]).day("2025-05-14");
+    expect(m1.rental).toBe(200000);
+    expect(m1.box.키즈입장료).toBe(200000);
+    const now = buildStorePart({ store: "kids", date: "2026-05-14", file: "k", sheet: { from: "2026-05-14", to: "2026-05-14", lines: [line({ name: "아스타나키즈 대관 [평일] 10시~12시", qty: 1, gross: 200000, net: 200000 })], sheetNet: null } as any, sectorOf: () => "기타" as any }).part;
+    const m2 = new Board([{ date: "2026-05-14", kids: now }]).day("2026-05-14");
+    expect([m2.box.키즈입장료, m2.box.기타, m2.total]).toEqual([200000, 0, 200000]);
+  });
+  it("통장에 들어온 어린이집 · 유치원 대관 입금 = 그날 키즈입장 매출 + 정산 '대관'", () => {
+    const cash = cashPart("2026-05-07", { shinhan: [{ inWho: "하슬린어린이집", inMemo: "아스타나키즈 대관매출", inAmt: 230000, outWho: "", outMemo: "", outAmt: 0 }, { inWho: "카드가맹점", inMemo: "", inAmt: 1000, outWho: "", outMemo: "", outAmt: 0 }] });
+    expect(rentalIn(cash)).toBe(230000);
+    const m = new Board([{ date: "2026-05-07", cash }]).day("2026-05-07");
+    expect([m.rental, m.box.키즈입장료]).toEqual([230000, 230000]);
+    const s = settlements([cash], "2026-01-01", "2026-12-31");
+    expect([s.by.rental, s.by.card, s.total]).toEqual([230000, 1000, 231000]);
+  });
+});

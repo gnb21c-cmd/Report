@@ -14,6 +14,7 @@
    ============================================================ */
 import { dayRange, daysInMonth, lyCalendar, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
 import { EXTRA_KINDS, type ExtraKind } from "./extra";
+import { rentalIn } from "./cash";
 import { isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
@@ -91,6 +92,8 @@ export interface Metrics {
   eventFree: number;
   fee: { naver: number; walkIn: number };
   kidsOtherNet: number;
+  /** 대관 (어린이집 · 유치원 등) — 키즈 POS '대관' 상품 + 통장 대관 입금, 키즈입장에 더함 */
+  rental: number;
   /** POS 밖 매출 (자판기 · 인생네컷 · 주차) — 기타 상자에 더함 */
   extra: Record<ExtraKind, number>;
 }
@@ -121,6 +124,7 @@ function empty(from: string, to: string): Metrics {
     eventFree: 0,
     fee: { naver: 0, walkIn: 0 },
     kidsOtherNet: 0,
+    rental: 0,
     extra: { vending: 0, photo: 0, parking: 0 },
   };
 }
@@ -242,9 +246,13 @@ export class Board {
         m.walkIn += k.walkIn;
         m.eventFree += k.eventFree;
         m.walkInPosNet += k.walkInNet;
+        // 키즈 POS '대관' 상품 → 키즈입장 (4월부터는 기타에 들어 있던 것을 옮김)
+        let rent = 0;
+        for (const p of kids.products || []) if (/대관/.test(p[0]) && p[1] === "기타") rent += p[3];
+        m.rental += rent;
         if (sales) {
-          m.kidsOtherNet += k.other;
-          m.box.기타 += k.other;
+          m.kidsOtherNet += k.other - rent;
+          m.box.기타 += k.other - rent;
         }
       }
     }
@@ -268,7 +276,9 @@ export class Board {
     const wShort = Math.min(m.walkIn, sWalk);
     m.fee = kidsSales(date) ? { naver: (m.naver - nShort) * price + nShort * sp, walkIn: (m.walkIn - wShort) * price + wShort * sp } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
-    m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
+    // 통장으로 받은 대관료 (어린이집 · 유치원)
+    m.rental += rentalIn(r?.cash);
+    m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon + m.rental;
     // POS 밖 매출 (자판기 · 인생네컷 · 주차 — VAN 승인 내역) → 기타
     if (r?.extra) for (const k of EXTRA_KINDS) m.extra[k] += r.extra[k] || 0;
     m.box.기타 += m.extra.vending + m.extra.photo + m.extra.parking;
@@ -309,6 +319,7 @@ export class Board {
       m.fee.naver += x.fee.naver;
       m.fee.walkIn += x.fee.walkIn;
       m.kidsOtherNet += x.kidsOtherNet;
+      m.rental += x.rental;
       for (const k of EXTRA_KINDS) m.extra[k] += x.extra[k];
     }
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
@@ -578,4 +589,23 @@ export function yearMonthly(board: Board, key: MetricKey, date: string, cumulati
   };
   // 작년 달마다 = 작년 같은 달 (달력, 월간 비교)
   return { cur: run(y, curMonth, date), ly: run(y, 12, null, true) };
+}
+
+/** 방문인원 주 단위 합계 (월 ~ 일) — 1월 1일이 든 주부터 마감일이 든 주까지 (마감일 주는 마감일까지).
+ *  작년 = 같은 주 · 같은 요일 (364일 전), 한 주 전체 */
+export function weeklyVisitors(board: Board, date: string): { starts: string[]; cur: (number | null)[]; ly: (number | null)[] } {
+  const jan1 = `${date.slice(0, 4)}-01-01`;
+  const back = (weekdayIndex(jan1) + 6) % 7; // 월요일까지 거슬러
+  const starts: string[] = [];
+  for (let s = addDaysKey(jan1, -back); s <= date; s = addDaysKey(s, 7)) starts.push(s);
+  const val = (m: Metrics) => (m.has.cafe ? m.visitors : null);
+  return {
+    starts,
+    cur: starts.map((s) => val(board.range(s, addDaysKey(s, 6) < date ? addDaysKey(s, 6) : date))),
+    ly: starts.map((s) => val(board.range(lyDay(s), lyDay(addDaysKey(s, 6))))),
+  };
+}
+
+function weekdayIndex(key: string): number {
+  return new Date(key + "T00:00:00Z").getUTCDay();
 }

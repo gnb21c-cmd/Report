@@ -334,3 +334,18 @@ function addDaysT(d: string, n: number) {
   x.setUTCDate(x.getUTCDate() + n);
   return x.toISOString().slice(0, 10);
 }
+
+describe("방문인원 — 주 단위 합계 (월~일) · 작년은 같은 주(364일 전)", async () => {
+  const { weeklyVisitors } = await import("../src");
+  it("1월 1일이 든 주부터 마감일이 든 주까지, 마감일 주는 마감일까지", () => {
+    const reports: DayReport[] = [];
+    for (let d = "2024-12-30"; d <= "2026-01-14"; d = addDaysT(d, 1)) reports.push({ date: d, cafe: cafe(d, { 바리스타: 1000, cups: d < "2025-06-01" ? 10 : 20 }) });
+    const b = new Board(reports);
+    const w = weeklyVisitors(b, "2026-01-14"); // 수요일
+    expect(w.starts).toEqual(["2025-12-29", "2026-01-05", "2026-01-12"]);
+    const v = (cups: number, days: number) => Math.round(cups * 0.96) * days;
+    expect(w.cur).toEqual([v(20, 7), v(20, 7), v(20, 3)]);
+    // 작년 같은 주 = 364일 전 (2024-12-30 ~ 2025-01-05 …), 한 주 전체
+    expect(w.ly[0]).toBe(v(10, 7));
+  });
+});

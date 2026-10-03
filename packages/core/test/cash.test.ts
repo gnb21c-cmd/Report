@@ -100,7 +100,7 @@ describe("정산 총계 · 지급 수수료 (1/1 ~ 마감일)", () => {
     const b: CashPart = { ...sheet(), date: "2026-01-02", rows: { nh: [row({ inWho: "카드가맹점", inAmt: 1000000 })], shinhan: [row({ inWho: "네이버페이정산", inAmt: 300000 }), row({ inWho: "알파비젼㈜", inMemo: "계좌이체", inAmt: 5000000 })], cashAlpha: [row({ inWho: "카페아스타나", inMemo: "1/2 현금매출", inAmt: 50000 })] } };
     const s = settlements([a, b], "2026-01-01", "2026-01-31");
     expect(s.total).toBe(1350000);
-    expect(s.by).toEqual({ card: 1000000, naver: 300000, delivery: 0, cash: 50000 });
+    expect(s.by).toEqual({ card: 1000000, naver: 300000, delivery: 0, rental: 0, cash: 50000 });
     expect(s.days).toBe(1);
   });
 });
