@@ -286,6 +286,17 @@ export function isSettlement(account: string, r: Pick<CashRow, "inWho" | "inMemo
   return null;
 }
 
+/** 지급 수수료를 볼 때 매출을 어디까지 셀지 — 카드 대금은 보통 1~2영업일 뒤 들어오므로 마감일부터 거슬러 두 번째 영업일까지.
+ *  (정산은 마감일까지 그대로) 연휴 · 주말에 입금이 멈춰 수수료가 부풀었다 줄었다 하는 것을 막음 — 2026 자료로 시험해 가장 고름 */
+export function feeSalesTo(date: string): string {
+  let x = addDays(date, 1);
+  for (let k = 0; k < 2; ) {
+    x = addDays(x, -1);
+    if (!isOffDay(x)) k++;
+  }
+  return x;
+}
+
 /** from ~ to 의 매출 정산 입금 합 (원화 계좌만) */
 export function settlements(parts: CashPart[], from: string, to: string): { total: number; by: Record<SettleKind, number>; days: number } {
   const by: Record<SettleKind, number> = { card: 0, naver: 0, delivery: 0, cash: 0 };

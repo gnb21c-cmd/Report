@@ -131,3 +131,13 @@ describe("휴일 자금 — 입출금 없이 가장 최근 잔액", () => {
     expect(cashOnDay(book, parts, "2026-10-10")).toBeNull();
   });
 });
+
+describe("지급 수수료 — 카드 대금이 늦게 들어오는 몫을 빼고 (매출은 두 번째 영업일까지)", async () => {
+  const { feeSalesTo } = await import("../src");
+  it("평일 · 주말 · 추석 연휴", () => {
+    expect(feeSalesTo("2026-09-30")).toBe("2026-09-29"); // 수 → 화
+    expect(feeSalesTo("2026-09-27")).toBe("2026-09-22"); // 일 (추석 9/24~26) → 화 9/22
+    expect(feeSalesTo("2026-09-28")).toBe("2026-09-23"); // 월 → 수 9/23
+    expect(feeSalesTo("2026-10-05")).toBe("2026-10-01"); // 개천절 대체 휴일 → 목 10/1
+  });
+});

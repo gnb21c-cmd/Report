@@ -14,7 +14,7 @@ const manifestLink = (): Plugin => ({
 export default defineConfig(({ mode }) => {
   const demo = mode === "demo";
   return {
-    define: { __DEMO__: JSON.stringify(demo) },
+    define: { __DEMO__: JSON.stringify(demo), __BUILD__: JSON.stringify(new Date().toISOString()) },
     plugins: demo
       ? [react(), viteSingleFile()]
       : [

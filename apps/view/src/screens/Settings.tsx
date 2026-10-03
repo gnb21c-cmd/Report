@@ -84,6 +84,8 @@ export function Settings(props: { board: Board; status: OfficeStatus | null; sou
           <p className="note">
             마지막 확인 {time(props.syncedAt)}
           </p>
+          <ExtraCheck board={props.board} />
+          <p className="note">앱 버전 {__BUILD__.slice(0, 16).replace("T", " ")} (UTC)</p>
         </section>
 
         <section className="card">
@@ -155,5 +157,15 @@ export function Settings(props: { board: Board; status: OfficeStatus | null; sou
         </section>
       </main>
     </>
+  );
+}
+
+/** 자판기 · 인생네컷 · 주차가 폰에 들어왔는지 (보고 문서 extra 칸) — 0일이면 '처음부터 다시 받기' */
+function ExtraCheck({ board }: { board: Board }) {
+  const days = [...board.byDate.values()].filter((r) => r.extra).map((r) => r.date).sort();
+  return (
+    <p className="note">
+      자판기 · 네컷 · 주차 자료: {days.length ? `${days.length}일 (${days[0]} ~ ${days[days.length - 1]})` : "없음 — 위 '처음부터 다시 받기'를 눌러 주세요"}
+    </p>
   );
 }
