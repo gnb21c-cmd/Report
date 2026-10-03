@@ -341,13 +341,9 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
           <Delta now={m.box.기타} before={pw.has.cafe + pw.has.kids ? pw.box.기타 : null} label="지난주 같은 요일" money={false} />
           {m.total > 0 && <span className="note">총 매출의 {((m.box.기타 / m.total) * 100).toFixed(1)}%</span>}
         </HeroBox>
-        <div className="stats">
-          {rows.slice(0, 2).map((r) => (
-            <EtcStat key={r.label} {...r} per={per} />
-          ))}
-        </div>
-        <div className="stats">
-          {rows.slice(2).map((r) => (
+        {/* 한 줄에 하나씩 길게 */}
+        <div className="etc-list">
+          {rows.map((r) => (
             <EtcStat key={r.label} {...r} per={per} />
           ))}
         </div>
@@ -361,10 +357,12 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
 
 function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: number; per: string }) {
   return (
-    <div className="stat">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{won(day)}</div>
-      <span className="note period">
+    <div className="stat etc-row">
+      <div className="etc-top">
+        <span className="stat-label">{label}</span>
+        <span className="stat-value">{won(day)}</span>
+      </div>
+      <span className="note">
         {per} 누적 {label} 매출 {won(ytd)}
       </span>
     </div>

@@ -1220,3 +1220,28 @@ ul.plain li {
 .low-total b {
   font-size: 17px;
 }
+/* 기타 상세 — 한 줄에 하나씩 */
+.etc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.etc-row .etc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.etc-row .note {
+  text-align: left;
+}
+.stat.etc-row {
+  align-items: stretch;
+  text-align: left;
+}
+.etc-row .etc-top {
+  width: 100%;
+}
+.etc-row .note {
+  align-self: flex-start;
+}
