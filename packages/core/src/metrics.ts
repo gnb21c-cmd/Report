@@ -242,7 +242,9 @@ export class Board {
     } else m.naver = m.naverPos;
     const { price } = kidsPrice(date);
     // 4월부터 입장료 × 장수. 3월까지는 교환권 방식 — 네이버 × 3만원 + 현장 구매 결제액
-    m.fee = kidsSales(date) ? { naver: m.naver * price, walkIn: m.walkIn * price } : { naver: m.naver * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
+    // 3월까지 네이버 판매 장수 = POS 입장 발행 − 현장 구매 (당일 취소가 안 돼 발행 = 판매). 키즈 엑셀이 없으면 네이버 입력
+    const oldNaver = m.issued > 0 ? m.naverPos : m.naver;
+    m.fee = kidsSales(date) ? { naver: m.naver * price, walkIn: m.walkIn * price } : { naver: oldNaver * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;

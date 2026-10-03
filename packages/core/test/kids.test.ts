@@ -175,3 +175,20 @@ describe("2026-03 까지 키즈 매출 = 받은 교환권 값 − 카페에서 �
     expect(minus.box.키즈입장료).toBe(-60000); // 교환권을 더 준 실수 → − 키즈 매출
   });
 });
+
+describe("2026-03 까지 네이버 판매 장수 = POS 입장 발행 − 현장 구매 (당일 취소가 안 되어 발행 = 판매)", () => {
+  it("2025-12-20: 발행 204 − 현장 3 = 네이버 201장 → 201 × 3만 + 9만 − 교환권 600만 = +12만", async () => {
+    const { Board } = await import("../src");
+    const date = "2025-12-20";
+    const tickets = NAVER_SLOTS.map(() => 0);
+    tickets[0] = 196; // 캡처로 옮긴 숫자 (시간대 인원용)
+    const kids = kidsDay(date, [
+      line({ time: "10:00:00", name: "11시20분 퇴장 [10시 입장]", qty: 204 }),
+      line({ receipt: "0002", time: "19:20:34", name: "현장 구매 30,000원", qty: 3, gross: 90000, net: 90000 }),
+    ]);
+    const cafe = buildStorePart({ store: "cafe", date, file: "c", sheet: { from: date, to: date, lines: [line({ name: "[아키 2만원] 교환권", qty: 200, gross: -6000000, net: -6000000 })], sheetNet: null } as any, sectorOf: () => "키친" as any }).part;
+    const m = new Board([{ date, cafe, kids, naver: naverPastPart({ date, tickets }) }]).day(date);
+    expect(m.fee.naver).toBe(201 * 30000);
+    expect(m.box.키즈입장료).toBe(120000);
+  });
+});
