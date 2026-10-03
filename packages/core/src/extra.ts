@@ -20,6 +20,8 @@ export interface ExtraPart {
   vending: number;
   photo: number;
   parking: number;
+  /** 칸마다 누가 언제 어느 파일로 올렸는지 (A 의 자판기 · 네컷 · 주차 칸) */
+  files?: Partial<Record<ExtraKind, { by: string; at: string; file?: string }>>;
 }
 
 /** 카드 단말기 번호(CAT_ID) → 매출 종류 */
@@ -163,8 +165,12 @@ export function extraUpdates(sheets: NiceSheet[]): ExtraUpdate[] {
 }
 
 /** 이미 있는 값에 덮기 — 바꿀 종류만 */
-export function applyExtra(old: ExtraPart | undefined | null, u: ExtraUpdate): ExtraPart {
-  const out = old ? { ...emptyExtra(u.date), ...old, v: 1 as const, date: u.date } : emptyExtra(u.date);
+export function applyExtra(old: ExtraPart | undefined | null, u: ExtraUpdate, meta?: { by: string; at: string; file?: string }): ExtraPart {
+  const out: ExtraPart = old ? { ...emptyExtra(u.date), ...old, v: 1, date: u.date } : emptyExtra(u.date);
   for (const k of u.kinds) out[k] = u.part[k];
+  if (meta) {
+    out.files = { ...(out.files || {}) };
+    for (const k of u.kinds) out.files[k] = { by: meta.by, at: meta.at, ...(meta.file ? { file: meta.file } : {}) };
+  }
   return out;
 }

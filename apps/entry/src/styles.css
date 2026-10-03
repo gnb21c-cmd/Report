@@ -1177,3 +1177,27 @@ table.detail {
   font-weight: 600;
   color: var(--ink-2);
 }
+
+/* 자판기 · 인생네컷 · 주차 — 세 칸 한 줄 */
+.files.three {
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-top: 10px;
+}
+.how-row {
+  justify-content: space-between;
+  align-items: center;
+}
+.extrabox .drop-big {
+  font-size: 14px;
+}
+@media (max-width: 1100px) {
+  .files.three {
+    grid-template-columns: 1fr;
+  }
+}
+.files.three .sector-body {
+  min-height: 78px;
+}
+.files.three .panel-head {
+  flex-wrap: wrap;
+}

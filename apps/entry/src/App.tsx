@@ -3,6 +3,7 @@
    맨 위 안내: "yy년 mm월 dd일 기준 -1일 전의 일자 (영업마감 현재) 기준 영업 데이터를 입력하세요"
    영역마다 맡은 사람이 따로, 아무 때나 (아침 일찍 · 전날 저녁):
      ① 네이버 예약 시간대 표   ② 카페아스타나 엑셀 (+ 새 상품 분류)   ③ 아스타나키즈 엑셀   ④ 자금 현황
+     자판기 · 인생네컷 · 주차정산기 (POS 밖 카드 매출 — 나이스 통합거래조회 엑셀, 칸마다 그 종류만 바뀜)
    영역마다 [업로드] → 그 영역만 클라우드(Firebase)로 → 회색 빗금 '업로드 완료'
             [수정]   → 빗금이 풀리고 클라우드에 올라간 내용 그대로 고침 → 다시 [업로드] 하면 그날 그 영역만 바뀜
    이 PC 에는 아무것도 저장하지 않음 (어느 PC 에서 열어도 클라우드에서 불러옴). 빈칸은 올릴 때 0
@@ -10,7 +11,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   addDays,
+  applyExtra,
   Board,
+  EXTRA_KINDS,
+  EXTRA_LABEL,
+  type ExtraKind,
+  type ExtraPart,
   buildNaverPart,
   count,
   money,
@@ -31,6 +37,7 @@ import { api, ApiError, loadMe, mergeReport, saveMe, type DayInfo, type Info, ty
 import { compute, loadFile, newProducts, type Loaded } from "./load";
 import { NaverGrid } from "./NaverGrid";
 import { FileBox } from "./FileBox";
+import { ExtraBox, loadExtra, type ExtraLoaded } from "./ExtraBox";
 import { ImportPast } from "./ImportPast";
 import { CashSheet, CashTable, draftFromPart, draftSummary, fillZeros, partFromDraft, type CashDraft } from "./CashBox";
 
@@ -52,9 +59,15 @@ interface CashCtx {
   openFrom: string | null;
   prevRates: { usd: number; jpy: number } | null;
 }
+/** 자판기 · 네컷 · 주차 칸이 클라우드에 올라갔는지 (Claude 정리 파일로 넣은 날 = 세 칸 모두) */
+const xUploaded = (e: ExtraPart | undefined | null, k: ExtraKind) => !!e && (!e.files || !!e.files[k]);
+const xFlags = (v: boolean): Record<ExtraKind, boolean> => ({ vending: v, photo: v, parking: v });
+const X_N: Record<ExtraKind, string> = { vending: "⑤", photo: "⑥", parking: "⑦" };
+const X_TITLE: Record<ExtraKind, string> = { vending: "자판기 매출", photo: "인생네컷 매출", parking: "주차정산기 매출" };
+
 /** 업로드 확인 창 */
 interface Ask {
-  kind: Kind;
+  kind: Kind | ExtraKind;
   body: SubmitBody;
   lines: string[];
 }
@@ -84,7 +97,14 @@ export function App() {
   const [ask, setAsk] = useState<Ask | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showHow, setShowHow] = useState(false);
-  const anyDirty = KINDS.some((k) => dirty[k]);
+  const [showXHow, setShowXHow] = useState(false);
+  // 자판기 · 네컷 · 주차 칸
+  const [xFiles, setXFiles] = useState<Partial<Record<ExtraKind, ExtraLoaded>>>({});
+  const [xBusy, setXBusy] = useState<ExtraKind | null>(null);
+  const [xEditing, setXEditing] = useState<Record<ExtraKind, boolean>>(xFlags(true));
+  const [xDirty, setXDirty] = useState<Record<ExtraKind, boolean>>(xFlags(false));
+  const [xPassword, setXPassword] = useState("1");
+  const anyDirty = KINDS.some((k) => dirty[k]) || EXTRA_KINDS.some((k) => xDirty[k]);
   const touch = (k: Kind) => setDirty((p) => (p[k] ? p : { ...p, [k]: true }));
 
   /* ---------- 클라우드 연결 (로그인) ---------- */
@@ -152,6 +172,9 @@ export function App() {
       // 클라우드에 올라간 영역은 빗금 (고치려면 [수정])
       setEditing({ naver: !r?.naver, cafe: !r?.cafe, kids: !r?.kids, cash: !r?.cash });
       setDirty(flags(false));
+      setXFiles({});
+      setXEditing({ vending: !xUploaded(r?.extra, "vending"), photo: !xUploaded(r?.extra, "photo"), parking: !xUploaded(r?.extra, "parking") });
+      setXDirty(xFlags(false));
       setLoading(false);
     },
     [fromServer],
@@ -174,7 +197,7 @@ export function App() {
 
   const changeDate = (d: string) => {
     if (d === date) return;
-    if (anyDirty && !sure(`업로드하지 않은 입력이 있습니다 (${KINDS.filter((k) => dirty[k]).map((k) => KIND_LABEL[k]).join(", ")}). 날짜를 바꾸면 사라집니다. 바꿀까요?`)) return;
+    if (anyDirty && !sure(`업로드하지 않은 입력이 있습니다 (${[...KINDS.filter((k) => dirty[k]).map((k) => KIND_LABEL[k]), ...EXTRA_KINDS.filter((k) => xDirty[k]).map((k) => EXTRA_LABEL[k])].join(", ")}). 날짜를 바꾸면 사라집니다. 바꿀까요?`)) return;
     setDate(d);
   };
 
@@ -196,8 +219,10 @@ export function App() {
     if (editing.naver && dirty.naver) parts.naver = buildNaverPart(date, tickets, newVisitors);
     if (editing.cafe && results.cafe) parts.cafe = results.cafe.part;
     if (editing.kids && results.kids) parts.kids = results.kids.part;
+    const xs = EXTRA_KINDS.filter((k) => xEditing[k] && xFiles[k] && !xFiles[k]!.error);
+    if (xs.length) parts.extra = applyExtra(server?.extra, { date, part: { v: 1, date, vending: xFiles.vending?.value || 0, photo: xFiles.photo?.value || 0, parking: xFiles.parking?.value || 0 }, kinds: xs });
     return new Board([mergeReport(server, date, me.name, parts)]).day(date);
-  }, [server, date, me.name, editing, dirty, tickets, newVisitors, results]);
+  }, [server, date, me.name, editing, dirty, tickets, newVisitors, results, xEditing, xFiles]);
 
   /* ---------- 입력 바꾸기 ---------- */
   const onGrid = (row: "tickets" | "newVisitors", v: string[]) => {
@@ -221,6 +246,58 @@ export function App() {
       const n = { ...p };
       delete n[store];
       return n;
+    });
+  };
+  const onXFiles = async (k: ExtraKind, fs: File[]) => {
+    setXBusy(k);
+    setMsg(null);
+    const l = await loadExtra(k, fs, date, xPassword);
+    setXFiles((p) => ({ ...p, [k]: l }));
+    setXDirty((p) => ({ ...p, [k]: true }));
+    setXBusy(null);
+  };
+  const xButtons = (k: ExtraKind) => {
+    const locked = !xEditing[k];
+    const l = xFiles[k];
+    return (
+      <div className="actions">
+        {locked ? (
+          <button className="ghost" onClick={() => (setXEditing((p) => ({ ...p, [k]: true })), setMsg({ kind: "info", text: `${EXTRA_LABEL[k]}: 새 파일을 올리고 [업로드] 를 누르면 ${shortLabel(date)} ${EXTRA_LABEL[k]}만 바뀝니다.` }))} disabled={loading}>
+            ✎ 수정
+          </button>
+        ) : (
+          xUploaded(server?.extra, k) && (
+            <button
+              className="ghost"
+              onClick={() => {
+                if (xDirty[k] && !sure(`${EXTRA_LABEL[k]}에 올린 파일을 빼고 클라우드에 있는 그대로 둘까요?`)) return;
+                setXFiles((p) => ({ ...p, [k]: undefined }));
+                setXEditing((p) => ({ ...p, [k]: false }));
+                setXDirty((p) => ({ ...p, [k]: false }));
+              }}
+              disabled={busy}
+            >
+              취소
+            </button>
+          )
+        )}
+        <button className="primary" onClick={() => uploadX(k)} disabled={locked || busy || loading || !l || !!l.error}>
+          ⬆ 업로드
+        </button>
+      </div>
+    );
+  };
+  const uploadX = (k: ExtraKind) => {
+    setMsg(null);
+    if (!me.name) return setAskMe(true);
+    const l = xFiles[k];
+    if (!l || l.error) return setMsg({ kind: "bad", text: `${EXTRA_LABEL[k]} 엑셀을 먼저 올려 주세요.` });
+    const part = applyExtra(server?.extra, { date, part: { v: 1, date, vending: 0, photo: 0, parking: 0, [k]: l.value }, kinds: [k] }, { by: me.name, at: new Date().toISOString(), file: l.names.join(", ") });
+    const old = server?.extra?.files?.[k];
+    setAsk({
+      kind: k,
+      body: { date, by: me.name, parts: { extra: part } },
+      lines: [l.names.join(", "), `${EXTRA_LABEL[k]} ${won(l.value)} · ${count(l.lines, "건")}`, xUploaded(server?.extra, k) ? `클라우드에 있던 ${won(server!.extra![k])}${old ? `(${old.by} ${when(old.at)})` : ""}을 이것으로 바꿉니다.` : ""],
     });
   };
   const onCash = (d: CashDraft) => {
@@ -305,9 +382,16 @@ export function App() {
       await api.submit(ask.body);
       const got = await api.day(date).catch(() => null);
       if (got) setDay(got);
-      setEditing((p) => ({ ...p, [k]: false }));
-      setDirty((p) => ({ ...p, [k]: false }));
-      setMsg({ kind: "ok", text: `✓ ${shortLabel(date)} ${KIND_LABEL[k]} 업로드 완료${__DEMO__ ? " (체험판 — 이 브라우저에만)" : " — 폰(B)에서 앱을 다시 열면 보입니다."}` });
+      if (k === "vending" || k === "photo" || k === "parking") {
+        setXEditing((p) => ({ ...p, [k]: false }));
+        setXDirty((p) => ({ ...p, [k]: false }));
+        setXFiles((p) => ({ ...p, [k]: undefined }));
+      } else {
+        setEditing((p) => ({ ...p, [k]: false }));
+        setDirty((p) => ({ ...p, [k]: false }));
+      }
+      const label = k === "vending" || k === "photo" || k === "parking" ? EXTRA_LABEL[k] : KIND_LABEL[k];
+      setMsg({ kind: "ok", text: `✓ ${shortLabel(date)} ${label} 업로드 완료${__DEMO__ ? " (체험판 — 이 브라우저에만)" : " — 폰(B)에서 앱을 다시 열면 보입니다."}` });
       if (ask.body.products) void refreshTable();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setAskMe(true);
@@ -416,6 +500,11 @@ export function App() {
                   {k === "naver" ? "네이버" : k === "cafe" ? "카페" : k === "kids" ? "키즈" : "자금"} {server?.[k] ? "✓" : "—"}
                 </span>
               ))}
+              {EXTRA_KINDS.map((k) => (
+                <span key={k} className={`have ${xUploaded(server?.extra, k) ? "yes" : "no"}`}>
+                  {k === "vending" ? "자판기" : k === "photo" ? "네컷" : "주차"} {xUploaded(server?.extra, k) ? "✓" : "—"}
+                </span>
+              ))}
             </span>
           </div>
           {msg && <div className={`msg ${msg.kind}`}>{msg.text}</div>}
@@ -494,6 +583,57 @@ export function App() {
                 <li>
                   매장 <b>[아스타나키즈]</b> 로 바꿔 한 번 더 → ③ 칸에 (매장 [전체] 로 받으면 섞여서 안 됨)
                 </li>
+              </ol>
+            )}
+
+            {/* 자판기 · 인생네컷 · 주차정산기 — POS 밖 카드 매출 (나이스) */}
+            <div className="files three">
+              {EXTRA_KINDS.map((k) => {
+                const meta = server?.extra?.files?.[k];
+                return (
+                  <Sector
+                    key={k}
+                    n={X_N[k]}
+                    title={X_TITLE[k]}
+                    locked={!xEditing[k]}
+                    meta={meta ? { by: meta.by, at: meta.at, file: meta.file } : xUploaded(server?.extra, k) ? server?.meta?.extra : undefined}
+                    actions={xButtons(k)}
+                    className="file-sector"
+                  >
+                    <ExtraBox
+                      kind={k}
+                      date={date}
+                      loaded={xFiles[k]}
+                      busy={xBusy === k}
+                      onFiles={(fs) => void onXFiles(k, fs)}
+                      onClear={() => (setXFiles((p) => ({ ...p, [k]: undefined })), setXDirty((p) => ({ ...p, [k]: false })))}
+                      serverValue={xUploaded(server?.extra, k) ? server!.extra![k] : undefined}
+                      locked={!xEditing[k]}
+                    />
+                  </Sector>
+                );
+              })}
+            </div>
+            <div className="row how-row">
+              <button className="link how" onClick={() => setShowXHow((v) => !v)}>
+                {showXHow ? "엑셀 받는 방법 닫기" : "자판기 · 인생네컷 · 주차정산기 매출 엑셀 받는 방법"}
+              </button>
+              <label className="muted small">
+                엑셀 비밀번호 <input type="password" value={xPassword} onChange={(e) => setXPassword(e.target.value)} style={{ width: 60 }} autoComplete="off" />
+              </label>
+            </div>
+            {showXHow && (
+              <ol className="steps">
+                <li>
+                  나이스 가맹점 사이트 <b>nibs.nicevan.co.kr</b> 로그인 → <b>통합거래조회</b>
+                </li>
+                <li>
+                  거래일자 <b>{longDate(date)}</b> 하루 · 단말기(CAT_ID) 하나 골라 조회 → 엑셀 받기 (비밀번호를 꼭 넣어야 함 — 넣은 비밀번호를 위 칸에, 기본 1)
+                </li>
+                <li>
+                  자판기 <b>3974466</b> → ⑤ 칸 · 인생네컷 <b>3974963</b> · <b>3974964</b> (두 대 — 파일 두 개를 함께 골라 ⑥ 칸) · 주차정산기 <b>3974965</b> → ⑦ 칸
+                </li>
+                <li>단말기를 여러 개 한꺼번에 조회해 받은 파일이면 세 칸에 같은 파일을 올려도 됩니다 (칸마다 자기 단말기만 꺼냄). 승인거절은 빼고 취소는 뺌</li>
               </ol>
             )}
 

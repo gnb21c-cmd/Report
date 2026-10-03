@@ -54,6 +54,9 @@ describe("POS 밖 매출 — 나이스 통합거래조회 (자판기 · 인생�
     const old = { v: 1 as const, date: "2026-07-01", vending: 9000, photo: 8000, parking: 7000 };
     expect(applyExtra(old, ups[0])).toEqual({ v: 1, date: "2026-07-01", vending: 9000, photo: 8000, parking: 0 });
     expect(applyExtra(undefined, ups[1])).toEqual({ v: 1, date: "2026-07-02", vending: 0, photo: 0, parking: 2000 });
+    // 누가 언제 올렸는지 — 바꾼 칸만
+    const withMeta = applyExtra({ ...old, files: { vending: { by: "가", at: "t0" } } }, ups[0], { by: "나", at: "t1", file: "주차.xlsx" });
+    expect(withMeta.files).toEqual({ vending: { by: "가", at: "t0" }, parking: { by: "나", at: "t1", file: "주차.xlsx" } });
   });
   it("모양이 다르면 null", () => {
     expect(parseNiceSheet([["아무거나"], ["1", "2"]])).toBeNull();

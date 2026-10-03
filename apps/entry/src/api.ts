@@ -139,7 +139,8 @@ const real = {
   /** 자판기 · 인생네컷 · 주차 (나이스 엑셀) — 파일에 든 종류만 그날 값으로 바꿈 */
   async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
     const have = await readDays(cfg(), body.updates.map((u) => u.date));
-    const pieces: Piece[] = body.updates.map((u) => ({ kind: "extra", date: u.date, part: applyExtra(have.get(u.date)?.extra, u), file: body.file }));
+    const at = new Date().toISOString();
+    const pieces: Piece[] = body.updates.map((u) => ({ kind: "extra", date: u.date, part: applyExtra(have.get(u.date)?.extra, u, { by: body.by, at, file: body.file }), file: body.file }));
     await writePieces(cfg(), body.by, pieces);
     return { ok: true, saved: pieces.length };
   },
@@ -246,7 +247,8 @@ const demo = {
   },
   async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
     const s = demoLoad();
-    for (const u of body.updates) s.reports[u.date] = mergeReport(s.reports[u.date] || null, u.date, body.by, { extra: applyExtra(s.reports[u.date]?.extra, u) });
+    const at = new Date().toISOString();
+    for (const u of body.updates) s.reports[u.date] = mergeReport(s.reports[u.date] || null, u.date, body.by, { extra: applyExtra(s.reports[u.date]?.extra, u, { by: body.by, at, file: body.file }) });
     demoSave(s);
     return { ok: true, saved: body.updates.length };
   },
