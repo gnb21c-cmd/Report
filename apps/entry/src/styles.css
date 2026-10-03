@@ -1201,3 +1201,160 @@ table.detail {
 .files.three .panel-head {
   flex-wrap: wrap;
 }
+
+/* ⚙ 설정 — 머리 오른쪽 단추 · 아래에서 올라오는 창 */
+.guide-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-btn {
+  flex: none;
+}
+.settings-body {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 24px;
+  padding-top: 12px;
+}
+.settings-body h3 {
+  font-size: 15px;
+  margin: 4px 0 6px;
+}
+.season-table input {
+  width: 100%;
+}
+.season-table input[size="6"] {
+  width: 70px;
+}
+.season-table input.bad {
+  border-color: #d32f2f;
+  background: #fff3f3;
+}
+.row-tools {
+  white-space: nowrap;
+}
+.season-pick {
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.s-hot {
+  background: #fde2e1;
+  color: #c62828;
+}
+.s-normal {
+  background: #fff4c2;
+  color: #8a6100;
+}
+.s-low {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+.hcal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.hcal-wd {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+}
+.hcal-wd.off {
+  color: #d32f2f;
+}
+.hcal-day {
+  position: relative;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.hcal-day.red .hd-n {
+  color: #d32f2f;
+  font-weight: 800;
+}
+.hcal-day.red {
+  background: #fff5f5;
+}
+.hcal-day.added {
+  outline: 2px solid #d32f2f;
+}
+.hcal-day.removed .hd-name {
+  text-decoration: line-through;
+  color: #999;
+}
+.hd-name {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #c62828;
+}
+.hd-season {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  height: 4px;
+  border-radius: 2px;
+}
+.hd-season.s-hot {
+  background: #e53935;
+}
+.hd-season.s-normal {
+  background: #fbc02d;
+}
+.hd-season.s-low {
+  background: #1e88e5;
+}
+.legend.red {
+  color: #d32f2f;
+}
+.legend.added {
+  color: #d32f2f;
+  font-weight: 800;
+}
+.legend.s-hot,
+.legend.s-normal,
+.legend.s-low {
+  background: none;
+}
+.legend.s-hot {
+  color: #e53935;
+}
+.legend.s-normal {
+  color: #fbc02d;
+}
+.legend.s-low {
+  color: #1e88e5;
+}
+@media (max-width: 1100px) {
+  .settings-body {
+    grid-template-columns: 1fr;
+  }
+}
+/* 자금 보고 누락 — 빨간 알림 */
+.hint.alert-red {
+  color: #d32f2f;
+  font-weight: 800;
+}
+.hcal-day .hd-n {
+  color: #222;
+  font-weight: 700;
+}
+.hcal-day:hover {
+  border-color: #1e88e5;
+}

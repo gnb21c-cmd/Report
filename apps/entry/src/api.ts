@@ -2,8 +2,8 @@
    A 가 자료를 주고받는 곳 — 클라우드 보관함(Firebase, cloud.ts)에 직접
    - 체험판: 클라우드 없이 이 브라우저 저장소(localStorage)에 흉내
    ============================================================ */
-import { addDays, applyExtra, mergeNaverPast, type CashPart, type ExtraPart, type ExtraUpdate, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
-import { addProducts, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readProducts, sessionEmail, writePieces, type Piece } from "./cloud";
+import { addDays, applyExtra, cleanSettings, mergeNaverPast, type ReportSettings, type CashPart, type ExtraPart, type ExtraUpdate, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
+import { addProducts, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readProducts, readSettings, sessionEmail, writePieces, writeSettings, type Piece } from "./cloud";
 
 export const APP_VERSION = "0.4.0";
 
@@ -136,6 +136,12 @@ const real = {
     if (body.products) await addProducts(cfg(), body.products);
     return { ok: true, saved: pieces.length, skipped };
   },
+  async settings(): Promise<ReportSettings | null> {
+    return readSettings(cfg());
+  },
+  async saveSettings(st: ReportSettings): Promise<void> {
+    await writeSettings(cfg(), st);
+  },
   /** 자판기 · 인생네컷 · 주차 (나이스 엑셀) — 파일에 든 종류만 그날 값으로 바꿈 */
   async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
     const have = await readDays(cfg(), body.updates.map((u) => u.date));
@@ -244,6 +250,21 @@ const demo = {
     Object.assign(s.products, body.products || {});
     demoSave(s);
     return { ok: true, saved, skipped };
+  },
+  async settings(): Promise<ReportSettings | null> {
+    try {
+      const j = localStorage.getItem("entry.demo.settings");
+      return j ? cleanSettings(JSON.parse(j)) : null;
+    } catch {
+      return null;
+    }
+  },
+  async saveSettings(st: ReportSettings): Promise<void> {
+    try {
+      localStorage.setItem("entry.demo.settings", JSON.stringify(cleanSettings(st)));
+    } catch {
+      /* 체험판 */
+    }
   },
   async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
     const s = demoLoad();

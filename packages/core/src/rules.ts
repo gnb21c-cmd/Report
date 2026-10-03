@@ -10,6 +10,7 @@
    ============================================================ */
 import { weekday } from "./dates";
 import { EXTRA_HOLIDAYS, HOLIDAYS } from "./holidays";
+import { currentSettings } from "./settings";
 import type { SaleLine, StoreId } from "./types";
 
 /** 키즈 입장권 단가 (from 날짜부터 적용, 늦은 것이 우선) — 값이 바뀌면 줄을 더함 */
@@ -18,8 +19,11 @@ export const KIDS_PRICES: { from: string; weekday: number; holiday: number }[] =
 /** 추정 방문자 = 잔 수 × 이 값 */
 export const VISITOR_FACTOR = 0.96;
 
+/** 휴일 이름 — 공휴일 표 + 설정에서 더한 날, 설정에서 뺀 날은 휴일 아님 */
 export function holidayName(date: string): string | null {
-  return HOLIDAYS[date] || EXTRA_HOLIDAYS[date] || null;
+  const s = currentSettings();
+  if (s.holidaysOff.includes(date)) return null;
+  return s.holidaysAdd[date] || HOLIDAYS[date] || EXTRA_HOLIDAYS[date] || null;
 }
 
 /** 평일 외 = 토·일·공휴일·대체공휴일 */

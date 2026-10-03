@@ -38,6 +38,12 @@ service cloud.firestore {
           && request.resource.data.date == date;
       }
 
+      // 보고 설정 (기간 스티커 · 휴일 더하기/빼기) — 보는 폰도 읽음, 입력 계정만 씀
+      match /settings/{doc} {
+        allow read: if true;
+        allow write: if isSender(board) && piece("json");
+      }
+
       // 상품 분류표 · 정리한 영수증 줄 — 입력 계정만 (폰은 안 읽음)
       match /config/{doc} {
         allow read, write: if isSender(board);

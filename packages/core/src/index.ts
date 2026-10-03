@@ -14,3 +14,4 @@ export * from "./format";
 export * from "./weather";
 export * from "./cash";
 export * from "./extra";
+export * from "./settings";

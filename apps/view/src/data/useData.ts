@@ -1,7 +1,7 @@
 /* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 클라우드에서
    → 폰 저장소 → 새로 온 것만 받기 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sampleUntilYesterday, todayKst, type DayReport, type WeatherKey, type WeatherMap } from "@report/core";
+import { cleanSettings, sampleUntilYesterday, todayKst, type DayReport, type ReportSettings, type WeatherKey, type WeatherMap } from "@report/core";
 import { boardKey, firebaseConfig, firebaseSource } from "./firebase";
 import type { OfficeStatus, Source } from "./source";
 import demoWeatherRaw from "./demoWeather.json";
@@ -20,12 +20,15 @@ export interface DataState {
   syncing: boolean;
   error: string | null;
   source: Source["kind"];
+  /** 보고 설정 (기간 스티커 · 휴일) — 계산 전에 applySettings */
+  settings: ReportSettings | null;
 }
 
 const SYNCED = "report.syncedAt";
 const CURSOR = "report.reportCursor";
 const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
+const SETTINGS = "report.settings";
 /** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
 const DATA_SHAPE = "report.dataShape";
 const SHAPE = "2026-10-extra-2"; // 2: 같은 시각 문서를 건너뛰던 받기 고침 → 한 번 더 처음부터
@@ -66,6 +69,10 @@ export function useData() {
     syncing: false,
     error: null,
     source: picked.kind,
+    settings: (() => {
+      const c = local.get<ReportSettings>(SETTINGS);
+      return c ? cleanSettings(c) : null;
+    })(),
   }));
 
   const sync = useCallback(async () => {
@@ -85,7 +92,8 @@ export function useData() {
       const got = await src.reports(local.get<string>(CURSOR));
       await saveCached(got.reports);
       if (got.last) local.set(CURSOR, got.last);
-      const [status, wx] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null }))]);
+      const [status, wx, settings] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null)]);
+      local.set(SETTINGS, settings);
       let weather = local.get<WeatherMap>(WEATHER) || {};
       if (wx.days.length) {
         weather = { ...weather };
@@ -95,7 +103,7 @@ export function useData() {
       }
       const now = new Date().toISOString();
       local.set(SYNCED, now);
-      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false }));
+      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings }));
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }

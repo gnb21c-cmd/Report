@@ -224,7 +224,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
         skipped += r.skipped;
         setMsg(`보내는 중… ${count(Math.min(all.length, i + 300))} / ${count(all.length)}`);
       }
-      setMsg(`${count(saved, "개")} 넣었습니다${skipped ? ` · 이미 A 에서 넣은 ${count(skipped, "개")}는 그대로 둠` : ""}.`);
+      setMsg(`${count(saved, "개")} 넣었습니다${skipped ? ` · 이미 입력 화면에서 넣은 ${count(skipped, "개")}는 그대로 둠` : ""}.`);
       setRows([]);
       onDone();
     } catch (e) {
@@ -262,10 +262,10 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
         )}
         {kind === "cash" && (
           <ol className="steps">
-            <li>Claude 에게 엑셀을 주면 A 모양으로 바꾼 파일(.json)을 돌려 드립니다 → 그 파일을 여기에 올림</li>
+            <li>Claude 에게 엑셀을 주면 입력 화면 모양으로 바꾼 파일(.json)을 돌려 드립니다 → 그 파일을 여기에 올림</li>
             <li>매출 파일: 상품별(일자별) 엑셀 여러 개를 하나로 묶은 것 — ① 에 하나씩 올린 것과 같음 (영수증별로 이미 넣은 날은 그대로)</li>
             <li>전일 잔고는 맨 첫날만 쓰고 그 뒤는 앞 보고의 금일 잔고로 이어짐 · 엑셀과 다른 곳은 '(잔고 맞춤)' 줄로 표시</li>
-            <li>자금 파일: A 에서 이미 자금을 올린 날은 바꾸지 않습니다</li>
+            <li>자금 파일: 입력 화면에서 이미 자금을 올린 날은 바꾸지 않습니다</li>
             <li>자판기 · 네컷 · 주차 파일: 그 날짜들의 세 가지를 파일 값으로 바꿉니다 (⑤ 에 나이스 엑셀을 올린 것과 같음)</li>
           </ol>
         )}
@@ -283,8 +283,8 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
           <ol className="steps">
             <li>네이버 예약 화면을 주 단위로 띄워 캡처 → Claude 가 표로 정리해 드림 (엑셀 · CSV)</li>
             <li>표 모양: 첫 칸 날짜, 머리글 10:00 · 10:30 … 19:30 (판매 입장권 수). 10:00~17:30 표와 18:00~19:30(야간 무제한) 표를 따로 올려도 같은 날짜는 합쳐짐</li>
-            <li>신규방문자는 지난 자료로는 알 수 없어 '—' 로 보입니다 (A 에 직접 넣는 날부터)</li>
-            <li>A 에서 이미 네이버를 넣은 날은 바꾸지 않습니다</li>
+            <li>신규방문자는 지난 자료로는 알 수 없어 '—' 로 보입니다 (입력 화면에 직접 넣는 날부터)</li>
+            <li>입력 화면에서 이미 네이버를 넣은 날은 바꾸지 않습니다</li>
           </ol>
         )}
         <div className="row">

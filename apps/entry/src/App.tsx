@@ -12,6 +12,10 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import {
   addDays,
   applyExtra,
+  applySettings,
+  isOffDay,
+  DEFAULT_SETTINGS,
+  type ReportSettings,
   Board,
   EXTRA_KINDS,
   EXTRA_LABEL,
@@ -38,6 +42,7 @@ import { compute, loadFile, newProducts, type Loaded } from "./load";
 import { NaverGrid } from "./NaverGrid";
 import { FileBox } from "./FileBox";
 import { ExtraBox, loadExtra, type ExtraLoaded } from "./ExtraBox";
+import { SettingsSheet } from "./SettingsSheet";
 import { ImportPast } from "./ImportPast";
 import { CashSheet, CashTable, draftFromPart, draftSummary, fillZeros, partFromDraft, type CashDraft } from "./CashBox";
 
@@ -97,6 +102,10 @@ export function App() {
   const [ask, setAsk] = useState<Ask | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showHow, setShowHow] = useState(false);
+  // ⚙ 설정 (기간 스티커 · 휴일) — 클라우드 settings/main
+  const [settings, setSettings] = useState<ReportSettings>(DEFAULT_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const [showXHow, setShowXHow] = useState(false);
   // 자판기 · 네컷 · 주차 칸
   const [xFiles, setXFiles] = useState<Partial<Record<ExtraKind, ExtraLoaded>>>({});
@@ -128,7 +137,29 @@ export function App() {
   useEffect(() => {
     void refreshInfo();
     void refreshTable();
+    void api
+      .settings()
+      .then((st) => {
+        applySettings(st);
+        setSettings(st || DEFAULT_SETTINGS);
+      })
+      .catch(() => {});
   }, [refreshInfo, refreshTable]);
+  const saveSettings = async (st: ReportSettings) => {
+    setSettingsBusy(true);
+    try {
+      const next = { ...st, by: me.name, at: new Date().toISOString() };
+      await api.saveSettings(next);
+      applySettings(next);
+      setSettings(next);
+      setShowSettings(false);
+      setMsg({ kind: "ok", text: "✓ 설정을 저장했습니다 — 보고 앱은 다시 열 때 바뀝니다." });
+    } catch (e) {
+      setMsg({ kind: "bad", text: `설정을 저장하지 못했습니다: ${(e as Error).message}` });
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
 
   /* ---------- 영역 하나를 클라우드에 있는 모양으로 ---------- */
   const fromServer = useCallback((k: Kind, report: DayReport | null | undefined, ctx?: { before: CashPart[]; d: string }) => {
@@ -170,7 +201,8 @@ export function App() {
       const r = got?.report;
       for (const k of KINDS) fromServer(k, r, { before: prev, d });
       // 클라우드에 올라간 영역은 빗금 (고치려면 [수정])
-      setEditing({ naver: !r?.naver, cafe: !r?.cafe, kids: !r?.kids, cash: !r?.cash });
+      // 주말 · 휴일(공휴일 · 대체공휴일 · 설정에서 더한 휴일)은 은행이 쉬어 금전출납이 없음 → 자금 칸은 기본 빗금
+      setEditing({ naver: !r?.naver, cafe: !r?.cafe, kids: !r?.kids, cash: !r?.cash && !isOffDay(d) });
       setDirty(flags(false));
       setXFiles({});
       setXEditing({ vending: !xUploaded(r?.extra, "vending"), photo: !xUploaded(r?.extra, "photo"), parking: !xUploaded(r?.extra, "parking") });
@@ -212,6 +244,13 @@ export function App() {
   const fresh = useMemo(() => newProducts(files.cafe, table), [files.cafe, table]);
   const server = day?.report || null;
   const openEditable = !cashCtx.openFrom;
+  /** 앞 자금 보고 다음 날 ~ 어제 사이 영업일(주말 · 휴일 빼고) 중 자금 보고가 없는 날 */
+  const cashMissing = useMemo(() => {
+    if (!cashCtx.openFrom || server?.cash) return [];
+    const out: string[] = [];
+    for (let x = addDays(cashCtx.openFrom, 1); x < date; x = addDays(x, 1)) if (!isOffDay(x)) out.push(x);
+    return out;
+  }, [cashCtx.openFrom, date, server, settings]);
   const cashSum = useMemo(() => draftSummary(cash, cashCtx.open, cashCtx.openFrom, cashCtx.prevRates), [cash, cashCtx]);
   /** 미리보기: 클라우드에 있는 것 + 지금 고치는 영역 */
   const preview = useMemo(() => {
@@ -222,7 +261,7 @@ export function App() {
     const xs = EXTRA_KINDS.filter((k) => xEditing[k] && xFiles[k] && !xFiles[k]!.error);
     if (xs.length) parts.extra = applyExtra(server?.extra, { date, part: { v: 1, date, vending: xFiles.vending?.value || 0, photo: xFiles.photo?.value || 0, parking: xFiles.parking?.value || 0 }, kinds: xs });
     return new Board([mergeReport(server, date, me.name, parts)]).day(date);
-  }, [server, date, me.name, editing, dirty, tickets, newVisitors, results, xEditing, xFiles]);
+  }, [server, date, me.name, editing, dirty, tickets, newVisitors, results, xEditing, xFiles, settings]);
 
   /* ---------- 입력 바꾸기 ---------- */
   const onGrid = (row: "tickets" | "newVisitors", v: string[]) => {
@@ -414,7 +453,7 @@ export function App() {
             ✎ 수정
           </button>
         ) : (
-          server?.[k] && (
+          (server?.[k] || (k === "cash" && isOffDay(date))) && (
             <button className="ghost" onClick={() => cancel(k)} disabled={busy}>
               취소
             </button>
@@ -434,7 +473,7 @@ export function App() {
     <div className="page">
       <header className="bar">
         <div className="title">
-          <span className="logo">📊</span> 아스타나 매출 보고 입력 <small>(A)</small>
+          <span className="logo">📊</span> 아스타나 매출 보고 입력
           {__DEMO__ && <span className="demo">체험판 — 이 브라우저에만 저장</span>}
         </div>
         <div className="bar-right">
@@ -464,9 +503,14 @@ export function App() {
         {conn && <div className="alert bad">⚠ {conn}</div>}
 
         <section className="panel head-panel">
-          <p className="guide">
-            {y.slice(2)}년 {m}월 {d}일 기준 -1일 전의 일자 (영업마감 현재) 기준 영업 데이터를 입력하세요
-          </p>
+          <div className="guide-row">
+            <p className="guide">
+              {y.slice(2)}년 {m}월 {d}일 기준 -1일 전의 일자 (영업마감 현재) 기준 영업 데이터를 입력하세요
+            </p>
+            <button className="ghost settings-btn" onClick={() => setShowSettings(true)}>
+              ⚙ 설정
+            </button>
+          </div>
           <div className="date-row">
             <span className="date-label">입력할 영업일</span>
             <button className="ghost" onClick={() => changeDate(addDays(date, -1))} aria-label="전날">
@@ -693,7 +737,9 @@ export function App() {
           <Sector
             n="④"
             title="자금 현황 — 자금요약"
-            hint={!editing.cash ? undefined : cashCtx.openFrom ? (cashCtx.openFrom !== addDays(date, -1) ? `⚠ ${shortLabel(addDays(date, -1))} 자금 보고가 없어 ${shortLabel(cashCtx.openFrom)} 마감 잔고를 전일 잔고로` : `전일 잔고 = ${shortLabel(cashCtx.openFrom)} 마감 (클라우드)`) : "처음 자금 보고 — 전일 잔고를 직접 넣어 주세요"}
+            hint={!editing.cash ? undefined : cashCtx.openFrom ? `전일 잔고 = ${shortLabel(cashCtx.openFrom)} 마감 (클라우드)` : "처음 자금 보고 — 전일 잔고를 직접 넣어 주세요"}
+            alert={cashMissing.length ? `⚠️ ${cashMissing.map((x) => `${Number(x.slice(5, 7))}월 ${Number(x.slice(8, 10))}일`).join(" · ")} 자금보고 누락!!` : undefined}
+            cover={!server?.cash && isOffDay(date) ? "금전출납 없음" : undefined}
             locked={!editing.cash}
             meta={server?.meta?.cash}
             className="cash-sector"
@@ -709,6 +755,7 @@ export function App() {
         </div>
       </main>
 
+      {showSettings && <SettingsSheet initial={settings} busy={settingsBusy} onSave={(st) => void saveSettings(st)} onClose={() => setShowSettings(false)} />}
       {sheet && <CashSheet draft={cash} focus={sheet.focus} onChange={onCash} onClose={() => setSheet(null)} />}
       {ask && (
         <div className="modal-bg" role="dialog" aria-modal="true" aria-label="업로드 확인">
@@ -754,23 +801,23 @@ export function App() {
 }
 
 /** 입력 영역 하나 — 업로드가 끝나면 회색 빗금으로 덮고 '업로드 완료' */
-function Sector(props: { n: string; title: string; hint?: string; locked: boolean; meta?: PartMeta; actions: ReactNode; className?: string; children: ReactNode }) {
+function Sector(props: { n: string; title: string; hint?: string; alert?: string; locked: boolean; meta?: PartMeta; cover?: string; actions: ReactNode; className?: string; children: ReactNode }) {
   return (
     <section className={`panel sector ${props.locked ? "locked" : ""} ${props.className || ""}`}>
       <div className="panel-head">
         <h2>
           <span className="n">{props.n}</span> {props.title}
         </h2>
-        {props.hint && <span className="hint">{props.hint}</span>}
+        {props.alert ? <span className="hint alert-red">{props.alert}</span> : props.hint && <span className="hint">{props.hint}</span>}
         {props.actions}
       </div>
       <div className="sector-body">
         {props.children}
         {props.locked && (
-          <div className="cover" aria-label="업로드 완료">
+          <div className="cover" aria-label={props.cover || "업로드 완료"}>
             <span className="cover-tag">
-              ✓ 업로드 완료
-              {props.meta && (
+              {props.cover || "✓ 업로드 완료"}
+              {!props.cover && props.meta && (
                 <small>
                   {props.meta.by} · {when(props.meta.at)}
                 </small>

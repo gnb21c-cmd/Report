@@ -174,7 +174,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
             { label: "올해 누계", now: year, before: lyYear, pick: (m) => m.naver, has },
           ]}
         />
-        {month.newKnown > 0 && <p className="note center-note">이달 신규방문자 {count(month.newVisitors, "명")} (A 에 넣은 {count(month.newKnown, "일")})</p>}
+        {month.newKnown > 0 && <p className="note center-note">이달 신규방문자 {count(month.newVisitors, "명")} (입력 화면에 넣은 {count(month.newKnown, "일")})</p>}
       </main>
     </>
   );

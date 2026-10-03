@@ -1,5 +1,5 @@
 /* 자료를 어디서 받는지 — 클라우드 보관함(Firebase) · 체험판(가짜) */
-import type { DayReport, DayWeather } from "@report/core";
+import type { DayReport, DayWeather, ReportSettings } from "@report/core";
 
 /** (예전 C 상태 — 지금은 쓰지 않음) */
 export interface OfficeStatus {
@@ -17,5 +17,7 @@ export interface Source {
   reports(after: string | null): Promise<{ reports: DayReport[]; last: string | null }>;
   weather(after: string | null): Promise<{ days: DayWeather[]; last: string | null }>;
   status(): Promise<OfficeStatus | null>;
+  /** 보고 설정 (기간 스티커 · 휴일) — 없으면 null */
+  settings(): Promise<ReportSettings | null>;
 }
 

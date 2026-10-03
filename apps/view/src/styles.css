@@ -455,17 +455,18 @@ button.stat {
   border-radius: 999px;
   border: 1px solid var(--border);
 }
+/* 기간 스티커 색 — 성수기 빨강 · 평상시 노랑 · 비수기 파랑 */
 .season.s-성수기 {
-  background: var(--warn-bg);
-  color: var(--warn-ink);
+  background: var(--s-hot-bg);
+  color: var(--s-hot-ink);
 }
 .season.s-평상시 {
-  background: var(--track);
-  color: var(--accent);
+  background: var(--s-normal-bg);
+  color: var(--s-normal-ink);
 }
 .season.s-비수기 {
-  background: var(--page);
-  color: var(--text-secondary);
+  background: var(--s-low-bg);
+  color: var(--s-low-ink);
 }
 /* 폰: 날씨 글자를 화면 폭에 맞추고 '최고/최저' 글자는 숨김 (🌡️ · 🧊 그림으로) */
 @media (max-width: 520px) {
@@ -1249,4 +1250,32 @@ ul.plain li {
 .log-date {
   white-space: nowrap;
   vertical-align: top;
+}
+
+/* 기간 스티커 색 값 */
+:root {
+  --s-hot-bg: #fde2e1;
+  --s-hot-ink: #c62828;
+  --s-normal-bg: #fff4c2;
+  --s-normal-ink: #8a6100;
+  --s-low-bg: #dbeafe;
+  --s-low-ink: #1d4ed8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --s-hot-bg: #3d1517;
+    --s-hot-ink: #ff8a80;
+    --s-normal-bg: #3a3110;
+    --s-normal-ink: #ffd54f;
+    --s-low-bg: #12243f;
+    --s-low-ink: #90caf9;
+  }
+}
+:root[data-theme="dark"] {
+  --s-hot-bg: #3d1517;
+  --s-hot-ink: #ff8a80;
+  --s-normal-bg: #3a3110;
+  --s-normal-ink: #ffd54f;
+  --s-low-bg: #12243f;
+  --s-low-ink: #90caf9;
 }

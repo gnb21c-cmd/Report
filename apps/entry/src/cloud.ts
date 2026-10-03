@@ -8,7 +8,7 @@
    - 날씨: boards/{열쇠}/weather/{날짜} (GitHub 가 1시간마다 기상청에서 받아 넣음 — apps/weather)
    B 가 읽는 쪽: apps/view/src/data/firebase.ts toReport
    ============================================================ */
-import type { CashPart, DayReport, DayWeather, ExtraPart, NaverPart, StorePart } from "@report/core";
+import { cleanSettings, type CashPart, type DayReport, type DayWeather, type ExtraPart, type NaverPart, type ReportSettings, type StorePart } from "@report/core";
 
 export interface CloudConfig {
   apiKey: string;
@@ -236,5 +236,25 @@ export async function addProducts(cfg: CloudConfig, add: Record<string, string>)
     method: "PATCH",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${t.id}` },
     body: JSON.stringify({ fields: { table: str(JSON.stringify(table)), at: { timestampValue: new Date().toISOString() } } }),
+  });
+}
+
+/* ---------- 보고 설정 (기간 스티커 · 휴일) — settings/main, 보고 앱도 읽음 ---------- */
+export async function readSettings(cfg: CloudConfig): Promise<ReportSettings | null> {
+  const f = await get(cfg, "settings/main");
+  if (!f?.json) return null;
+  try {
+    return cleanSettings(JSON.parse(f.json));
+  } catch {
+    return null;
+  }
+}
+
+export async function writeSettings(cfg: CloudConfig, s: ReportSettings): Promise<void> {
+  const t = await idToken(cfg);
+  await http(`${docsBase(cfg)}/boards/${t.board}/settings/main?updateMask.fieldPaths=json&updateMask.fieldPaths=at`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${t.id}` },
+    body: JSON.stringify({ fields: { json: str(JSON.stringify(cleanSettings(s))), at: { timestampValue: new Date().toISOString() } } }),
   });
 }

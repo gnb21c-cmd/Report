@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, cashBook, cashOnDay, closedDay, dashboard, settlements, type CashPart } from "@report/core";
+import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, settlements, type CashPart } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -26,7 +26,11 @@ function Notice({ title, text }: { title: string; text: string }) {
 
 export function App() {
   const d = useData();
-  const board = useMemo(() => new Board(d.reports), [d.reports]);
+  // 설정(기간 스티커 · 휴일)을 넣은 뒤 계산 — 설정이 바뀌면 다시
+  const board = useMemo(() => {
+    applySettings(d.settings);
+    return new Board(d.reports);
+  }, [d.reports, d.settings]);
   const present = useMemo(() => {
     const m = new Map<string, Set<string>>();
     for (const [date, r] of board.byDate) m.set(date, new Set([r.cafe && "cafe", r.kids && "kids", r.naver && "naver"].filter(Boolean) as string[]));
