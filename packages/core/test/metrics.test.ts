@@ -129,7 +129,7 @@ describe("작년 비교 = 364일 전 (같은 주 · 같은 요일)", () => {
     expect(lyDay("2026-10-01")).toBe("2025-10-02");
     for (const d of ["2026-01-01", "2026-02-28", "2026-03-01", "2026-12-31", "2028-02-29"]) expect(weekday(lyDay(d))).toBe(weekday(d));
   });
-  it("날마다 막대 · 당월 누계도 같은 요일끼리", async () => {
+  it("날마다 막대는 같은 요일끼리 · 당월 누계는 달력 날짜 (작년 9/1 ~ 9/15)", async () => {
     const { monthDaily } = await import("../src");
     // 작년 자료: 2025-09-16(화) 만 10만원
     const b = new Board([{ date: "2025-09-16", cafe: cafe("2025-09-16", { 바리스타: 100000 }) }, { date: "2026-09-15", cafe: cafe("2026-09-15", { 바리스타: 70000 }) }]);
@@ -137,8 +137,8 @@ describe("작년 비교 = 364일 전 (같은 주 · 같은 요일)", () => {
     expect(md.ly[14]).toBe(100000); // 9월 15일 자리에 작년 9/16(같은 요일)
     expect(md.ly[15]).toBeNull();
     const v = monthView(b, "2026-09-15");
-    expect(v.lyMonth.total).toBe(100000);
-    expect(dashboard(b, "2026-09-15").lyMonth.total).toBe(100000);
+    expect(v.lyMonth.total).toBe(0); // 작년 9/16 은 9/1 ~ 9/15 밖
+    expect(dashboard(b, "2026-09-15").lyMonth.to).toBe("2025-09-15");
   });
 });
 
@@ -306,3 +306,31 @@ describe("베이커리 — 마감일까지 60일 동안 적게 팔린 빵 10종 
     expect(lowSellers(b, "2026-10-02", "베이커리", 60, 2).rows.length).toBe(2);
   });
 });
+
+describe("월간 비교는 달력 날짜 (작년 같은 달 1일 ~ 마감일과 같은 날짜) · 하루 · 올해 누계는 364일", async () => {
+  const { lyCalendar, lyDay } = await import("../src");
+  it("달력 날짜 · 2월 29일은 28일로", () => {
+    expect(lyCalendar("2026-10-02")).toBe("2025-10-02");
+    expect(lyCalendar("2024-02-29")).toBe("2023-02-28");
+    expect(lyDay("2026-10-02")).toBe("2025-10-03");
+  });
+  it("홈 · 당월 상세 · 올해 달마다", () => {
+    const days: { date: string; cafe: StorePart }[] = [];
+    for (let d = "2025-09-25"; d <= "2025-11-05"; d = addDaysT(d, 1)) days.push({ date: d, cafe: cafe(d, { 바리스타: Number(d.slice(8, 10)) * 1000 }) });
+    const b = new Board(days);
+    const dash = dashboard(b, "2026-10-02");
+    expect([dash.lyMonth.from, dash.lyMonth.to, dash.lyMonth.total]).toEqual(["2025-10-01", "2025-10-02", 3000]);
+    expect([dash.lyYear.to]).toEqual(["2025-10-03"]);
+    const v = monthView(b, "2026-10-02");
+    expect([v.lyMonth.total, v.lyFull.from, v.lyFull.to]).toEqual([3000, "2025-10-01", "2025-10-31"]);
+    expect(v.ly.slice(0, 3)).toEqual([1000, 3000, 6000]);
+    expect(v.ly[30]).toBe(((31 * 32) / 2) * 1000);
+    const ym = yearMonthly(b, "total", "2026-10-02");
+    expect(ym.ly[9]).toBe(((31 * 32) / 2) * 1000);
+  });
+});
+function addDaysT(d: string, n: number) {
+  const x = new Date(d + "T00:00:00Z");
+  x.setUTCDate(x.getUTCDate() + n);
+  return x.toISOString().slice(0, 10);
+}

@@ -14,6 +14,7 @@ import {
   NAVER_SLOTS,
   naverSlots,
   pct,
+  lyCalendar,
   lyDay as lyOf,
   shortLabel,
   sum,
@@ -81,9 +82,10 @@ export function NaverDetail(props: { board: Board } & Nav) {
   const daySlots = naverSlots(board, date, date);
   const lyDaySlots = naverSlots(board, ly, ly);
   const monSlots = naverSlots(board, monthStart(date), date);
-  const lyMonSlots = naverSlots(board, lyOf(monthStart(date)), ly);
+  // 이달 누계는 달력 날짜 (작년 같은 달 1일 ~ 같은 날짜) · 하루는 364일 전
+  const lyMonSlots = naverSlots(board, lyCalendar(monthStart(date)), lyCalendar(date));
   const month = board.range(monthStart(date), date);
-  const lyMonth = board.range(lyOf(monthStart(date)), ly);
+  const lyMonth = board.range(lyCalendar(monthStart(date)), lyCalendar(date));
   const year = board.range(`${date.slice(0, 4)}-01-01`, date);
   const lyYear = board.range(lyOf(`${date.slice(0, 4)}-01-01`), ly);
   const daily = monthDaily(board, "naver", date);
@@ -188,7 +190,7 @@ export function KidsBarsDetail(props: { board: Board; k: "walkIn" | "eventFree" 
   const pick = (m: Metrics) => m[k];
   const has = (m: Metrics) => m.has.kids > 0;
   const month = board.range(monthStart(date), date);
-  const lyMonth = board.range(lyOf(monthStart(date)), ly);
+  const lyMonth = board.range(lyCalendar(monthStart(date)), lyCalendar(date));
   const lyFull = sum(d.ly.map((v) => v || 0));
   const m = Number(date.slice(5, 7));
   return (

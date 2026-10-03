@@ -22,10 +22,9 @@ export function MonthDetail(props: { board: Board } & Nav) {
   // 달 단위로 움직임 (홈의 날짜는 그대로)
   const [date, setDate] = useState(props.date);
   const v = monthView(board, date);
-  const ly = lyDay(date); // 작년 = 364일 전 (같은 요일)
   const m = Number(date.slice(5, 7));
-  // 작년 같은 달 = 이번 달 날짜마다 364일 전 (말일이 다음 달 1일로 넘어가도 이름은 이번 달)
-  const lm = Number(date.slice(5, 7));
+  // 작년 같은 달 = 달력 날짜 (작년 같은 달 1일 ~ 같은 날짜) — 월간 비교
+  const lm = m;
   const d = Number(date.slice(8, 10));
   const series: Line[] = [
     { label: `작년 ${lm}월 (${Number(date.slice(0, 4)) - 1})`, color: "var(--ly)", values: v.ly, weight: 2 },
@@ -43,7 +42,7 @@ export function MonthDetail(props: { board: Board } & Nav) {
           <Delta now={v.month.total} before={comparable(v.lyMonth) ? v.lyMonth.total : null} label="작년 같은 달 같은 기간" money={false} missing={partial(v.lyMonth)} />
         </section>
         <div className="stats">
-          <Stat label="작년 같은 달 같은 기간 누계" value={money(v.lyMonth)} note={`${dot(v.lyMonth.from)} ~ ${ly.slice(5).replace("-", ".")}`} />
+          <Stat label="작년 같은 달 같은 기간 누계" value={money(v.lyMonth)} note={`${dot(v.lyMonth.from)} ~ ${v.lyMonth.to.slice(5).replace("-", ".")}`} />
           <Stat label={`작년 ${lm}월 한 달 전체`} value={money(v.lyFull)} note={v.lyFull.total > 0 && comparable(v.lyFull) ? `올해 ${((v.month.total / v.lyFull.total) * 100).toFixed(1)}% 채움` : undefined} />
         </div>
 

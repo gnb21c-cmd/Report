@@ -52,6 +52,14 @@ export function lyDay(key: string): string {
   return addDays(key, -364);
 }
 
+/** 작년 달력 같은 날짜 — 월간 비교용 (작년 같은 달 1일 ~ 이 날). 2월 29일은 작년 2월 말일로 */
+export function lyCalendar(date: string): string {
+  const y = Number(date.slice(0, 4)) - 1;
+  const mm = date.slice(5, 7);
+  const last = new Date(Date.UTC(y, Number(mm), 0)).getUTCDate();
+  return `${y}-${mm}-${String(Math.min(Number(date.slice(8, 10)), last)).padStart(2, "0")}`;
+}
+
 /** 달력 날짜 그대로 n년 전 (요일은 달라짐 — 작년 비교에는 lyDay) */
 export function sameDayYearsAgo(key: string, n = 1): string {
   const [y, m, d] = key.split("-").map(Number);
