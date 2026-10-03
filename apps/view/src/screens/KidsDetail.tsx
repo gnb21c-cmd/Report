@@ -14,7 +14,7 @@ import {
   NAVER_SLOTS,
   naverSlots,
   pct,
-  sameDayYearsAgo,
+  lyDay as lyOf,
   shortLabel,
   sum,
   yearMonthly,
@@ -74,17 +74,18 @@ const slotTip = (i: number) => `${NAVER_SLOTS[i]} ~ ${NAVER_SLOTS[i + 1] || "20:
 
 export function NaverDetail(props: { board: Board } & Nav) {
   const { board, date } = props;
-  const ly = sameDayYearsAgo(date);
+  // 작년 = 364일 전 (같은 주 · 같은 요일)
+  const ly = lyOf(date);
   const day = board.day(date);
   const lyDay = board.day(ly);
   const daySlots = naverSlots(board, date, date);
   const lyDaySlots = naverSlots(board, ly, ly);
   const monSlots = naverSlots(board, monthStart(date), date);
-  const lyMonSlots = naverSlots(board, monthStart(ly), ly);
+  const lyMonSlots = naverSlots(board, lyOf(monthStart(date)), ly);
   const month = board.range(monthStart(date), date);
-  const lyMonth = board.range(monthStart(ly), ly);
+  const lyMonth = board.range(lyOf(monthStart(date)), ly);
   const year = board.range(`${date.slice(0, 4)}-01-01`, date);
-  const lyYear = board.range(`${ly.slice(0, 4)}-01-01`, ly);
+  const lyYear = board.range(lyOf(`${date.slice(0, 4)}-01-01`), ly);
   const daily = monthDaily(board, "naver", date);
   const monthly = yearMonthly(board, "naver", date);
   const yearly = yearMonthly(board, "naver", date, true);
@@ -181,13 +182,13 @@ export function KidsBarsDetail(props: { board: Board; k: "walkIn" | "eventFree" 
   const { board, date, k } = props;
   const unit = k === "walkIn" ? "장" : "팀";
   const title = k === "walkIn" ? "현장 입장권 판매수" : "이벤트 무료입장팀 수";
-  const ly = sameDayYearsAgo(date);
+  const ly = lyOf(date);
   const d = monthDaily(board, k, date);
   const day = board.day(date);
   const pick = (m: Metrics) => m[k];
   const has = (m: Metrics) => m.has.kids > 0;
   const month = board.range(monthStart(date), date);
-  const lyMonth = board.range(monthStart(ly), ly);
+  const lyMonth = board.range(lyOf(monthStart(date)), ly);
   const lyFull = sum(d.ly.map((v) => v || 0));
   const m = Number(date.slice(5, 7));
   return (

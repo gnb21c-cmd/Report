@@ -122,12 +122,32 @@ describe("하루 숫자", () => {
   });
 });
 
+describe("작년 비교 = 364일 전 (같은 주 · 같은 요일)", () => {
+  it("26-09-15(화) ↔ 25-09-16(화), 요일이 늘 같음", async () => {
+    const { lyDay, weekday } = await import("../src");
+    expect(lyDay("2026-09-15")).toBe("2025-09-16");
+    expect(lyDay("2026-10-01")).toBe("2025-10-02");
+    for (const d of ["2026-01-01", "2026-02-28", "2026-03-01", "2026-12-31", "2028-02-29"]) expect(weekday(lyDay(d))).toBe(weekday(d));
+  });
+  it("날마다 막대 · 당월 누계도 같은 요일끼리", async () => {
+    const { monthDaily } = await import("../src");
+    // 작년 자료: 2025-09-16(화) 만 10만원
+    const b = new Board([{ date: "2025-09-16", cafe: cafe("2025-09-16", { 바리스타: 100000 }) }, { date: "2026-09-15", cafe: cafe("2026-09-15", { 바리스타: 70000 }) }]);
+    const md = monthDaily(b, "total", "2026-09-15");
+    expect(md.ly[14]).toBe(100000); // 9월 15일 자리에 작년 9/16(같은 요일)
+    expect(md.ly[15]).toBeNull();
+    const v = monthView(b, "2026-09-15");
+    expect(v.lyMonth.total).toBe(100000);
+    expect(dashboard(b, "2026-09-15").lyMonth.total).toBe(100000);
+  });
+});
+
 describe("누계", () => {
   const reports: DayReport[] = [...days("2025-01-01", "2025-12-31"), ...days("2026-01-01", "2026-10-01")].map((d) => ({ date: d, cafe: cafe(d, { 바리스타: 50000, cups: 10 }) }));
   const b = new Board(reports);
   it("대시보드: 당월 · 올해 · 작년 같은 기간", () => {
     const d = dashboard(b, "2026-10-01");
-    expect([d.weekday, d.prevWeek.date, d.month.total, d.year.total, d.lyDate, d.lyMonth.total, d.lyYear.total]).toEqual(["목", "2026-09-24", 50000, 274 * 50000, "2025-10-01", 50000, 274 * 50000]);
+    expect([d.weekday, d.prevWeek.date, d.month.total, d.year.total, d.lyDate, d.lyMonth.total, d.lyYear.total]).toEqual(["목", "2026-09-24", 50000, 274 * 50000, "2025-10-02", 50000, 274 * 50000]);
     expect(d.year.visitors).toBe(274 * 10);
   });
   it("당월 상세: 이번 달은 마감일까지 · 작년 같은 달은 한 달 전체 (지난달 없음)", () => {
@@ -154,8 +174,9 @@ describe("누계", () => {
 
 describe("키즈 입장권 상세 (네이버 · 현장 · 이벤트)", () => {
   const reports: DayReport[] = [
-    { date: "2025-10-01", kids: kids("2025-10-01", { issued: 10, walkIn: 2, eventFree: 1 }), naver: naver("2025-10-01", [1, 2]) },
-    { date: "2025-10-20", kids: kids("2025-10-20", { issued: 10, walkIn: 3 }) },
+    // 작년 = 364일 전 같은 요일: 26-10-01(목) ↔ 25-10-02(목), 26-10-20 ↔ 25-10-21
+    { date: "2025-10-02", kids: kids("2025-10-02", { issued: 10, walkIn: 2, eventFree: 1 }), naver: naver("2025-10-02", [1, 2]) },
+    { date: "2025-10-21", kids: kids("2025-10-21", { issued: 10, walkIn: 3 }) },
     { date: "2026-10-01", kids: kids("2026-10-01", { issued: 20, walkIn: 4, eventFree: 2 }), naver: naver("2026-10-01", [3, 4, 0, 1], [1]) },
   ];
   const b = new Board(reports);

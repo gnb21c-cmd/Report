@@ -12,7 +12,7 @@
    - 카페아스타나 방문인원 = 카페 음료·맥주 잔 수 × 0.96 (날마다 반올림), 1인 평균소비 = 총매출 ÷ 방문인원
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
-import { dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekdayLabel } from "./dates";
+import { dayRange, daysInMonth, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
 import { kidsPrice, kidsSales, OLD_VOUCHER_PRICE, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
@@ -340,7 +340,8 @@ export interface Dashboard {
 }
 
 export function dashboard(board: Board, date: string): Dashboard {
-  const ly = sameDayYearsAgo(date);
+  // 작년 비교는 364일 전 (같은 주 · 같은 요일)
+  const ly = lyDay(date);
   const pw = addDaysKey(date, -7);
   return {
     date,
@@ -349,8 +350,8 @@ export function dashboard(board: Board, date: string): Dashboard {
     prevWeek: { date: pw, m: board.day(pw) },
     month: board.range(monthStart(date), date),
     year: board.range(`${date.slice(0, 4)}-01-01`, date),
-    lyMonth: board.range(monthStart(ly), ly),
-    lyYear: board.range(`${ly.slice(0, 4)}-01-01`, ly),
+    lyMonth: board.range(lyDay(monthStart(date)), ly),
+    lyYear: board.range(lyDay(`${date.slice(0, 4)}-01-01`), ly),
     lyDate: ly,
     price: kidsPrice(date),
   };
@@ -401,17 +402,30 @@ function cumulate(board: Board, month: string, upto: number, total: number, key:
   return any ? out : out.map(() => null);
 }
 
+/** 작년 같은 주 · 같은 요일로 날마다 쌓은 선 (이번 달 n일 ↔ 그 364일 전) */
+function cumulateLy(board: Board, month: string, total: number, key: MetricKey): (number | null)[] {
+  let acc = 0;
+  let any = false;
+  const out: (number | null)[] = [];
+  for (let d = 1; d <= total; d++) {
+    const m = board.day(lyDay(`${month}-${String(d).padStart(2, "0")}`));
+    any = any || hasData(m) || m.has.naver > 0;
+    acc += valueOf(m, key) || 0;
+    out.push(acc);
+  }
+  return any ? out : out.map(() => null);
+}
+
 export function monthView(board: Board, date: string, key: MetricKey = "total"): MonthView {
   const total = daysInMonth(date);
-  const ly = sameDayYearsAgo(date);
-  const lyMonth = monthOf(ly);
+  const month = monthOf(date);
   return {
     days: Array.from({ length: total }, (_, i) => i + 1),
-    cur: cumulate(board, monthOf(date), Number(date.slice(8, 10)), total, key),
-    ly: cumulate(board, lyMonth, 31, total, key),
+    cur: cumulate(board, month, Number(date.slice(8, 10)), total, key),
+    ly: cumulateLy(board, month, total, key),
     month: board.range(monthStart(date), date),
-    lyMonth: board.range(monthStart(ly), ly),
-    lyFull: board.range(`${lyMonth}-01`, lastDay(lyMonth)),
+    lyMonth: board.range(lyDay(monthStart(date)), lyDay(date)),
+    lyFull: board.range(lyDay(`${month}-01`), lyDay(lastDay(month))),
     day: board.day(date),
   };
 }
@@ -437,8 +451,7 @@ export interface YearView {
 
 export function yearView(board: Board, date: string): YearView {
   const y = date.slice(0, 4);
-  const lyY = String(Number(y) - 1);
-  const ly = sameDayYearsAgo(date);
+  const ly = lyDay(date);
   const curMonth = Number(date.slice(5, 7));
   const cur: (number | null)[] = [];
   const last: (number | null)[] = [];
@@ -454,14 +467,14 @@ export function yearView(board: Board, date: string): YearView {
       a += m.total;
       cur.push(a);
     } else cur.push(null);
-    const lm = board.range(`${lyY}-${mm}-01`, lastDay(`${lyY}-${mm}`));
+    const lm = board.range(lyDay(`${y}-${mm}-01`), lyDay(lastDay(`${y}-${mm}`)));
     anyB = anyB || hasData(lm);
     b += lm.total;
     last.push(b);
   }
   const year = board.range(`${y}-01-01`, date);
-  const lyYear = board.range(`${lyY}-01-01`, ly);
-  const lyFull = board.range(`${lyY}-01-01`, `${lyY}-12-31`);
+  const lyYear = board.range(lyDay(`${y}-01-01`), ly);
+  const lyFull = board.range(lyDay(`${y}-01-01`), lyDay(`${y}-12-31`));
   let estimate: YearView["estimate"] = null;
   if (anyA && year.total > 0) {
     if (comparable(lyYear) && comparable(lyFull) && lyYear.total > 0) estimate = { value: Math.round((year.total * lyFull.total) / lyYear.total), how: "작년 흐름 기준" };
@@ -480,7 +493,7 @@ export function yearView(board: Board, date: string): YearView {
     lyYear,
     lyFull,
     month: board.range(monthStart(date), date),
-    lyMonthFull: board.range(`${monthOf(ly)}-01`, lastDay(monthOf(ly))),
+    lyMonthFull: board.range(lyDay(monthStart(date)), lyDay(lastDay(monthOf(date)))),
   };
 }
 
@@ -505,23 +518,24 @@ export function naverSlots(board: Board, from: string, to: string): { tickets: n
 /** 그 달 1일 ~ 말일 날마다의 값 — 이번 달은 마감일까지 · 작년 같은 달은 전체 (자료 없는 날 null) */
 export function monthDaily(board: Board, key: MetricKey, date: string): { days: number[]; cur: (number | null)[]; ly: (number | null)[] } {
   const total = daysInMonth(date);
-  const lyMonth = monthOf(sameDayYearsAgo(date));
+  const month = monthOf(date);
   const upto = Number(date.slice(8, 10));
-  const pick = (month: string, limit: number) =>
+  // 작년은 같은 주 · 같은 요일 (n일 ↔ 그 364일 전)
+  const pick = (limit: number, shift: boolean) =>
     Array.from({ length: total }, (_, i) => {
-      if (i + 1 > limit || i + 1 > daysInMonth(`${month}-01`)) return null;
-      const m = board.day(`${month}-${String(i + 1).padStart(2, "0")}`);
+      if (i + 1 > limit) return null;
+      const d = `${month}-${String(i + 1).padStart(2, "0")}`;
+      const m = board.day(shift ? lyDay(d) : d);
       return hasValue(m, key) ? valueOf(m, key) : null;
     });
-  return { days: Array.from({ length: total }, (_, i) => i + 1), cur: pick(monthOf(date), upto), ly: pick(lyMonth, 31) };
+  return { days: Array.from({ length: total }, (_, i) => i + 1), cur: pick(upto, false), ly: pick(31, true) };
 }
 
 /** 1~12월 달마다의 값 — 올해는 마감일까지 · 작년은 12달 전체 (cumulative 면 쌓은 값) */
 export function yearMonthly(board: Board, key: MetricKey, date: string, cumulative = false): { cur: (number | null)[]; ly: (number | null)[] } {
   const y = date.slice(0, 4);
-  const lyY = String(Number(y) - 1);
   const curMonth = Number(date.slice(5, 7));
-  const run = (year: string, limitMonth: number, end: string | null) => {
+  const run = (year: string, limitMonth: number, end: string | null, shift = false) => {
     let acc = 0;
     let any = false;
     const out: (number | null)[] = [];
@@ -531,7 +545,9 @@ export function yearMonthly(board: Board, key: MetricKey, date: string, cumulati
         continue;
       }
       const mm = `${year}-${String(mo).padStart(2, "0")}`;
-      const m = board.range(`${mm}-01`, mo === limitMonth && end ? end : lastDay(mm));
+      const from = `${mm}-01`;
+      const to = mo === limitMonth && end ? end : lastDay(mm);
+      const m = shift ? board.range(lyDay(from), lyDay(to)) : board.range(from, to);
       const has = hasValue(m, key);
       any = any || has;
       const v = valueOf(m, key) || 0;
@@ -540,5 +556,6 @@ export function yearMonthly(board: Board, key: MetricKey, date: string, cumulati
     }
     return any ? out : out.map(() => null);
   };
-  return { cur: run(y, curMonth, date), ly: run(lyY, 12, null) };
+  // 작년 달마다 = 올해 그 달을 364일 앞당긴 기간 (같은 요일 구성)
+  return { cur: run(y, curMonth, date), ly: run(y, 12, null, true) };
 }

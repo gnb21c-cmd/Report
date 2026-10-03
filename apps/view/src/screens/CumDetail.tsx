@@ -5,7 +5,7 @@
    올해누계 (11-6): 작년 같은 기간 누계 · 달마다 쌓은 선 (작년 12달 = 회색, 올해 = 빨강) · 12월에 연말 예상 점
                    · 방문자 (마감월 누적 · 작년 같은 달 · 1/1~마감일 · 작년 1/1~같은 날)
    ============================================================ */
-import { comparable, count, monthView, sameDayYearsAgo, won, wonShort, yearView, type Board, type Metrics } from "@report/core";
+import { comparable, count, lyDay, monthView, won, wonShort, yearView, type Board, type Metrics } from "@report/core";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
 import { Delta, partial } from "./Home";
@@ -18,7 +18,7 @@ const dot = (d: string) => d.replaceAll("-", ".");
 export function MonthDetail(props: { board: Board } & Nav) {
   const { board, date } = props;
   const v = monthView(board, date);
-  const ly = sameDayYearsAgo(date);
+  const ly = lyDay(date); // 작년 = 364일 전 (같은 요일)
   const m = Number(date.slice(5, 7));
   const lm = Number(ly.slice(5, 7));
   const d = Number(date.slice(8, 10));
@@ -78,7 +78,7 @@ export function YearDetail(props: { board: Board } & Nav) {
   const { board, date } = props;
   const v = yearView(board, date);
   const y = date.slice(0, 4);
-  const ly = sameDayYearsAgo(date);
+  const ly = lyDay(date); // 작년 = 364일 전 (같은 요일)
   const m = Number(date.slice(5, 7));
   const lm = Number(ly.slice(5, 7));
   const series: Line[] = [

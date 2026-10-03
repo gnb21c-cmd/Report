@@ -47,6 +47,12 @@ export function addMonths(month: string, n: number): string {
 }
 
 /** 같은 달 같은 날을 n 년 전으로 (2월 29일은 28일로) */
+/** 작년 비교 날 = 364일 전 (52주 전) — 요일이 같고 작년의 같은 주(월~일)에 듦. 예: 26-09-15(화) ↔ 25-09-16(화) */
+export function lyDay(key: string): string {
+  return addDays(key, -364);
+}
+
+/** 달력 날짜 그대로 n년 전 (요일은 달라짐 — 작년 비교에는 lyDay) */
 export function sameDayYearsAgo(key: string, n = 1): string {
   const [y, m, d] = key.split("-").map(Number);
   const yy = y - n;
