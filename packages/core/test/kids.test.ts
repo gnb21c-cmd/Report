@@ -59,3 +59,43 @@ describe("네이버 지난 자료 — 낮 · 밤 캡처 합치기", () => {
     expect(mergeNaverPast({ ...a, noNew: undefined }, m)).toBeNull();
   });
 });
+
+describe("2026-03-31 까지 — 키즈 매출 없음 (교환권 방식), 인원만", () => {
+  const sheet = (date: string, lines: ReceiptLine[]) => ({ from: date, to: date, lines, sheetNet: null }) as any;
+  const cafeDay = (date: string, lines: ReceiptLine[]) => buildStorePart({ store: "cafe", date, file: "c.xls", sheet: sheet(date, lines), sectorOf: () => "키친" as any }).part;
+
+  it("3/31 까지 키즈입장 0원 · 키즈 기타 매출 0원, 입장 인원은 그대로", async () => {
+    const { Board } = await import("../src");
+    const tickets = NAVER_SLOTS.map(() => 0);
+    tickets[0] = 4;
+    const kidsLines = [line({ time: "10:40:00", name: "1시간 50분", qty: 2, gross: 24000, net: 24000 }), line({ receipt: "0002", time: "11:10:00", name: "딸기주스", qty: 1, gross: 4000, net: 4000 })];
+    const before = "2026-03-27";
+    const after = "2026-04-03";
+    const b = new Board([
+      { date: before, kids: kidsDay(before, kidsLines), naver: naverPastPart({ date: before, tickets }) },
+      { date: after, kids: kidsDay(after, kidsLines), naver: naverPastPart({ date: after, tickets }) },
+    ]);
+    const m = b.day(before);
+    expect(m.naver).toBe(4);
+    expect(m.walkIn).toBe(2);
+    expect(m.box.키즈입장료).toBe(0);
+    expect(m.box.기타).toBe(0);
+    expect(m.total).toBe(0);
+    const h = hourDay(b, before, "키즈입장료")!;
+    expect(h.people[0]).toBe(6); // 인원은 시간대별로 그대로
+    expect(h.total).toBe(0);
+    // 4/1 부터는 입장료 · 키즈 기타 매출
+    const n = b.day(after);
+    expect(n.box.키즈입장료).toBe(6 * 12000);
+    expect(n.box.기타).toBe(4000);
+  });
+
+  it("카페의 키즈 교환권 −3만원 줄은 매출에서 빼지 않음 (네이버로 이미 받은 돈)", () => {
+    const p = cafeDay("2026-03-14", [
+      line({ name: "부라타토마토파스타", qty: 2, gross: 46000, net: 46000 }),
+      line({ name: "[아키 3만원] 교환권", qty: 1, gross: -30000, net: -30000 }),
+    ]);
+    expect(p.sectors.키친).toBe(46000);
+    expect(p.voucher).toBe(30000);
+  });
+});

@@ -7,7 +7,7 @@
    - 추세: 4주 전 → 마감일 다섯 번의 시간대별 매출 선 + 시간마다 오름 ▲ · 내림 ▼ (주당 5% 넘게 변하면)
    ============================================================ */
 import { addDays, dayRange, monthStart, weekdayLabel } from "./dates";
-import { holidayName, isOffDay, kidsPrice, VISITOR_FACTOR } from "./rules";
+import { holidayName, isOffDay, kidsPrice, kidsSales, VISITOR_FACTOR } from "./rules";
 import { wonMan } from "./format";
 import { HOURS, sum } from "./part";
 import { valueOf, type Board, type BoxKey, type ProductRow } from "./metrics";
@@ -48,7 +48,7 @@ export function hourDay(board: Board, date: string, box: BoxKey): HourDay | null
     people = tickets;
   } else if (box === "기타") {
     if (!ch && !kh) return null;
-    sales = add(ch ? [...ch.sectors.기타] : zeros(), kh?.other);
+    sales = add(ch ? [...ch.sectors.기타] : zeros(), kidsSales(date) ? kh?.other : null);
     people = cafePeople;
   } else {
     if (!ch) return null;

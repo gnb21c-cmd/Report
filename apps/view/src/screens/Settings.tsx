@@ -99,7 +99,10 @@ export function Settings(props: { board: Board; status: OfficeStatus | null; sou
               </tr>
               <tr>
                 <td>키즈 입장료</td>
-                <td className="num">(네이버 + 현장 입장권) × 단가</td>
+                <td className="num">
+                  (네이버 + 현장 입장권) × 단가
+                  <div className="note">26년 3월까지는 카페 교환권 방식이라 키즈 매출 없음 · 인원만</div>
+                </td>
               </tr>
               <tr>
                 <td>네이버 입장권</td>

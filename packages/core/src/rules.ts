@@ -1,6 +1,8 @@
 /* ============================================================
    보고 규칙 (사장님이 정한 기준) — 바꾸면 test/metrics.test.ts 에 시험을 먼저 더함
    - 키즈 입장료 단가: 평일 12,000원 · 평일 외(토·일·공휴일·대체공휴일) 14,000원
+   - 2026-03-31 까지는 키즈 매출 없음: 네이버에서 카페 교환권(3만원)을 사고, 입장 때 받은 교환권을 카페에서 −3만원으로 씀
+     → 키즈 입장료 · 키즈 기타 매출은 0원, 인원(네이버 · 현장)만 시간대별로 셈. 카페의 교환권 −3만원 줄은 매출에서 빼지 않음(isVoucherPayment)
    - 카페아스타나 방문인원 = 음료·맥주 잔 수 × 0.96 (두 잔 마시는 사람을 감안). 한 팀(영수증)의 인원 = 그 팀의 잔 수
    - 1인 평균 소비금액 = 총매출 ÷ 방문인원
    ============================================================ */
@@ -24,9 +26,18 @@ export function isOffDay(date: string): boolean {
   return w === 0 || w === 6 || !!holidayName(date);
 }
 
-export function kidsPrice(date: string): { price: number; kind: "평일" | "휴일" } {
+/** 이날부터 키즈 매출(입장료 · 키즈 POS 기타)을 잡음 — 그 전은 교환권 방식이라 인원만 */
+export const KIDS_SALES_FROM = "2026-04-01";
+
+/** 그날 키즈 매출을 잡는지 */
+export const kidsSales = (date: string) => date >= KIDS_SALES_FROM;
+
+/** 그날 키즈 입장권 단가 (키즈 매출을 안 잡는 날은 0원) */
+export function kidsPrice(date: string): { price: number; kind: "평일" | "휴일"; charged: boolean } {
   const rule = [...KIDS_PRICES].reverse().find((r) => r.from <= date) || KIDS_PRICES[0];
-  return isOffDay(date) ? { price: rule.holiday, kind: "휴일" } : { price: rule.weekday, kind: "평일" };
+  const kind = isOffDay(date) ? "휴일" : "평일";
+  if (!kidsSales(date)) return { price: 0, kind, charged: false };
+  return { price: kind === "휴일" ? rule.holiday : rule.weekday, kind, charged: true };
 }
 
 /** 잔 수에서 뺄 것 (옵션·원두·상품 등) */

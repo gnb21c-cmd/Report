@@ -13,7 +13,7 @@
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
 import { dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekdayLabel } from "./dates";
-import { kidsPrice, visitorsFromCups } from "./rules";
+import { kidsPrice, kidsSales, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
@@ -212,15 +212,19 @@ export class Board {
       const k = kids.kids;
       m.posNet += kids.posNet;
       m.voucher += kids.voucher;
+      // 키즈 매출은 2026-04-01 부터 (그 전은 교환권 방식 — 인원만)
+      const sales = kidsSales(date);
       // 키즈 상품 분류에는 섹터가 없으므로 sectors 는 0 — 혹시 들어 있으면 기타로
-      m.box.기타 += kids.sectors.바리스타 + kids.sectors.베이커리 + kids.sectors.키친 + kids.sectors.기타;
+      if (sales) m.box.기타 += kids.sectors.바리스타 + kids.sectors.베이커리 + kids.sectors.키친 + kids.sectors.기타;
       if (k) {
         m.issued += k.issued;
         m.walkIn += k.walkIn;
-        m.walkInPosNet += k.walkInNet;
         m.eventFree += k.eventFree;
-        m.kidsOtherNet += k.other;
-        m.box.기타 += k.other;
+        if (sales) {
+          m.walkInPosNet += k.walkInNet;
+          m.kidsOtherNet += k.other;
+          m.box.기타 += k.other;
+        }
       }
     }
     m.naverPos = Math.max(0, m.issued - m.walkIn);
@@ -322,7 +326,7 @@ export interface Dashboard {
   /** 작년 같은 기간 (작년 1월 1일 ~ 작년 같은 날) */
   lyYear: Metrics;
   lyDate: string;
-  price: { price: number; kind: "평일" | "휴일" };
+  price: { price: number; kind: "평일" | "휴일"; charged: boolean };
 }
 
 export function dashboard(board: Board, date: string): Dashboard {

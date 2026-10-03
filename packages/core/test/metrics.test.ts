@@ -75,8 +75,12 @@ const days = (from: string, to: string) => {
 
 describe("규칙", () => {
   it("키즈 단가: 평일 12,000 · 토·일·공휴일·대체공휴일 14,000", () => {
-    expect(kidsPrice("2026-10-01")).toEqual({ price: 12000, kind: "평일" });
-    expect([kidsPrice("2026-10-03").price, kidsPrice("2026-10-04").price, kidsPrice("2026-10-05").price, kidsPrice("2026-10-06").price, kidsPrice("2025-10-08").price]).toEqual([14000, 14000, 14000, 12000, 14000]);
+    expect(kidsPrice("2026-10-01")).toEqual({ price: 12000, kind: "평일", charged: true });
+    expect([kidsPrice("2026-10-03").price, kidsPrice("2026-10-04").price, kidsPrice("2026-10-05").price, kidsPrice("2026-10-06").price, kidsPrice("2026-05-05").price]).toEqual([14000, 14000, 14000, 12000, 14000]);
+    // 2026-03-31 까지는 교환권 방식 — 키즈 매출 없음
+    expect(kidsPrice("2025-10-08")).toEqual({ price: 0, kind: "휴일", charged: false });
+    expect(kidsPrice("2026-03-31").price).toBe(0);
+    expect(kidsPrice("2026-04-01").price).toBe(12000);
   });
   it("잔: 음료·맥주는 잔, 옵션·0원·아이스크림은 아님, 세트는 이름의 잔 수", () => {
     expect(isCup("cafe", { name: "[ICE] 아메리카노", cat1: "" }, "바리스타")).toBe(true);
