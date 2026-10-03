@@ -45,7 +45,7 @@ export function BarChart(props: {
     const px = ((clientX - rect.left) / rect.width) * width;
     return Math.max(0, Math.min(n - 1, Math.floor((px - pad.l) / slot)));
   };
-  const topSize = slot < 20 ? 9.5 : slot < 26 ? 11 : 13;
+  const topSize = slot < 20 ? 10 : slot < 26 ? 12 : 14;
 
   return (
     <div className="chart" ref={ref}>

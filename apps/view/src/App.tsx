@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, dashboard, todayKst } from "@report/core";
+import { addDays, Board, cashBook, dashboard, todayKst, type CashPart } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -9,6 +9,7 @@ import { SectorDetail } from "./screens/SectorDetail";
 import { MonthDetail, YearDetail } from "./screens/CumDetail";
 import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { Settings } from "./screens/Settings";
+import { CashDetail } from "./screens/CashDetail";
 
 function Notice({ title, text }: { title: string; text: string }) {
   return (
@@ -30,6 +31,8 @@ export function App() {
     return m;
   }, [board]);
   const latest = useMemo(() => board.latest(), [board]);
+  // 자금: 앞 보고의 금일 잔고를 이어서 계산
+  const book = useMemo(() => cashBook(d.reports.map((r) => r.cash).filter((c): c is CashPart => !!c)), [d.reports]);
   const today = todayKst();
   const [date, setDate] = useState<string>(latest || addDays(today, -1));
   const [view, setView] = useState<View>({ name: "home" });
@@ -74,7 +77,10 @@ export function App() {
   else if (view.name === "year") body = <YearDetail board={board} {...nav} />;
   else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
-  else if (view.name === "settings")
+  else if (view.name === "cash") {
+    const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;
+    body = <CashDetail sum={book.get(date)} part={board.report(date)?.cash} meta={board.report(date)?.meta?.cash} earlier={earlier !== date ? earlier : null} {...nav} />;
+  } else if (view.name === "settings")
     body = <Settings board={board} status={d.status} source={d.source} latest={latest} syncedAt={d.syncedAt} syncing={d.syncing} onSync={d.sync} onReload={d.reload} onBack={back} />;
   if (body) return <div className="app">{body}</div>;
 
@@ -86,7 +92,7 @@ export function App() {
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} />}
+        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={book.get(date)} />}
       </main>
     </div>
   );

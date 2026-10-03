@@ -6,6 +6,7 @@ import { addDays, dayRange, weekday } from "./dates";
 import { isOffDay, kidsPrice } from "./rules";
 import { HOURS, NAVER_SLOTS, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { Sector } from "./classify";
+import { CASH_ACCOUNTS, type CashPart, type CashRow } from "./cash";
 
 interface Item {
   name: string;
@@ -185,6 +186,35 @@ function kidsDay(date: string): { kids: StorePart; naver: DayReport["naver"] } {
   return { kids, naver: { v: 1, date, tickets, newVisitors } };
 }
 
+/** 날짜로 늘 같은 0~1 값 */
+function rnd(date: string, salt: number): number {
+  let h = 2166136261 ^ salt;
+  for (const ch of date) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 10000) / 10000;
+}
+const SAMPLE_OPEN: Record<string, number> = { cashAlpha: 3798210, cashCafe: 500000, nh: 115115572, shinhan: 23141205, ibk: 9188, keb: 316, hana: 328, securities: 200000000, shinhanUsd2: 9.75, citiUsd: 33.92, kebUsd: 19.32 };
+
+/** 체험판 자금 보고 (가짜) — 카드 정산 · 네이버 정산 입금, 관리비 · 거래처 출금 */
+function cashDay(date: string): CashPart {
+  const row = (x: Partial<CashRow>): CashRow => ({ inWho: "", inMemo: "", inAmt: 0, outWho: "", outMemo: "", outAmt: 0, ...x });
+  const rows: Record<string, CashRow[]> = Object.fromEntries(CASH_ACCOUNTS.map((a) => [a.id, []]));
+  const md = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
+  rows.nh = [row({ inWho: "카드가맹점", inMemo: `${md} 입금액`, inAmt: Math.round(2500000 + rnd(date, 1) * 3000000) })];
+  rows.shinhan = [row({ inWho: "네이버페이정산", inMemo: "아스타나 키즈 예약", inAmt: Math.round(100000 + rnd(date, 2) * 200000), ...(rnd(date, 3) > 0.6 ? { outWho: "관리비", outMemo: "건물 관리비", outAmt: 610000 } : {}) })];
+  if (rnd(date, 4) > 0.7) rows.nh.push(row({ outWho: "식자재", outMemo: "원두 · 우유", outAmt: Math.round(800000 + rnd(date, 5) * 1500000) }));
+  rows.cashAlpha = [row({ inWho: "카페아스타나", inMemo: `${md} 현금매출`, inAmt: Math.round(rnd(date, 6) * 100) * 500 })];
+  return {
+    date,
+    rates: { usd: Math.round((1355 + rnd(date, 7) * 20) * 100) / 100, jpy: Math.round((855 + rnd(date, 8) * 15) * 100) / 100 },
+    open: { ...SAMPLE_OPEN },
+    rows,
+    loans: [
+      { label: "신한 대출 (예시 1)", amount: 840000000 },
+      { label: "신한 대출 (예시 2)", amount: 200000000 },
+    ],
+  };
+}
+
 /** from ~ to 의 체험판 보고 자료. 설날·추석 당일은 휴무로 뺌 */
 export function sampleReports(from: string, to: string): DayReport[] {
   const closed = new Set(["2025-01-29", "2025-10-06", "2026-02-17", "2026-09-25"]);
@@ -193,7 +223,8 @@ export function sampleReports(from: string, to: string): DayReport[] {
     if (closed.has(date)) continue;
     const { kids, naver } = kidsDay(date);
     const at = `${addDays(date, 1)}T01:10:00.000Z`;
-    out.push({ date, cafe: cafePart(date), kids, naver, meta: { cafe: { by: "체험판", at }, kids: { by: "체험판", at }, naver: { by: "체험판", at } }, at });
+    const cash = date >= addDays(to, -45) ? cashDay(date) : undefined;
+    out.push({ date, cafe: cafePart(date), kids, naver, ...(cash ? { cash } : {}), meta: { cafe: { by: "체험판", at }, kids: { by: "체험판", at }, naver: { by: "체험판", at }, ...(cash ? { cash: { by: "체험판", at } } : {}) }, at });
   }
   return out;
 }

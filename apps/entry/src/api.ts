@@ -2,10 +2,14 @@
    A 가 자료를 주고받는 곳 — 클라우드 보관함(Firebase, cloud.ts)에 직접
    - 체험판: 클라우드 없이 이 브라우저 저장소(localStorage)에 흉내
    ============================================================ */
-import type { DayReport, DayWeather, NaverPart, ReceiptLine, StorePart } from "@report/core";
-import { addProducts, cloudConfig, CloudError, login, logout, readDay, readDays, readProducts, sessionEmail, writePieces, type Piece } from "./cloud";
+import { addDays, type CashPart, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
+import { addProducts, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readProducts, sessionEmail, writePieces, type Piece } from "./cloud";
 
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.4.0";
+
+/** 자금 전일 잔고를 찾을 때 거슬러 보는 날 수 */
+export const CASH_LOOKBACK = 31;
+const daysBefore = (date: string) => Array.from({ length: CASH_LOOKBACK }, (_, i) => addDays(date, -(i + 1)));
 
 /** 지난 자료 한 조각 — 매장 하루치(상품별 · 영수증별) 또는 네이버 정리표 하루 */
 export type PastPart = StorePart | NaverPart;
@@ -27,7 +31,7 @@ export interface DayInfo {
 export interface SubmitBody {
   date: string;
   by: string;
-  parts: { cafe?: StorePart; kids?: StorePart; naver?: NaverPart };
+  parts: { cafe?: StorePart; kids?: StorePart; naver?: NaverPart; cash?: CashPart };
   lines?: { cafe?: ReceiptLine[]; kids?: ReceiptLine[] };
   products?: Record<string, string>;
 }
@@ -76,11 +80,16 @@ const real = {
     return { date, ...(await readDay(cfg(), date)) };
   },
   products: () => readProducts(cfg()),
+  /** 그 날짜 앞(최근 31일)의 자금 보고 — 전일 잔고 · 환율 · 대출 이어받기 */
+  async cashBefore(date: string): Promise<CashPart[]> {
+    const m = await readDays(cfg(), daysBefore(date));
+    return [...m.values()].map((r) => r.cash).filter((c): c is CashPart => !!c);
+  },
   async submit(body: SubmitBody): Promise<SubmitResult> {
     const pieces: Piece[] = [];
-    for (const k of ["cafe", "kids", "naver"] as const) {
+    for (const k of PARTS) {
       const p = body.parts[k];
-      if (p) pieces.push({ kind: k, date: body.date, part: p, file: k === "naver" ? undefined : (p as StorePart).file });
+      if (p) pieces.push({ kind: k, date: body.date, part: p, file: k === "cafe" || k === "kids" ? (p as StorePart).file : undefined });
     }
     const lines = (["cafe", "kids"] as const).filter((k) => body.lines?.[k]).map((k) => ({ date: body.date, store: k, lines: body.lines![k]! }));
     await writePieces(cfg(), body.by, pieces, lines);
@@ -140,13 +149,14 @@ function demoSave(s: DemoStore) {
 export function mergeReport(prev: DayReport | null, date: string, by: string, parts: SubmitBody["parts"]): DayReport {
   const at = new Date().toISOString();
   const r: DayReport = { ...(prev || { date }), date, meta: { ...(prev?.meta || {}) }, at };
-  for (const k of ["cafe", "kids", "naver"] as const) {
+  for (const k of PARTS) {
     const p = parts[k];
     if (!p) continue;
+    const store = k === "cafe" || k === "kids";
     const old = r[k] as StorePart | undefined;
-    if (k !== "naver" && (p as StorePart).basis === "daily" && old && old.basis === "receipt") continue;
+    if (store && (p as StorePart).basis === "daily" && old && old.basis === "receipt") continue;
     (r as any)[k] = p;
-    r.meta![k] = { by, at, file: k === "naver" ? undefined : (p as StorePart).file };
+    r.meta![k] = { by, at, file: store ? (p as StorePart).file : undefined };
   }
   return r;
 }
@@ -163,6 +173,12 @@ const demo = {
   },
   async products() {
     return demoLoad().products;
+  },
+  async cashBefore(date: string): Promise<CashPart[]> {
+    const s = demoLoad();
+    return daysBefore(date)
+      .map((d) => s.reports[d]?.cash)
+      .filter((c): c is CashPart => !!c);
   },
   async submit(body: SubmitBody): Promise<SubmitResult> {
     const s = demoLoad();

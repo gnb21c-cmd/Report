@@ -1,6 +1,6 @@
 /* 영수증별 엑셀 올리는 칸 (매장 하나) — 끌어다 놓기 또는 파일 선택 → 바로 확인 결과 */
 import { useRef, useState } from "react";
-import { count, STORE_LABEL, won, type PartMeta, type StoreId } from "@report/core";
+import { count, STORE_LABEL, won, type PartMeta, type StoreId, type StorePart } from "@report/core";
 import type { Loaded } from "./load";
 import type { compute } from "./load";
 
@@ -8,7 +8,7 @@ type Computed = ReturnType<typeof compute>;
 
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
-export function FileBox(props: { store: StoreId; loaded?: Loaded; result: Computed; onFile: (f: File) => void; onClear: () => void; onUseDate: (d: string) => void; onServer?: PartMeta; date: string }) {
+export function FileBox(props: { store: StoreId; loaded?: Loaded; result: Computed; onFile: (f: File) => void; onClear: () => void; onUseDate: (d: string) => void; onServer?: PartMeta; serverPart?: StorePart; locked?: boolean; date: string }) {
   const { store, loaded: l, result: r } = props;
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -26,15 +26,17 @@ export function FileBox(props: { store: StoreId; loaded?: Loaded; result: Comput
         <h3>
           <span className="store-tag">{store === "cafe" ? "카페" : "키즈"}</span> {STORE_LABEL[store]}
         </h3>
-        {l && (
+        {l && !props.locked && (
           <button className="ghost small" onClick={props.onClear}>
             빼기
           </button>
         )}
       </div>
       <input ref={input} type="file" accept=".xls,.xlsx" hidden onChange={(e) => (e.target.files?.[0] && props.onFile(e.target.files[0]), (e.target.value = ""))} />
-      {!l ? (
-        <button className="drop" onClick={pick}>
+      {!l && props.serverPart && props.locked ? (
+        <ServerSummary store={store} p={props.serverPart} />
+      ) : !l ? (
+        <button className="drop" onClick={pick} disabled={props.locked}>
           <span className="drop-big">📄 여기에 끌어다 놓거나 눌러서 파일 선택</span>
           <span className="drop-small">
             매장 <b>[{STORE_LABEL[store]}]</b> 으로 받은 '영수증별 매출 상세현황' 엑셀 (예: 영수증별 매출 상세현황 (27).xls)
@@ -109,9 +111,42 @@ export function FileBox(props: { store: StoreId; loaded?: Loaded; result: Comput
       {props.onServer && (
         <div className="server-note">
           클라우드에 올라간 자료: {props.onServer.file || "엑셀"} · {props.onServer.by} {when(props.onServer.at)}
-          {l && !l.error ? " → 이번에 보내면 이 파일로 바뀝니다" : ""}
+          {l && !l.error && !props.locked ? " → 업로드하면 이 파일로 바뀝니다" : ""}
         </div>
       )}
     </section>
+  );
+}
+
+/** 클라우드에 올라간 매장 하루치 요약 (이 PC 에 파일이 없을 때) */
+function ServerSummary({ store, p }: { store: StoreId; p: StorePart }) {
+  return (
+    <table className="mini">
+      <tbody>
+        <tr>
+          <td>실매출</td>
+          <td>{won(p.posNet)}</td>
+        </tr>
+        {store === "cafe" ? (
+          <tr>
+            <td>팀 · 음료</td>
+            <td>
+              {count(p.teams, "팀")} · {count(p.cups, "잔")}
+            </td>
+          </tr>
+        ) : (
+          <tr>
+            <td>입장</td>
+            <td>
+              발행 {count(p.kids?.issued || 0, "장")} · 현장 결제 {count(p.kids?.walkIn || 0, "장")} · 이벤트 무료 {count(p.kids?.eventFree || 0, "팀")}
+            </td>
+          </tr>
+        )}
+        <tr>
+          <td>반품</td>
+          <td>{p.refunds.receipts ? `${p.refunds.receipts}장 지움 (${won(p.refunds.amount)})` : "없음"}</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }

@@ -9,6 +9,7 @@ import { guessSector, kidsKind, SECTORS, sectorFromCategory, type KidsKind, type
 import { cupsPerItem, isCup, isVoucherPayment } from "./rules";
 import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } from "./receipt";
 import type { SaleLine, StoreId } from "./types";
+import type { CashPart } from "./cash";
 
 export const HOURS = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 export const hourLabel = (h: number) => `${h}시`;
@@ -94,7 +95,9 @@ export interface DayReport {
   cafe?: StorePart;
   kids?: StorePart;
   naver?: NaverPart;
-  meta?: { cafe?: PartMeta; kids?: PartMeta; naver?: PartMeta };
+  /** 자금 현황 (cash.ts) */
+  cash?: CashPart;
+  meta?: { cafe?: PartMeta; kids?: PartMeta; naver?: PartMeta; cash?: PartMeta };
   /** C 가 합친 시각 ISO */
   at?: string;
 }

@@ -1,4 +1,4 @@
-/* A 입력 화면 — 사무실 PC 전체 화면용. 엑셀처럼 낯설지 않게: 흰 칸 · 파란 단추 · 큰 글자 */
+/* A 입력 화면 — 사무실 PC 전체 화면용. 엑셀처럼 낯설지 않게: 흰 칸 · 파란 단추. PC 는 한 화면에 다 보이게 작은 글자, 폰은 조금 크게 */
 /* 사무실 화면은 늘 밝은 화면 하나로 (엑셀 같은 흰 바탕) */
 :root {
   color-scheme: light;
@@ -29,8 +29,8 @@ body {
   background: var(--page);
   color: var(--ink);
   font-family: "Malgun Gothic", "맑은 고딕", system-ui, "Apple SD Gothic Neo", sans-serif;
-  font-size: 16px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.4;
 }
 button,
 input,
@@ -581,5 +581,593 @@ button.link {
   .files,
   .two {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   영역별 업로드 · 한 화면 배치 (PC)
+   ============================================================ */
+.page {
+  grid-template-rows: auto 1fr;
+}
+.main {
+  gap: 10px;
+  padding: 10px 14px 14px;
+}
+.panel {
+  padding: 10px 12px;
+}
+.panel-head {
+  margin-bottom: 6px;
+  gap: 10px;
+  align-items: center;
+}
+.panel-head h2 {
+  font-size: 16px;
+}
+.panel-head .n {
+  color: var(--accent);
+}
+.panel-head .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.panel-head .actions button {
+  padding: 5px 12px;
+}
+.guide {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.date-big {
+  font-size: 20px;
+  min-width: 190px;
+}
+.date-row {
+  gap: 8px;
+}
+.date-info {
+  margin: 0 0 0 10px;
+  font-size: 14px;
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.have {
+  margin-right: 6px;
+}
+.msg {
+  margin-top: 8px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.msg.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.msg.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.msg.info {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* 업로드 완료 — 회색 미세 빗금으로 덮음 */
+.sector-body {
+  position: relative;
+}
+.cover {
+  position: absolute;
+  inset: -2px;
+  z-index: 2;
+  border-radius: 6px;
+  background: repeating-linear-gradient(135deg, rgba(110, 116, 125, 0.16) 0 1px, rgba(245, 246, 248, 0.55) 1px 6px);
+  display: grid;
+  place-items: center;
+  cursor: not-allowed;
+}
+.cover-tag {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--grid);
+  color: #55595f;
+  font-weight: 800;
+  font-size: 18px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  display: grid;
+  justify-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.cover-tag small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sector.locked {
+  background: #f8f9fa;
+}
+/* 네이버 표 — 작게 */
+.naver-grid {
+  min-width: 980px;
+}
+.naver-grid th,
+.naver-grid td {
+  font-size: 12.5px;
+}
+.naver-grid thead th {
+  padding: 3px 0;
+}
+.naver-grid .row-head {
+  width: 104px;
+  font-size: 13px;
+  padding: 0 6px;
+}
+.naver-grid td input {
+  padding: 5px 1px;
+  font-size: 15px;
+}
+.naver-grid td input:disabled {
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+}
+.naver-grid .sum {
+  width: 70px;
+  font-size: 14px;
+}
+/* 아래: 왼쪽(엑셀 두 개 · 미리보기) · 오른쪽(자금) */
+.lower {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.9fr) minmax(640px, 1.25fr);
+  gap: 10px;
+  align-items: start;
+}
+.col {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.files {
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.file-sector .panel-head h2 {
+  font-size: 14px;
+}
+.file-sector .panel-head .actions button {
+  padding: 4px 9px;
+  font-size: 13px;
+}
+.filebox {
+  min-height: 0;
+  padding: 8px;
+  gap: 6px;
+  border-width: 1.5px;
+}
+.filebox-head {
+  display: none;
+}
+.drop {
+  padding: 16px 8px;
+}
+.drop-big {
+  font-size: 14px;
+}
+.drop-small {
+  font-size: 12px;
+}
+.file-name {
+  font-size: 13px;
+}
+.mini {
+  font-size: 13px;
+}
+.mini td:first-child {
+  width: 90px;
+}
+.server-note {
+  font-size: 12px;
+}
+.fresh {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.fresh .table-scroll {
+  max-height: 180px;
+}
+.fresh .list {
+  font-size: 13px;
+}
+.fresh .list td {
+  padding: 2px 6px;
+}
+.how {
+  justify-self: start;
+  font-size: 13px;
+}
+.steps {
+  font-size: 13px;
+  margin: 0;
+}
+.preview-panel .list {
+  font-size: 13.5px;
+}
+.preview-panel .list td {
+  padding: 3px 6px;
+}
+.preview-panel .list tr.sum td {
+  font-size: 16px;
+}
+.preview-panel .warn {
+  font-size: 12.5px;
+}
+/* ---------- 자금요약 표 (엑셀 모양) ---------- */
+.cash-wrap {
+  overflow-x: auto;
+}
+table.cash {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 620px;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+.cash col.c-grp {
+  width: 76px;
+}
+.cash col.c-acc {
+  width: 118px;
+}
+.cash col.c-no {
+  width: 64px;
+}
+.cash th,
+.cash td {
+  border: 1px solid var(--grid);
+  padding: 1px 6px;
+  height: 21px;
+  line-height: 1.25;
+}
+.cash thead th {
+  background: var(--head);
+  font-weight: 700;
+  color: var(--ink-2);
+  text-align: center;
+}
+.cash thead small {
+  font-weight: 500;
+  color: var(--muted);
+}
+.cash th.grp {
+  background: #e8ebef;
+  white-space: pre-line;
+  font-size: 12.5px;
+}
+.cash td.acc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cash td.accno {
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.cash .num {
+  text-align: right;
+}
+.cash td.close {
+  background: #fffbe0;
+  font-weight: 700;
+}
+.cash tr.moved td.close {
+  background: #fff3a8;
+}
+.cash tr.tot th,
+.cash tr.tot td {
+  background: #dde2e8;
+  font-weight: 800;
+}
+.cash tr.tot th {
+  text-align: center;
+}
+.cash tr.tot.single th {
+  background: #e8ebef;
+}
+.cash tr.tot.single td {
+  background: #fff;
+  font-weight: 600;
+}
+.cash tr.tot.single td.close {
+  background: #fffbe0;
+}
+.cash tr.tot.big th,
+.cash tr.tot.big td {
+  background: #cfd6de;
+}
+.cash tr.gap td {
+  border: 0;
+  height: 6px;
+  padding: 0;
+}
+.cash tr.fx td {
+  background: #fafbfc;
+}
+.cash td.rate {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cash .rate-in {
+  width: 78px;
+}
+.cash .chg {
+  margin-left: 6px;
+  color: var(--muted);
+}
+.cash .chg.up {
+  color: var(--bad);
+}
+.cash .chg.down {
+  color: var(--accent);
+}
+.cash .krw-label {
+  color: var(--bad);
+  font-weight: 700;
+  text-align: right;
+}
+.cash td.krw {
+  color: var(--bad);
+  font-weight: 800;
+}
+.cash tr.grand th,
+.cash tr.grand td {
+  background: #fdeee4;
+  font-weight: 800;
+  font-size: 13.5px;
+  height: 26px;
+}
+.cash tr.grand td {
+  color: var(--bad);
+}
+.cash tr.net td {
+  background: #dcecf3;
+  font-weight: 700;
+}
+.cash tr.net td.minus {
+  color: var(--bad);
+  font-weight: 800;
+}
+.cash td.loans {
+  padding: 3px 6px;
+}
+.loans-in {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  align-items: center;
+}
+.cash .loan {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.cash .loan-label {
+  width: 170px;
+}
+.cash .loan .amt {
+  width: 110px;
+}
+.cash input,
+.detail input {
+  width: 100%;
+  border: 1px solid var(--grid);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  background: #fff;
+}
+.cash input.amt,
+.detail input.amt {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cash input:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+}
+.cell-btn {
+  background: none;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  width: 100%;
+  text-align: right;
+  cursor: pointer;
+  border-radius: 0;
+}
+.cell-btn:not(:disabled):hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.cell-btn:disabled {
+  opacity: 1;
+}
+button.x {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  padding: 0 4px;
+  font-size: 15px;
+}
+.cash-foot {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+/* ---------- 세부내용 등록 — 아래에서 올라오는 창 ---------- */
+.sheet-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: rgba(10, 20, 35, 0.35);
+  display: flex;
+  align-items: flex-end;
+}
+.sheet {
+  width: 100%;
+  height: min(78vh, 900px);
+  background: #fff;
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  animation: up 0.22s ease-out;
+}
+@keyframes up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+.sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-head h2 {
+  font-size: 17px;
+}
+.sheet-head .primary {
+  margin-left: auto;
+}
+.sheet-body {
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+.detail tbody.acc-block:nth-of-type(even) td:not(.num) {
+  background: #fcfcfd;
+}
+table.detail {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  min-width: 940px;
+  table-layout: fixed;
+  font-size: 13px;
+}
+.detail col.d-acc {
+  width: 120px;
+}
+.detail col.d-who {
+  width: 15%;
+}
+.detail col.d-amt {
+  width: 120px;
+}
+.detail col.d-x {
+  width: 88px;
+}
+.detail thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--head);
+  border-right: 1px solid var(--grid);
+  border-bottom: 1px solid var(--grid);
+  height: 25px;
+  box-sizing: border-box;
+  padding: 3px 4px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.detail thead tr:nth-child(2) th {
+  top: 25px;
+}
+.detail thead th.in {
+  background: #e6f0fc;
+}
+.detail thead th.out {
+  background: #fdecea;
+}
+.detail td,
+.detail th.acc {
+  border-right: 1px solid var(--grid);
+  border-bottom: 1px solid var(--grid);
+  padding: 2px 3px;
+}
+.detail th.acc {
+  background: #f3f5f8;
+  white-space: pre-line;
+  font-size: 13px;
+  vertical-align: middle;
+}
+.detail th.acc small {
+  display: block;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 11px;
+}
+.detail tbody.fx th.acc {
+  background: #e3f1f6;
+}
+.detail tr.sub td {
+  background: #eef0f3;
+  font-weight: 700;
+  font-size: 12.5px;
+  text-align: center;
+}
+.detail tr.sub td.num {
+  text-align: right;
+}
+.detail button.add {
+  white-space: nowrap;
+  background: none;
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+  padding: 1px 6px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+/* 좁은 화면 (노트북 · 폰) — 차례로 쌓고 글자 조금 크게 */
+@media (max-width: 1180px) {
+  .lower {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  html,
+  body {
+    font-size: 16px;
+  }
+  .files {
+    grid-template-columns: 1fr;
+  }
+  .panel-head .actions {
+    margin-left: 0;
+  }
+  .cash,
+  .cash input {
+    font-size: 14px;
+  }
+  .guide {
+    font-size: 16px;
   }
 }

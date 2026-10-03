@@ -5,9 +5,10 @@
    ③ 당월누계 · 올해누계 (→ 누계 상세)
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
    ⑤ 네이버 입장권 판매수 · 현장 입장권 판매수 · 이벤트 무료입장팀 수 (→ 각 상세)
+   ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { BOXES, changePct, comparable, count, holidayName, pct, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type Dashboard, type DayWeather, type Metrics } from "@report/core";
+import { BOXES, changePct, comparable, count, holidayName, money, pct, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -16,6 +17,7 @@ export type View =
   | { name: "year" }
   | { name: "naver" }
   | { name: "kids"; key: "walkIn" | "eventFree" }
+  | { name: "cash" }
   | { name: "settings" };
 export type Open = (v: View) => void;
 
@@ -49,7 +51,7 @@ export const Chevron = () => (
 
 export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타", 베이커리: "베이커리", 키친: "키친", 키즈입장료: "키즈입장", 기타: "기타" };
 
-export function Home({ d, open, weather }: { d: Dashboard; open: Open; weather?: DayWeather }) {
+export function Home({ d, open, weather, cash }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -92,6 +94,25 @@ export function Home({ d, open, weather }: { d: Dashboard; open: Open; weather?:
           </button>
         ))}
       </div>
+
+
+      {/* 자금 현황 — 섹터 상자 바로 아래. 누르면 계좌 · 적요까지 자세히 */}
+      <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
+        <div className="stat-label">
+          자금 현황 · 잔액 합계 <Chevron />
+        </div>
+        {cash ? (
+          <>
+            <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
+            <CashBar inn={cash.krw.in} out={cash.krw.out} />
+            <span className="note">
+              대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
+            </span>
+          </>
+        ) : (
+          <span className="note">이날 자금 보고 없음 — 눌러서 가까운 날 보기</span>
+        )}
+      </button>
 
       <div className="stats">
         <button className="stat tap" onClick={() => open({ name: "month" })}>
@@ -143,6 +164,30 @@ export function Home({ d, open, weather }: { d: Dashboard; open: Open; weather?:
       <p className="note center-note">
         {d.price.kind} 단가 {won(d.price.price)} × 입장권 {count(day.naver + day.walkIn, "장")} = 키즈입장 {won(day.box.키즈입장료)}
       </p>
+
     </>
+  );
+}
+
+/** 그날 원화 입금 · 출금 막대 (긴 쪽을 꽉 차게) */
+function CashBar({ inn, out }: { inn: number; out: number }) {
+  const max = Math.max(inn, out, 1);
+  return (
+    <div className="cash-bar" aria-label={`입금 ${money(inn, "KRW", false)}원, 출금 ${money(out, "KRW", false)}원`}>
+      <div className="cb-row">
+        <span className="cb-label">입금</span>
+        <span className="cb-track">
+          <span className="cb-fill in" style={{ width: `${(inn / max) * 100}%` }} />
+        </span>
+        <span className="cb-num in">+{money(inn, "KRW", false)}</span>
+      </div>
+      <div className="cb-row">
+        <span className="cb-label">출금</span>
+        <span className="cb-track">
+          <span className="cb-fill out" style={{ width: `${(out / max) * 100}%` }} />
+        </span>
+        <span className="cb-num out">−{money(out, "KRW", false)}</span>
+      </div>
+    </div>
   );
 }
