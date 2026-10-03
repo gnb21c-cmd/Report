@@ -14,24 +14,50 @@ import os
 import sys
 
 from .relay import FirebaseRelay
-from .weather import Kma, days_to_fetch
+from .weather import Kma, WeatherError, days_to_fetch
 
 KST = dt.timezone(dt.timedelta(hours=9))
 
 
-def run(relay, kma, now: dt.datetime) -> list:
-    """한 번 돌기 → 올린 (날짜, 종류) 목록"""
+CHUNK_DAYS = 60  # 기상청은 긴 기간을 한 번에 달라면 늦게 답해서 나눠 받음
+
+
+def chunks(start: str, end: str, size: int = CHUNK_DAYS) -> list:
+    """(시작, 끝) 기간을 size 일씩 자름"""
+    a, b = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
+    out = []
+    while a <= b:
+        z = min(b, a + dt.timedelta(days=size - 1))
+        out.append((a.isoformat(), z.isoformat()))
+        a = z + dt.timedelta(days=1)
+    return out
+
+
+def run(relay, kma, now: dt.datetime, errors: list | None = None) -> list:
+    """한 번 돌기 → 올린 (날짜, 종류) 목록. 실패한 부분은 errors 에 적고 나머지는 계속"""
+    errors = [] if errors is None else errors
     have = relay.weather_sources()
-    span = days_to_fetch(now.date(), {d for d, s in have.items() if s == "observed"}, kma.conf.get("since", "2025-01-01"))
-    days = kma.observed(*span) if span else []
-    days += kma.forecast(now.replace(tzinfo=None))
     done = []
-    for d in days:
-        if d["source"] != "observed" and have.get(d["date"]) == "observed":
-            continue  # 예보는 관측을 못 바꿈
-        relay.put_weather(d)
-        have[d["date"]] = d["source"]
-        done.append((d["date"], d["source"]))
+
+    def put(days):
+        for d in days:
+            if d["source"] != "observed" and have.get(d["date"]) == "observed":
+                continue  # 예보는 관측을 못 바꿈
+            relay.put_weather(d)
+            have[d["date"]] = d["source"]
+            done.append((d["date"], d["source"]))
+
+    span = days_to_fetch(now.date(), {d for d, s in have.items() if s == "observed"}, kma.conf.get("since", "2025-01-01"))
+    for a, b in chunks(*span) if span else []:
+        try:
+            put(kma.observed(a, b))  # 받은 만큼 바로 올림 → 다음 번엔 이어서
+        except WeatherError as e:
+            errors.append(f"관측 {a}~{b}: {e}")
+            break
+    try:
+        put(kma.forecast(now.replace(tzinfo=None)))
+    except WeatherError as e:
+        errors.append(f"예보: {e}")
     return done
 
 
@@ -49,9 +75,12 @@ def main() -> int:
         return 0
     relay = FirebaseRelay({"apiKey": env["FIREBASE_API_KEY"], "projectId": env["FIREBASE_PROJECT_ID"], "board": env["REPORT_BOARD_KEY"], "email": env["WEATHER_EMAIL"], "password": env["WEATHER_PASSWORD"]})
     kma = Kma({"serviceKey": env["KMA_SERVICE_KEY"]})
-    done = run(relay, kma, dt.datetime.now(KST))
+    errors: list = []
+    done = run(relay, kma, dt.datetime.now(KST), errors)
     print(f"날씨 {len(done)}일 올림" + (f" ({done[0][0]} ~ {done[-1][0]})" if done else ""))
-    return 0
+    for e in errors:
+        print("실패:", e)
+    return 1 if errors else 0
 
 
 sys.exit(main())

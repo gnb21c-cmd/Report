@@ -83,14 +83,14 @@ class FakeRelay:
 
 
 class RunTest(unittest.TestCase):
-    def run_once(self, relay, kma, now):
+    def run_once(self, relay, kma, now, errors=None):
         import importlib.util, pathlib, sys
         # __main__ 은 불러오면 main() 을 돌리므로 run 만 꺼내 씀
         src = pathlib.Path(__file__).resolve().parents[1] / "src" / "report_weather" / "__main__.py"
         code = src.read_text(encoding="utf-8").replace("sys.exit(main())", "")
         ns = {"__name__": "report_weather._t", "__package__": "report_weather"}
         exec(compile(code, str(src), "exec"), ns)
-        return ns["run"](relay, kma, now)
+        return ns["run"](relay, kma, now, errors)
 
     def test_backfill_then_only_new(self):
         relay, kma = FakeRelay(), FakeKma()
@@ -100,6 +100,26 @@ class RunTest(unittest.TestCase):
         done = self.run_once(relay, kma, dt.datetime(2026, 10, 2, 9, 0))
         self.assertEqual(kma.asked[-1], ("2026-10-01", "2026-10-01"))
         self.assertEqual(done, [("2026-10-01", "observed")])  # 가짜 예보는 10/1 것뿐이고 10/1 은 이미 관측이라 건너뜀
+
+    def test_long_backfill_is_split(self):
+        relay, kma = FakeRelay(), FakeKma()
+        kma.conf = {"since": "2026-01-01"}
+        self.run_once(relay, kma, dt.datetime(2026, 10, 1, 9, 0))
+        self.assertEqual(kma.asked[0], ("2026-01-01", "2026-03-01"))  # 60일씩
+        self.assertEqual(kma.asked[-1][1], "2026-09-30")
+        self.assertTrue(all((dt.date.fromisoformat(b) - dt.date.fromisoformat(a)).days < 60 for a, b in kma.asked))
+
+    def test_observed_failure_keeps_forecast(self):
+        from report_weather.weather import WeatherError
+
+        class SlowKma(FakeKma):
+            def observed(self, a, b):
+                raise WeatherError("기상청 서버에 연결하지 못했습니다", retry=True)
+
+        relay, errors = FakeRelay(), []
+        done = self.run_once(relay, SlowKma(), dt.datetime(2026, 10, 1, 9, 0), errors)
+        self.assertEqual(done, [("2026-10-01", "forecast")])  # 관측이 안 돼도 예보는 올라감
+        self.assertEqual(len(errors), 1)
 
 
 if __name__ == "__main__":

@@ -130,7 +130,7 @@ class Kma:
     def __init__(self, conf: dict, opener=None):
         self.conf = {**DEFAULTS, **(conf or {})}
         self.key = service_key(self.conf["serviceKey"])
-        self.open = opener or (lambda url: urllib.request.urlopen(url, timeout=15).read().decode("utf-8"))
+        self.open = opener or (lambda url: urllib.request.urlopen(url, timeout=60).read().decode("utf-8"))
 
     def _once(self, path: str, params: dict) -> tuple:
         qs = urllib.parse.urlencode({"serviceKey": self.key, "dataType": "JSON", **params})
