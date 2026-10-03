@@ -26,6 +26,9 @@ const SYNCED = "report.syncedAt";
 const CURSOR = "report.reportCursor";
 const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
+/** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
+const DATA_SHAPE = "report.dataShape";
+const SHAPE = "2026-10-extra";
 
 const LABEL: Record<WeatherKey, [string, string]> = { sunny: ["맑음", "☀️"], cloudy: ["구름", "☁️"], rain: ["비", "🌧️"], heavyrain: ["강우", "⛈️"], snow: ["눈", "❄️"] };
 /** 체험판: 기상청에서 받아 둔 실제 날씨 (2025-01-01 ~ 만든 날) */
@@ -69,6 +72,12 @@ export function useData() {
     const src = picked.source;
     if (!src) return;
     set((p) => ({ ...p, syncing: true, error: null }));
+    if (local.get<string>(DATA_SHAPE) !== SHAPE) {
+      local.set(CURSOR, null);
+      await clearCached();
+      set((p) => ({ ...p, reports: [] }));
+      local.set(DATA_SHAPE, SHAPE);
+    }
     // 폰에 저장된 자료부터 바로 보여 줌
     const cached = await loadCached();
     set((p) => ({ ...p, reports: cached.length ? byDate([...p.reports, ...cached]) : p.reports, phase: "ready" }));
