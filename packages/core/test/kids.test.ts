@@ -222,6 +222,27 @@ describe("'[키즈]' (2025-01 초 카페 POS — '[아키 2만원] 교환권' �
   });
 });
 
+describe("2025-01 교환권 값 바꾸는 달 — 평일 표는 2만원 ('/평일-20,000원'), 숏타임은 3만원", () => {
+  it("평일 2만원 표 · 평일 현장결제 2만원 · 숏타임 3만원", () => {
+    const date = "2025-01-02";
+    const ks = [
+      line({ name: "11시50분 퇴장/평일-20,000원 [10시입장]", qty: 10 }),
+      line({ name: "12시50분 퇴장 [11시 입장]", qty: 2 }),
+      line({ name: "11시20분 퇴장/평일-20,000원 [10시입장]", qty: 3 }),
+      line({ name: "평일 현장결제 20,000원", qty: 1, gross: 20000, net: 20000 }),
+    ];
+    expect(kidsKind({ name: "평일 현장결제 20,000원", qty: 1, gross: 20000, net: 20000 })).toBe("현장결제");
+    const kids = buildStorePart({ store: "kids", date, file: "k", sheet: { from: date, to: date, lines: ks, sheetNet: null } as any, sectorOf: () => "기타" as any }).part;
+    const m = new Board([{ date, kids }]).day(date);
+    expect(m.issued).toBe(15);
+    expect(m.walkIn).toBe(1);
+    expect(m.naverPos).toBe(14);
+    // 2만원 표 10장 − 현장 2만원 1장 = 9장 × 2만 + 3만원 표(일반 2 + 숏타임 3) 5장 × 3만
+    expect(m.fee.naver).toBe(9 * 20000 + 5 * 30000);
+    expect(m.fee.walkIn).toBe(20000);
+  });
+});
+
 describe("'퇴장시간 + 10~19분 지연' — 연장 요금은 입장 인원이 아니라 키즈 기타 매출", () => {
   it("이름에 '퇴장'이 있어도 '지연'이면 기타", () => {
     expect(kidsKind({ name: "퇴장시간 + 10~19분 지연", qty: 1, gross: 5000, net: 5000 })).toBe("기타");

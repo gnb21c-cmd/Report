@@ -6,7 +6,7 @@
    시간대: 10시 ~ 22시를 한 시간씩 12칸 (10시 전 주문은 10시 칸, 22시 넘은 주문은 21시 칸에)
    ============================================================ */
 import { guessSector, kidsKind, SECTORS, sectorFromCategory, type KidsKind, type Sector } from "./classify";
-import { cupsPerItem, isCup, isKidsCoupon, isVoucherPayment } from "./rules";
+import { cupsPerItem, isCup, isKidsCoupon, isVoucherPayment, oldTicketPrice } from "./rules";
 import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } from "./receipt";
 import type { SaleLine, StoreId } from "./types";
 import type { CashPart } from "./cash";
@@ -34,6 +34,9 @@ export interface KidsNumbers {
   /** 돈 받은 입장권 */
   walkIn: number;
   walkInNet: number;
+  /** 교환권 방식 2만원 입장 발행 · 2만원 현장 결제 (2025-01 평일) — 없으면 0 */
+  issued20?: number;
+  walkIn20?: number;
   /** 0원 쿠폰 입장 (팀) */
   eventFree: number;
   /** 입장권 외 매출 (추가 인원 · 간식 등 → 기타) */
@@ -238,10 +241,13 @@ function addLine(
     const k = kidsKind({ name: l.name, gross: l.gross, net: l.net, cat1, qty: l.qty });
     sector = k;
     const kids = part.kids!;
-    if (k === "입장발행") kids.issued += l.qty;
-    else if (k === "현장결제") {
+    if (k === "입장발행") {
+      kids.issued += l.qty;
+      if (oldTicketPrice(l.name) === 20000) kids.issued20 = (kids.issued20 || 0) + l.qty;
+    } else if (k === "현장결제") {
       kids.walkIn += l.qty;
       kids.walkInNet += l.net;
+      if (l.qty && Math.round(l.gross / l.qty) === 20000) kids.walkIn20 = (kids.walkIn20 || 0) + l.qty;
     } else if (k === "이벤트무료") kids.eventFree += l.qty;
     else {
       kids.other += l.net;

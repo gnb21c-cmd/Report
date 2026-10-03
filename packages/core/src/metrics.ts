@@ -212,6 +212,8 @@ export class Board {
       m.cups += cafe.cups;
       m.teams += cafe.teams;
     }
+    let i20 = 0;
+    let w20 = 0;
     if (kids) {
       m.has.kids = 1;
       const k = kids.kids;
@@ -222,6 +224,8 @@ export class Board {
       // 키즈 상품 분류에는 섹터가 없으므로 sectors 는 0 — 혹시 들어 있으면 기타로
       if (sales) m.box.기타 += kids.sectors.바리스타 + kids.sectors.베이커리 + kids.sectors.키친 + kids.sectors.기타;
       if (k) {
+        i20 = k.issued20 || 0;
+        w20 = k.walkIn20 || 0;
         m.issued += k.issued;
         m.walkIn += k.walkIn;
         m.eventFree += k.eventFree;
@@ -244,7 +248,9 @@ export class Board {
     // 4월부터 입장료 × 장수. 3월까지는 교환권 방식 — 네이버 × 3만원 + 현장 구매 결제액
     // 3월까지 네이버 판매 장수 = POS 입장 발행 − 현장 구매 (당일 취소가 안 돼 발행 = 판매). 키즈 엑셀이 없으면 네이버 입력
     const oldNaver = m.issued > 0 ? m.naverPos : m.naver;
-    m.fee = kidsSales(date) ? { naver: m.naver * price, walkIn: m.walkIn * price } : { naver: oldNaver * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
+    // 2025-01 평일 표는 2만원 (2만원 발행 − 2만원 현장), 나머지는 3만원
+    const n20 = m.issued > 0 ? Math.min(oldNaver, Math.max(0, i20 - w20)) : 0;
+    m.fee = kidsSales(date) ? { naver: m.naver * price, walkIn: m.walkIn * price } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;

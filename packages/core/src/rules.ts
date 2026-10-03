@@ -34,6 +34,16 @@ export const KIDS_SALES_FROM = "2026-04-01";
 /** 2026-03 까지 네이버 · 현장에서 받은 카페 교환권 한 장 값 (원) */
 export const OLD_VOUCHER_PRICE = 30000;
 
+/** 숏타임 (방학 · 휴일 10시 입장 → 11시20분 퇴장, 네이버 10장) — 이름에 2만원이 붙어도 3만원 표 */
+export function isShortTime(name: string): boolean {
+  return /11시\s*20분\s*퇴장/.test(name || "") && /10시\s*입장/.test(name || "");
+}
+
+/** 교환권 방식 때 입장 발행 한 장 값 — 2025-01 은 값을 바꾸던 달이라 평일 표가 '/평일-20,000원' (2만원), 나머지는 3만원 */
+export function oldTicketPrice(name: string): number {
+  return /20,000\s*원/.test(name || "") && !isShortTime(name) ? 20000 : OLD_VOUCHER_PRICE;
+}
+
 /** 그날 키즈 매출을 잡는지 (입장료 방식) — 그 전 날은 교환권 방식: 받은 교환권 값 − 카페에서 쓴 교환권 (metrics) */
 export const kidsSales = (date: string) => date >= KIDS_SALES_FROM;
 
