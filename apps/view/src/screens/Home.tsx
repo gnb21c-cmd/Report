@@ -2,11 +2,11 @@
    대시보드 — 달력에서 고른 마감일의 숫자
    ① 마감일 총 매출 + 날씨 (상세 없음)
    ② 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 (한 줄 상자 다섯 개 → 섹터 상세)
-   ③ 당월누계 · 올해누계 (→ 누계 상세)
+   ③ 당월 매출 합계 · OO년 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
    ⑤ 네이버 입장권 판매수 · 현장 입장권 판매수 · 이벤트 무료입장팀 수 (→ 각 상세)
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
-   ⑦ 1/1~ 정산 총계 · 지급 수수료 (누계 매출 − 정산 총계 = 카드 · VAN · PG 수수료 전체) — 누계 줄 바로 아래
+   ⑦ OO년 정산 총금액 · OO년 지급 수수료 (1/1~마감일) (누계 매출 − 정산 총계 = 카드 · VAN · PG 수수료 전체) — 누계 줄 바로 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
 import { BOXES, changePct, comparable, count, holidayName, money, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
@@ -122,14 +122,14 @@ export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: O
       <div className="stats">
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
-            당월누계 ({Number(d.date.slice(5, 7))}/1~) <Chevron />
+            당월 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.month.total)}</div>
           <Delta now={d.month.total} before={comparable(d.lyMonth) ? d.lyMonth.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyMonth)} />
         </button>
         <button className="stat tap" onClick={() => open({ name: "year" })}>
           <div className="stat-label">
-            올해누계 (1/1~마감일) <Chevron />
+            {d.date.slice(2, 4)}년 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.year.total)}</div>
           <Delta now={d.year.total} before={comparable(d.lyYear) ? d.lyYear.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyYear)} />
@@ -210,12 +210,12 @@ function SettleRow({ d, s }: { d: Dashboard; s: Settle }) {
   return (
     <div className="stats">
       <div className="stat">
-        <div className="stat-label">정산 총계 (1/1~마감일)</div>
+        <div className="stat-label">{d.date.slice(2, 4)}년 정산 총금액</div>
         <div className="stat-value">{won(s.total)}</div>
         <span className="note settle-note">{parts.join(" · ") || "정산 입금 없음"}</span>
       </div>
       <div className="stat">
-        <div className="stat-label">지급 수수료 (1/1~마감일)</div>
+        <div className="stat-label">{d.date.slice(2, 4)}년 지급 수수료</div>
         <div className={`stat-value${fee < 0 ? " minus" : ""}`}>{won(fee)}</div>
         <span className="note settle-note">{thin ? `매출 자료가 ${count(d.year.has.cafe, "일")}뿐이라 아직 안 맞음` : `누계 매출의 ${sales > 0 ? ((fee / sales) * 100).toFixed(1) : "0"}% · 누계 − 정산`}</span>
       </div>
