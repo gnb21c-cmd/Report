@@ -315,6 +315,18 @@ export function bottomProducts(board: Board, date: string, box: BoxKey, span: "d
 }
 
 
+/** 마감일까지 days 일 동안 매출액이 적은 상품 n 개 (0원 · 옵션 빼고) — 비율 = 그 상품 ÷ 그 기간 그 섹터 매출 (베이커리 상세) */
+export function lowSellers(board: Board, date: string, box: BoxKey, days = 60, n = 10): { from: string; total: number; rows: (ProductRow & { share: number })[] } {
+  const from = addDays(date, -(days - 1));
+  const total = board.range(from, date).box[box];
+  const rows = board
+    .products(from, date, box)
+    .filter(rankable)
+    .sort((a, b) => a.net - b.net || a.qty - b.qty || a.name.localeCompare(b.name))
+    .slice(0, n)
+    .map((p) => ({ ...p, share: total > 0 ? Math.round((p.net / total) * 10000) / 10000 : 0 }));
+  return { from, total, rows };
+}
 /** 그날 시간대별 총매출 (섹터 다섯 개 합) — 카페 시간대 자료가 없으면 null */
 export function dayHourly(board: Board, date: string): number[] | null {
   if (!board.report(date)?.cafe?.hourly) return null;

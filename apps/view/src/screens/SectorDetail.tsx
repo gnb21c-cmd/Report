@@ -11,13 +11,12 @@ import { useMemo, useState } from "react";
 import {
   bottomProducts,
   count,
-  EXTRA_KINDS,
-  EXTRA_LABEL,
   extraTotal,
   hourDay,
   hourLabel,
   hourlyInsights,
   kidsPrice,
+  lowSellers,
   HOURS,
   shortLabel,
   weeksAverage,
@@ -42,6 +41,12 @@ const tip = (i: number) => `${HOURS[i]}시 ~ ${HOURS[i] + 1}시`;
 const TREND_COLORS = ["var(--trend-4)", "var(--trend-3)", "var(--trend-2)", "var(--trend-1)", "var(--pink-strong)"];
 
 export function SectorDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
+  // 기타는 시간대 · 분석 없이 매출 분류만 (자판기 · 인생네컷 · 주차 · 매장 소액 기타)
+  if (props.box === "기타") return <EtcDetail {...props} />;
+  return <SalesDetail {...props} />;
+}
+
+function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
   const { board, box, date } = props;
   const name = box === "키즈입장료" ? "키즈 입장료" : BOX_LABEL[box];
   const kids = box === "키즈입장료";
@@ -62,11 +67,6 @@ export function SectorDetail(props: { board: Board; box: BoxKey; weather: Weathe
           <Delta now={m.box[box]} before={pw.has.cafe + pw.has.kids ? pw.box[box] : null} label="지난주 같은 요일" money={false} />
           {m.total > 0 && <span className="note">총 매출의 {((m.box[box] / m.total) * 100).toFixed(1)}%</span>}
           {box === "키즈입장료" && <span className="note">{kidsFormula(m, date)}</span>}
-          {box === "기타" && extraTotal(m.extra) > 0 && (
-            <span className="note">
-              POS 밖 매출 포함 — {EXTRA_KINDS.filter((k) => m.extra[k]).map((k) => `${EXTRA_LABEL[k]} ${won(m.extra[k])}`).join(" · ")}
-            </span>
-          )}
         </HeroBox>
 
         <ChartCard
@@ -124,7 +124,9 @@ export function SectorDetail(props: { board: Board; box: BoxKey; weather: Weathe
           </ul>
         </section>
 
-        {box !== "기타" && <BottomCard board={board} box={box} date={date} />}
+        {/* 맨 밑: 바리스타 = 적게 팔린 상품 5개 · 베이커리 = 60일 최저 판매 빵 10종 · 키친 · 키즈 = 없음 */}
+        {box === "바리스타" && <BottomCard board={board} box={box} date={date} />}
+        {box === "베이커리" && <LowSellersCard board={board} date={date} />}
       </main>
     </>
   );
@@ -244,19 +246,16 @@ function BottomCard({ board, box, date }: { board: Board; box: BoxKey; date: str
         <table>
           <thead>
             <tr>
-              <th>순위</th>
               <th>상품</th>
               <th className="num">수량</th>
               <th className="num">실매출</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((p, i) => (
+            {rows.map((p) => (
               <tr key={p.store + p.name}>
-                <td>{i + 1}</td>
                 <td>
                   {p.name}
-                  {box === "기타" && <div className="note">{p.store === "kids" ? "아스타나키즈" : "카페아스타나"}</div>}
                 </td>
                 <td className="num">{count(p.qty)}</td>
                 <td className="num">{won(p.net)}</td>
@@ -277,4 +276,97 @@ function kidsFormula(m: Metrics, date: string): string {
   return p.charged
     ? `${p.kind} 단가 ${won(p.price)} × 입장권 ${count(m.naver + m.walkIn, "장")}${m.kidsCoupon ? ` − 사은권 ${won(m.kidsCoupon)}` : ""} = 키즈입장 ${won(m.box.키즈입장료)}`
     : `교환권 방식(26년 3월까지) — 네이버 ${count(Math.round(m.fee.naver / 30000), "장")} × 3만원 + 현장 ${won(m.fee.walkIn)} − 카페 교환권 사용 ${won(m.kidsCoupon)} = 키즈입장 ${won(m.box.키즈입장료)}`;
+}
+
+/** 베이커리 — 마감일까지 60일 동안 적게 팔린 빵 10종 (매출액 · 60일 이동 합계 대비 비율) */
+function LowSellersCard({ board, date }: { board: Board; date: string }) {
+  const r = useMemo(() => lowSellers(board, date, "베이커리", 60, 10), [board, date]);
+  return (
+    <section className="card">
+      <div className="low-head">
+        <h2>60일 최저 판매 빵 10종</h2>
+        <div className="low-total">
+          <span className="note">60일 이동 합계</span>
+          <b>{won(r.total)}</b>
+        </div>
+      </div>
+      <p className="sub">
+        {md(r.from)} ~ {md(date)} (마감일 포함 60일) · 매출액이 적은 순
+      </p>
+      {r.rows.length ? (
+        <table>
+          <thead>
+            <tr>
+              <th>빵</th>
+              <th className="num">60일 매출</th>
+              <th className="num">비율</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.rows.map((p) => (
+              <tr key={p.name}>
+                <td>{p.name}</td>
+                <td className="num">{won(p.net)}</td>
+                <td className="num">{(p.share * 100).toFixed(2)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="empty">판매 자료가 없습니다.</p>
+      )}
+    </section>
+  );
+}
+
+/** 기타 — 그날 자판기 · 인생네컷 · 주차료 · 매장 소액 기타, 아래 회색 글씨 = 1/1 ~ 마감일 누적 */
+function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
+  const { board, date } = props;
+  const m = board.day(date);
+  const y = board.range(`${date.slice(0, 4)}-01-01`, date);
+  const pw = board.day(addWeek(date, -1));
+  const small = (x: Metrics) => x.box.기타 - extraTotal(x.extra);
+  const rows: { label: string; day: number; ytd: number }[] = [
+    { label: "자판기", day: m.extra.vending, ytd: y.extra.vending },
+    { label: "네컷사진", day: m.extra.photo, ytd: y.extra.photo },
+    { label: "주차료", day: m.extra.parking, ytd: y.extra.parking },
+    { label: "매장 소액 기타", day: small(m), ytd: small(y) },
+  ];
+  const per = `${date.slice(2, 4)}년 1월 1일 ~ ${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일`;
+  return (
+    <>
+      <DetailHeader title="기타" {...props} />
+      <main className="content">
+        <HeroBox label={`${shortLabel(date)} 기타`} value={won(m.box.기타)} date={date} w={props.weather[date]}>
+          <Delta now={m.box.기타} before={pw.has.cafe + pw.has.kids ? pw.box.기타 : null} label="지난주 같은 요일" money={false} />
+          {m.total > 0 && <span className="note">총 매출의 {((m.box.기타 / m.total) * 100).toFixed(1)}%</span>}
+        </HeroBox>
+        <div className="stats">
+          {rows.slice(0, 2).map((r) => (
+            <EtcStat key={r.label} {...r} per={per} />
+          ))}
+        </div>
+        <div className="stats">
+          {rows.slice(2).map((r) => (
+            <EtcStat key={r.label} {...r} per={per} />
+          ))}
+        </div>
+        <p className="note center-note">
+          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 · 네컷사진 · 주차료 = 카드 단말기 승인 내역(나이스 · KIS) · 매장 소액 기타 = POS 기타 상품 (키즈 간식 · 연장 요금 등 포함)
+        </p>
+      </main>
+    </>
+  );
+}
+
+function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: number; per: string }) {
+  return (
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{won(day)}</div>
+      <span className="note period">
+        {per} 누적 {label} 매출 {won(ytd)}
+      </span>
+    </div>
+  );
 }
