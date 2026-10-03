@@ -205,3 +205,19 @@ describe("'퍼피 정산' (2025-09 까지 아스타나퍼피 선결제 1만원 �
     expect(p.kidsCoupon || 0).toBe(0);
   });
 });
+
+describe("'퇴장시간 + 10~19분 지연' — 연장 요금은 입장 인원이 아니라 키즈 기타 매출", () => {
+  it("이름에 '퇴장'이 있어도 '지연'이면 기타", () => {
+    expect(kidsKind({ name: "퇴장시간 + 10~19분 지연", qty: 1, gross: 5000, net: 5000 })).toBe("기타");
+    expect(kidsKind({ name: "퇴장시간 + 20~29분 지연", qty: 1, gross: 10000, net: 10000 })).toBe("기타");
+    expect(kidsKind({ name: "11시20분 퇴장 [10시 입장]", qty: 1, gross: 0, net: 0 })).toBe("입장발행");
+    expect(kidsKind({ name: "[휴일] 1시간 50분 입장권", qty: 1, gross: 14000, net: 14000 })).toBe("현장결제");
+  });
+});
+
+describe("'9월 이벤트(시간제한X)/30,000원' — 이름에 금액이 붙은 0원 이벤트 입장 = 네이버에서 판 입장권 (입장 발행)", () => {
+  it("발행으로 셈 (무료 이벤트 아님), 금액 없는 쿠폰 입장은 그대로 이벤트 무료", () => {
+    expect(kidsKind({ name: "9월 이벤트(시간제한X)/30,000원", qty: 1, gross: 0, net: 0 })).toBe("입장발행");
+    expect(kidsKind({ name: "[평일] 한가위 무제한 쿠폰", qty: 1, gross: 0, net: 0 })).toBe("이벤트무료");
+  });
+});

@@ -73,6 +73,10 @@ export function kidsKind(line: Pick<SaleLine, "name" | "gross" | "net"> & { cat1
   const name = line.name || "";
   const free = line.gross === 0 && line.net === 0;
   if (EXTRA.test(name)) return "추가인원";
+  // '퇴장시간 + 10~19분 지연' — 늦게 나가 낸 연장 요금 (사람 수 아님)
+  if (/지연/.test(name)) return "기타";
+  // '9월 이벤트(시간제한X)/30,000원' — 이름에 금액이 붙은 0원 입장은 네이버에서 그 값에 판 입장권 → 입장 발행
+  if (free && /[\d,]{4,}\s*원/.test(name) && !/쿠폰/.test(name)) return "입장발행";
   if (free && (EVENT.test(name) || /쿠폰/.test(line.cat1 || ""))) return "이벤트무료";
   if (!free && isTicketPrice(line.gross, line.qty)) return "현장결제";
   // 2026-03 까지 현장 손님은 '현장 구매 30,000원' (카페 교환권 포함) 으로 결제 → 현장 입장 인원
