@@ -82,16 +82,8 @@ export function CalendarStrip({ from, to, selected, present, latest, onSelect, o
               최근 마감
             </button>
           )}
-          <button className="icon-btn" onClick={onSettings} aria-label="설정">
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-              <path
-                d="M12 15a3 3 0 100-6 3 3 0 000 6zM19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6a7 7 0 000 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="round"
-              />
-            </svg>
+          <button className="chip log-btn" onClick={onSettings} aria-label="LOG 기록">
+            LOG 기록
           </button>
         </div>
       </div>

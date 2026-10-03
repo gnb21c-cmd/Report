@@ -1245,3 +1245,8 @@ ul.plain li {
 .etc-row .note {
   align-self: flex-start;
 }
+/* LOG 기록 */
+.log-date {
+  white-space: nowrap;
+  vertical-align: top;
+}

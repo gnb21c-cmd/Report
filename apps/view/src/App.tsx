@@ -8,7 +8,7 @@ import { Home, type View } from "./screens/Home";
 import { SectorDetail } from "./screens/SectorDetail";
 import { MonthDetail, YearDetail } from "./screens/CumDetail";
 import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
-import { Settings } from "./screens/Settings";
+import { LogScreen } from "./screens/LogScreen";
 import { CashDetail } from "./screens/CashDetail";
 import { SettleDetail } from "./screens/SettleDetail";
 import { DayDetail } from "./screens/DayDetail";
@@ -95,7 +95,7 @@ export function App() {
     const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;
     body = <CashDetail sum={cashDay?.sum} part={cashDay?.part} carriedFrom={cashDay?.carriedFrom || null} meta={cashDay?.carriedFrom ? undefined : board.report(date)?.meta?.cash} earlier={earlier !== date ? earlier : null} {...nav} />;
   } else if (view.name === "settings")
-    body = <Settings board={board} status={d.status} source={d.source} latest={latest} syncedAt={d.syncedAt} syncing={d.syncing} onSync={d.sync} onReload={d.reload} onBack={back} />;
+    body = <LogScreen board={board} latest={latest} onBack={back} />;
   if (body) return <div className="app">{body}</div>;
 
   return (
