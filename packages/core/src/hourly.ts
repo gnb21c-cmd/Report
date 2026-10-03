@@ -10,7 +10,7 @@ import { addDays, dayRange, monthStart, weekdayLabel } from "./dates";
 import { holidayName, isOffDay, kidsPrice, kidsSales, VISITOR_FACTOR } from "./rules";
 import { wonMan } from "./format";
 import { HOURS, sum } from "./part";
-import { valueOf, type Board, type BoxKey, type ProductRow } from "./metrics";
+import { BOXES, valueOf, type Board, type BoxKey, type ProductRow } from "./metrics";
 import type { WeatherMap } from "./weather";
 
 export interface HourDay {
@@ -314,3 +314,14 @@ export function bottomProducts(board: Board, date: string, box: BoxKey, span: "d
   return [...month, ...zero].sort(byQty).slice(0, n);
 }
 
+
+/** 그날 시간대별 총매출 (섹터 다섯 개 합) — 카페 시간대 자료가 없으면 null */
+export function dayHourly(board: Board, date: string): number[] | null {
+  if (!board.report(date)?.cafe?.hourly) return null;
+  const out = HOURS.map(() => 0);
+  for (const b of BOXES) {
+    const h = hourDay(board, date, b);
+    if (h) h.sales.forEach((v, i) => (out[i] += v));
+  }
+  return out;
+}

@@ -1171,3 +1171,8 @@ tr.sum td {
   white-space: normal;
   text-align: right;
 }
+
+/* 마감일 비교 표 */
+.day-cmp td:first-child { white-space: nowrap; }
+.day-cmp th, .day-cmp td { font-size: 12px; padding-left: 2px; padding-right: 2px; }
+.day-cmp { width: 100%; }

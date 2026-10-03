@@ -267,3 +267,12 @@ describe("체험판 자료", () => {
     expect(hourDay(b, "2026-10-01", "키친")!.total).toBeCloseTo(m.box.키친, -3);
   });
 });
+
+describe("마감일 비교 — 시간대별 총매출", () => {
+  it("섹터 합, 시간대 자료 없으면 null", async () => {
+    const { dayHourly } = await import("../src");
+    const b = new Board([{ date: "2026-10-01", cafe: cafe("2026-10-01", { 바리스타: 3000, 키친: 5000, hourly: { 바리스타: H([1000, 2000]), 키친: H([0, 5000]) } }) }, { date: "2026-10-02", cafe: cafe("2026-10-02", { 바리스타: 1, daily: true }) }]);
+    expect(dayHourly(b, "2026-10-01")!.slice(0, 3)).toEqual([1000, 7000, 0]);
+    expect(dayHourly(b, "2026-10-02")).toBeNull();
+  });
+});

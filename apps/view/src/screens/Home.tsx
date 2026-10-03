@@ -13,6 +13,7 @@ import { BOXES, changePct, comparable, count, holidayName, money, pct, SETTLE_LA
 
 export type View =
   | { name: "home" }
+  | { name: "day" }
   | { name: "sector"; box: BoxKey }
   | { name: "month" }
   | { name: "year" }
@@ -81,6 +82,7 @@ export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: O
         value={won(day.total)}
         date={d.date}
         w={weather}
+        onClick={() => open({ name: "day" })}
       >
         <Delta now={day.total} before={d.prevWeek.m.total} label={`지난주 ${d.weekday}요일`} />
       </HeroBox>

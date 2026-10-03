@@ -10,6 +10,7 @@ import { MonthDetail, YearDetail } from "./screens/CumDetail";
 import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { Settings } from "./screens/Settings";
 import { CashDetail } from "./screens/CashDetail";
+import { DayDetail } from "./screens/DayDetail";
 
 function Notice({ title, text }: { title: string; text: string }) {
   return (
@@ -73,7 +74,8 @@ export function App() {
   const nav = { date, minDate: from, maxDate: to, onDate: setDate, onBack: back };
 
   let body: JSX.Element | null = null;
-  if (view.name === "sector") body = <SectorDetail board={board} box={view.box} weather={d.weather} {...nav} />;
+  if (view.name === "day") body = <DayDetail board={board} weather={d.weather} {...nav} />;
+  else if (view.name === "sector") body = <SectorDetail board={board} box={view.box} weather={d.weather} {...nav} />;
   else if (view.name === "month") body = <MonthDetail board={board} {...nav} />;
   else if (view.name === "year") body = <YearDetail board={board} {...nav} />;
   else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;

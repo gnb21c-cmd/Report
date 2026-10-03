@@ -56,3 +56,38 @@ export function Stat({ label, value, note }: { label: ReactNode; value: ReactNod
 }
 
 export const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+
+/** 그 달의 마지막 날 (n 달 옮긴) */
+function monthEnd(date: string, n: number): string {
+  const [y, m] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m + n, 0)).toISOString().slice(0, 10);
+}
+
+/** 달 단위로 움직이는 머리 (당월누계 · 올해누계) — ‹ › 한 달씩. 고른 날 = 그 달 마지막 날 (마감일이 든 달은 마감일) */
+export function MonthHeader({ title, date, onBack, onDate, minDate, maxDate }: { title: string } & Nav) {
+  const go = (n: number) => {
+    const d = monthEnd(date, n);
+    onDate(d > maxDate ? maxDate : d);
+  };
+  return (
+    <header className="detail-head">
+      <button className="icon-btn" onClick={onBack} aria-label="뒤로">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+          <path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <h1>{title}</h1>
+      <div className="detail-date">
+        <button className="icon-btn" disabled={monthEnd(date, -1) < minDate} onClick={() => go(-1)} aria-label="지난달">
+          ‹
+        </button>
+        <span>
+          {date.slice(0, 4)}년 {Number(date.slice(5, 7))}월
+        </span>
+        <button className="icon-btn" disabled={date.slice(0, 7) >= maxDate.slice(0, 7)} onClick={() => go(1)} aria-label="다음 달">
+          ›
+        </button>
+      </div>
+    </header>
+  );
+}
