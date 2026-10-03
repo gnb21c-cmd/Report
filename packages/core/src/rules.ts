@@ -1,0 +1,61 @@
+/* ============================================================
+   보고 규칙 (사장님이 정한 기준) — 바꾸면 test/metrics.test.ts 에 시험을 먼저 더함
+   - 키즈 입장료 단가: 평일 12,000원 · 평일 외(토·일·공휴일·대체공휴일) 14,000원
+   - 카페아스타나 방문인원 = 음료·맥주 잔 수 × 0.96 (두 잔 마시는 사람을 감안). 한 팀(영수증)의 인원 = 그 팀의 잔 수
+   - 1인 평균 소비금액 = 총매출 ÷ 방문인원
+   ============================================================ */
+import { weekday } from "./dates";
+import { EXTRA_HOLIDAYS, HOLIDAYS } from "./holidays";
+import type { SaleLine, StoreId } from "./types";
+
+/** 키즈 입장권 단가 (from 날짜부터 적용, 늦은 것이 우선) — 값이 바뀌면 줄을 더함 */
+export const KIDS_PRICES: { from: string; weekday: number; holiday: number }[] = [{ from: "2025-01-01", weekday: 12000, holiday: 14000 }];
+
+/** 추정 방문자 = 잔 수 × 이 값 */
+export const VISITOR_FACTOR = 0.96;
+
+export function holidayName(date: string): string | null {
+  return HOLIDAYS[date] || EXTRA_HOLIDAYS[date] || null;
+}
+
+/** 평일 외 = 토·일·공휴일·대체공휴일 */
+export function isOffDay(date: string): boolean {
+  const w = weekday(date);
+  return w === 0 || w === 6 || !!holidayName(date);
+}
+
+export function kidsPrice(date: string): { price: number; kind: "평일" | "휴일" } {
+  const rule = [...KIDS_PRICES].reverse().find((r) => r.from <= date) || KIDS_PRICES[0];
+  return isOffDay(date) ? { price: rule.holiday, kind: "휴일" } : { price: rule.weekday, kind: "평일" };
+}
+
+/** 잔 수에서 뺄 것 (옵션·원두·상품 등) */
+const NOT_CUP = /추가|변경|사이즈|업그레이드|연하게|진하게|원두|드립백|시럽|굿즈|텀블러|쿠폰|할인|포장비|봉투|컵\s*홀더|아이스크림/;
+/** 잔으로 셀 것 — 카페 POS 바리스타 상품 + 이름으로 맥주 등 */
+const CUP_NAME = /맥주|beer|생맥|필스너|에일|라거|하이볼|와인|커피|라떼|아메리카노|아메(?![가-힣])|에스프레소|에이드|주스|스무디|프라페|밀크티|티(?![가-힣])|차(?![가-힣])|tea|coffee/i;
+
+/** 방문자 추정용 '잔'인지 */
+export function isCup(pos: StoreId, line: Pick<SaleLine, "name" | "cat1"> & Partial<Pick<SaleLine, "gross" | "net">>, team: string): boolean {
+  const name = line.name || "";
+  if (NOT_CUP.test(name)) return false;
+  // 0원 상품은 옵션(연하게·less ice·테이크아웃 등)이라 잔으로 세지 않음 — 단 '[종이] ICE 아메' 같은 무료 음료 쿠폰은 잔
+  if (line.gross === 0 && line.net === 0) return CUP_NAME.test(name);
+  if (pos === "cafe" && team === "바리스타") return true;
+  return CUP_NAME.test(name) || /주류|맥주|음료/.test(line.cat1 || "");
+}
+
+/** 한 상품이 몇 잔인지 — '맥주2+감자튀김' · '와인2+리코타샐러드M' 처럼 이름에 잔 수가 붙은 세트는 그 수만큼 */
+export function cupsPerItem(name: string): number {
+  const m = (name || "").match(/(?:맥주|와인|하이볼|에이드|커피|라떼|아메리카노)\s*(\d)\s*(?:잔|ea)?\s*\+/i);
+  return m ? Math.max(1, Number(m[1])) : 1;
+}
+
+/** 현금성 상품권으로 결제한 줄 ('[종이쿠폰]만원권' · '[아키 2만원] 교환권', 음수) — 상품이 아니라 결제 수단
+ *  상품은 이미 제값으로 팔린 것으로 잡혀 있으므로, 이 음수 줄은 매출에서 빼지 않고 '상품권 결제' 로 따로 보여 줌 */
+export function isVoucherPayment(line: Pick<SaleLine, "name" | "net">): boolean {
+  return line.net < 0 && /종이쿠폰|상품권|교환권|금액권/.test(line.name || "");
+}
+
+export function visitorsFromCups(cups: number): number {
+  return Math.max(0, Math.round(cups * VISITOR_FACTOR));
+}

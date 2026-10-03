@@ -1,0 +1,41 @@
+# A(…/a/) · B(…/b/<열쇠>/) 화면과 보안 규칙을 클라우드(Firebase Hosting · Firestore)에 올림
+# main 에 올라가면 저절로, 또는 Actions → Deploy → Run workflow
+# 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secret FIREBASE_SERVICE_ACCOUNT (Firebase 서비스 계정 비공개 키 JSON)
+name: Deploy
+on:
+  push:
+    branches: [main]
+    paths: ["apps/view/**", "apps/entry/**", "packages/core/**", "firebase/**", "scripts/hosting.mjs", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 설정 확인
+        id: check
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ] || [ -z "${{ vars.FIREBASE_PROJECT_ID }}" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT · FIREBASE_PROJECT_ID 가 아직 없어 올리지 않습니다 (docs/SETUP.md ⑤)"; echo "ok=0" >> $GITHUB_OUTPUT
+          else echo "ok=1" >> $GITHUB_OUTPUT; fi
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.ok == '1'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ok == '1'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 화면 만들기
+        if: steps.check.outputs.ok == '1'
+        run: pnpm install --frozen-lockfile && pnpm build:hosting
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      - name: 올리기
+        if: steps.check.outputs.ok == '1'
+        working-directory: firebase
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx -y firebase-tools@13 deploy --only hosting,firestore:rules --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
+          rm -f "$RUNNER_TEMP/sa.json"

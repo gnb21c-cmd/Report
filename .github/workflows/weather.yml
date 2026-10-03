@@ -1,0 +1,27 @@
+# 기상청 날씨 → 클라우드 (1시간마다) — 사무실에 켜 둘 PC 없이 GitHub 가 대신
+# 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD · KMA_SERVICE_KEY
+# (값이 없으면 아무것도 안 하고 끝남)
+name: Weather
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+jobs:
+  weather:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 기상청 → 클라우드
+        working-directory: apps/weather
+        run: python -m report_weather
+        env:
+          PYTHONPATH: src
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+          KMA_SERVICE_KEY: ${{ secrets.KMA_SERVICE_KEY }}

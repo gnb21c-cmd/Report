@@ -1,0 +1,585 @@
+/* A 입력 화면 — 사무실 PC 전체 화면용. 엑셀처럼 낯설지 않게: 흰 칸 · 파란 단추 · 큰 글자 */
+/* 사무실 화면은 늘 밝은 화면 하나로 (엑셀 같은 흰 바탕) */
+:root {
+  color-scheme: light;
+  --page: #eef1f5;
+  --panel: #ffffff;
+  --ink: #111111;
+  --ink-2: #4a4a48;
+  --muted: #7d7c77;
+  --line: #d6d9de;
+  --grid: #c9ced6;
+  --accent: #1f6fd1;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6f0fc;
+  --ok: #0a7a2f;
+  --ok-soft: #e7f6ec;
+  --bad: #c0362c;
+  --bad-soft: #fdecea;
+  --warn: #8a5a00;
+  --warn-soft: #fff5dc;
+  --head: #f3f5f8;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Malgun Gothic", "맑은 고딕", system-ui, "Apple SD Gothic Neo", sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+h2 {
+  font-size: 18px;
+  margin: 0;
+}
+h3 {
+  font-size: 17px;
+  margin: 0;
+}
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+.page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #18324f;
+  color: #fff;
+}
+.bar .title {
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bar small {
+  font-weight: 400;
+  opacity: 0.7;
+}
+.bar .demo {
+  font-size: 13px;
+  font-weight: 600;
+  background: #ffd76a;
+  color: #3b2a00;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bar button.ghost {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+.conn {
+  font-size: 14px;
+}
+.conn.ok {
+  color: #8ff0a8;
+}
+.conn.bad {
+  color: #ffb3ab;
+  font-weight: 700;
+}
+.pill {
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.pill.warn {
+  background: #ffd76a;
+  color: #3b2a00;
+}
+.main {
+  padding: 14px 20px 20px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  max-width: 1880px;
+  width: 100%;
+  margin: 0 auto;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 14px;
+}
+.head-panel {
+  border-left: 6px solid var(--accent);
+}
+.guide {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 700;
+}
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.date-label {
+  color: var(--ink-2);
+}
+.date-big {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+  min-width: 260px;
+  text-align: center;
+}
+.date-info {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px 26px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.have {
+  margin-right: 12px;
+}
+.have.yes {
+  color: var(--ok);
+  font-weight: 600;
+}
+.have.no {
+  color: var(--muted);
+}
+input[type="date"],
+select {
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff;
+}
+/* 네이버 표 — 엑셀 칸처럼 */
+.grid-wrap {
+  overflow-x: auto;
+}
+.naver-grid {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 1200px;
+  table-layout: fixed;
+}
+.naver-grid th,
+.naver-grid td {
+  border: 1px solid var(--grid);
+  padding: 0;
+  text-align: center;
+  font-size: 14px;
+}
+.naver-grid thead th {
+  background: var(--head);
+  padding: 6px 0;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.naver-grid thead th.hour {
+  color: var(--ink);
+}
+.naver-grid .row-head {
+  width: 128px;
+  background: var(--head);
+  text-align: left;
+  padding: 0 10px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.naver-grid td input {
+  width: 100%;
+  border: 0;
+  padding: 10px 2px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+}
+.naver-grid td input:focus {
+  background: var(--accent-soft);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.naver-grid .sum {
+  width: 86px;
+  background: var(--head);
+  font-weight: 800;
+  font-size: 17px;
+}
+/* 엑셀 올리는 칸 */
+.files {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.filebox {
+  border: 2px dashed var(--grid);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 190px;
+}
+.filebox.over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.filebox.good {
+  border-style: solid;
+  border-color: #8fd1a5;
+  background: #fbfefc;
+}
+.filebox.bad {
+  border-style: solid;
+  border-color: #f0a39b;
+  background: #fffbfa;
+}
+.filebox-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.store-tag {
+  display: inline-block;
+  font-size: 13px;
+  border-radius: 6px;
+  padding: 1px 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-right: 4px;
+  vertical-align: 2px;
+}
+.drop {
+  background: var(--head);
+  color: var(--ink);
+  border: 0;
+  border-radius: 8px;
+  padding: 28px 12px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  cursor: pointer;
+}
+.drop:hover {
+  background: var(--accent-soft);
+}
+.drop-big {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.drop-small {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.file-name {
+  font-weight: 700;
+  word-break: break-all;
+}
+.file-error {
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+.server-note {
+  font-size: 14px;
+  color: var(--ink-2);
+  border-top: 1px dashed var(--line);
+  padding-top: 6px;
+}
+.mini {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 15px;
+}
+.mini td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #eef0f3;
+  vertical-align: top;
+}
+.mini td:first-child {
+  color: var(--ink-2);
+  width: 150px;
+  white-space: nowrap;
+}
+.ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+.warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+.two {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+.table-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.list th {
+  position: sticky;
+  top: 0;
+  background: var(--head);
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.list td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef0f3;
+}
+.list tr.sum td {
+  font-weight: 800;
+  font-size: 18px;
+}
+.preview td.num {
+  font-size: 17px;
+  font-weight: 600;
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 14px;
+}
+.center {
+  text-align: center;
+}
+.steps {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  color: var(--ink-2);
+  display: grid;
+  gap: 4px;
+}
+.alert.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+}
+/* 아래 단추 줄 */
+.foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.06);
+}
+.foot-msg {
+  flex: 1 1 240px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.foot-msg.ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+.foot-msg.bad {
+  color: var(--bad);
+  font-weight: 700;
+}
+button {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.ghost,
+label.button.ghost {
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--grid);
+}
+label.button {
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.small {
+  padding: 3px 10px;
+  font-size: 14px;
+}
+button.big {
+  font-size: 18px;
+  padding: 6px 14px;
+}
+button.huge {
+  font-size: 19px;
+  padding: 14px 26px;
+  border-radius: 10px;
+}
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+}
+button.link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  padding: 0 4px;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.row.end {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.radio {
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  background: #fff;
+}
+.radio.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+/* 확인 창 */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 35, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  padding: 20px;
+}
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px 24px;
+  width: min(640px, 100%);
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+.modal.wide {
+  width: min(860px, 100%);
+}
+.send-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.field {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-2);
+}
+.field input {
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 18px;
+}
+.error {
+  color: var(--bad);
+  font-weight: 700;
+}
+.okmsg {
+  color: var(--ok);
+  font-weight: 700;
+  background: var(--ok-soft);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 0;
+}
+@media (max-width: 1100px) {
+  .files,
+  .two {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+out
+*.log
+.env
+.env.local
+__pycache__
+*.pyc
+# 매출 자료 파일은 저장소에 넣지 않음
+*.xls
+*.xlsx
+*.csv
+
+apps/view/dist-demo
+apps/entry/dist*

@@ -1,0 +1,1001 @@
+/* 매출 보고 — 색은 역할 이름으로 (밝은 / 어두운 화면)
+   폰 한 손 보기: 위 달력 띠 → 총 매출 → 팀별 한 줄 상자 → 누계 2×2 → 방문·키즈 */
+:root {
+  color-scheme: light;
+  --page: #f6f6f3;
+  --surface-1: #fdfdfc;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --ref: #b4b3ab;
+  --spark: #c3c2b7;
+  --track: #e8f0fb;
+  --accent: #2a78d6;
+  --on-accent: #ffffff;
+  --good: #006300;
+  --bad: #c23b3b;
+  --sun: #c23b3b;
+  --sat: #256abf;
+  --warn-bg: #fff4dc;
+  --warn-ink: #6b4a00;
+  --press: rgba(11, 11, 11, 0.04);
+  /* 시간대 막대(핑크) · 추세 선(옅음 → 진함) · 작년(회색) / 올해(빨강) */
+  --pink: #e0679a;
+  --pink-soft: #f0aecb;
+  --pink-strong: #c2185b;
+  --trend-4: #f6d3e1;
+  --trend-3: #eeb0c8;
+  --trend-2: #e48aae;
+  --trend-1: #d96894;
+  --cur: #d63a3a;
+  --ly: #b4b3ab;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --ref: #6b6a65;
+    --spark: #55544f;
+    --track: #1f2c3d;
+    --accent: #3987e5;
+    --on-accent: #ffffff;
+    --good: #0ca30c;
+    --bad: #e66767;
+    --sun: #e66767;
+    --sat: #6da7ec;
+    --warn-bg: #3a2d0c;
+    --warn-ink: #fad27a;
+    --press: rgba(255, 255, 255, 0.05);
+    --pink: #ee7fab;
+    --pink-soft: #8a4964;
+    --pink-strong: #ff8fbd;
+    --trend-4: #4a2a37;
+    --trend-3: #6e3a50;
+    --trend-2: #9a4e6e;
+    --trend-1: #c9638d;
+    --cur: #ef6b6b;
+    --ly: #6b6a65;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --ref: #6b6a65;
+  --spark: #55544f;
+  --track: #1f2c3d;
+  --accent: #3987e5;
+  --on-accent: #ffffff;
+  --good: #0ca30c;
+  --bad: #e66767;
+  --sun: #e66767;
+  --sat: #6da7ec;
+  --warn-bg: #3a2d0c;
+  --warn-ink: #fad27a;
+  --press: rgba(255, 255, 255, 0.05);
+  --pink: #ee7fab;
+  --pink-soft: #8a4964;
+  --pink-strong: #ff8fbd;
+  --trend-4: #4a2a37;
+  --trend-3: #6e3a50;
+  --trend-2: #9a4e6e;
+  --trend-1: #c9638d;
+  --cur: #ef6b6b;
+  --ly: #6b6a65;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+h2 {
+  font-size: 16px;
+  margin: 0;
+}
+h3 {
+  font-size: 15px;
+  margin: 0;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.content {
+  padding: 12px 16px;
+  display: grid;
+  gap: 10px;
+  transition: opacity 0.2s;
+}
+.content.busy {
+  opacity: 0.75;
+}
+
+/* ---------- 위 달력 띠 ---------- */
+.top {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 2px 16px;
+}
+.month-btn {
+  background: none;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 4px 0;
+}
+.month-btn span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.chip {
+  background: var(--track);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.icon-btn {
+  background: none;
+  color: var(--text-secondary);
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 10px;
+}
+.strip {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.strip-pad {
+  flex: 0 0 calc(50% - 26px);
+}
+.strip::-webkit-scrollbar {
+  display: none;
+}
+.day {
+  flex: 0 0 52px;
+  width: 52px;
+  scroll-snap-align: center;
+  background: none;
+  color: var(--text-primary);
+  border-radius: 14px;
+  padding: 2px 0 6px;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  font-weight: 500;
+}
+.day .mon {
+  height: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.day .wd {
+  font-size: 12px;
+  color: var(--muted);
+}
+.day .dn {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.day.sun .wd,
+.day.sun .dn {
+  color: var(--sun);
+}
+.day.sat .wd,
+.day.sat .dn {
+  color: var(--sat);
+}
+.day .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.day .dot.full {
+  background: var(--accent);
+}
+.day .dot.half {
+  border: 1.5px solid var(--accent);
+}
+.day.sel {
+  background: var(--accent);
+}
+.day.sel .wd,
+.day.sel .dn,
+.day.sel .mon {
+  color: var(--on-accent);
+}
+.day.sel .dot.full {
+  background: var(--on-accent);
+}
+.day.sel .dot.half {
+  border-color: var(--on-accent);
+}
+.demo-tag {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 년 월 고르기 */
+.sheet-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  align-items: end;
+  z-index: 20;
+}
+.sheet {
+  background: var(--surface-1);
+  border-radius: 18px 18px 0 0;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 17px;
+}
+.months {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.months button {
+  background: var(--page);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 12px 0;
+  font-weight: 600;
+}
+.months button.on {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+/* ---------- 상자 ---------- */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  min-width: 0;
+}
+.card > h2 + * {
+  margin-top: 8px;
+}
+button.card,
+button.stat {
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+  font-weight: 400;
+  cursor: pointer;
+}
+.tap:active {
+  background: var(--press);
+}
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-head button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.card-tools {
+  margin-bottom: 8px;
+}
+.chev {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+/* 총 매출 + 날씨 */
+/* 금액 상자 + 날씨: 위 날짜 줄 / 아래 [금액·비교 | 날씨 2 × 2] — 폰에서도 옆에 */
+.hero-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label label" "main wx";
+  gap: 6px 12px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+.hero-label {
+  grid-area: label;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.hero-box .hero-main {
+  grid-area: main;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.hero-box .hero-main > * {
+  min-width: 0;
+}
+.hero.hero-box .hero-value {
+  font-size: clamp(20px, 6vw, 36px);
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: -0.8px;
+  margin: 0;
+}
+.hero-box .delta {
+  display: block;
+}
+.hero-box .wx {
+  grid-area: wx;
+}
+/* 날씨 칸 — 2 × 2: [기간] [날씨] / [최고] [최저]. 70대도 한눈에: 큰 이모지 · 큰 글자 */
+.wx {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 14px 18px;
+  align-items: center;
+  align-content: center;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.wx-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.wx-emoji {
+  width: 28px;
+  text-align: center;
+  font-size: 26px;
+  line-height: 1;
+}
+.wx-text {
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wx-text .wx-key {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+.wx-text small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.season {
+  justify-self: start;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.season.s-성수기 {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.season.s-평상시 {
+  background: var(--track);
+  color: var(--accent);
+}
+.season.s-비수기 {
+  background: var(--page);
+  color: var(--text-secondary);
+}
+/* 폰: 날씨 글자를 화면 폭에 맞추고 '최고/최저' 글자는 숨김 (🌡️ · 🧊 그림으로) */
+@media (max-width: 520px) {
+  .hero-box {
+    gap: 6px 8px;
+  }
+  .hero-box .wx {
+    gap: 10px 8px;
+  }
+  .hero-box .wx-emoji {
+    font-size: 5vw;
+    width: 5.2vw;
+  }
+  .hero-box .wx-row {
+    gap: 3px;
+  }
+  .hero-box .wx-text {
+    font-size: 4.2vw;
+  }
+  .hero-box .wx-text .wx-key {
+    display: none;
+  }
+  .hero-box .season {
+    font-size: 3.8vw;
+    padding: 4px 8px;
+  }
+}
+.wx-cell {
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.wx.compact {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--grid);
+}
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.hero .hero-value {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 2px 0 2px;
+  overflow-wrap: anywhere;
+}
+/* 팀별 섹터 버튼: 다섯 개가 한 줄, 한 화면 폭에 */
+.sectors {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.sector {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  padding: 8px 2px 8px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  font-weight: 400;
+  min-width: 0;
+}
+.sec-label {
+  font-weight: 700;
+  font-size: 12.5px;
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.sec-value {
+  font-weight: 700;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.sec-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1px;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.sec-line .sec-value {
+  font-size: min(15px, 3.25vw);
+  letter-spacing: -0.5px;
+}
+.sec-pct {
+  font-size: min(11px, 2.35vw);
+  color: var(--muted);
+  letter-spacing: -0.4px;
+}
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.stats.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.stats.three .stat {
+  padding: 10px 10px;
+}
+/* 숫자 상자: 이름은 왼쪽 위, 금액·비교는 오른쪽 정렬 */
+.stat {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 2px;
+}
+.stat > .stat-label {
+  align-self: flex-start;
+  text-align: left;
+  margin-bottom: 4px;
+}
+.stats .stat-value {
+  font-size: min(20px, 4.5vw);
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.stats .stat .delta,
+.stats .stat .note {
+  font-size: min(13px, 3.3vw);
+}
+.stats .stat .note {
+  white-space: nowrap;
+}
+.stats .stat .delta {
+  white-space: normal;
+  text-align: right;
+  word-break: keep-all;
+}
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  word-break: keep-all;
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.group {
+  margin: 8px 2px -2px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  vertical-align: 1px;
+}
+.tag.ghost {
+  background: var(--track);
+  color: var(--accent);
+}
+.center-note {
+  text-align: center;
+  margin: 0;
+}
+.delta {
+  font-size: 13px;
+  display: inline-block;
+}
+.delta.up {
+  color: var(--good);
+}
+.delta.down {
+  color: var(--bad);
+}
+.sub {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.note {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.note.strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.muted {
+  color: var(--muted);
+}
+.bad {
+  color: var(--bad);
+}
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 16px 0;
+  margin: 0;
+}
+.banner {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  margin: 6px 16px 0;
+}
+.content > .banner {
+  margin: 0;
+}
+
+/* ---------- 상세 ---------- */
+.detail-head {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 4px;
+}
+.detail-date {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.detail-date .icon-btn {
+  width: 32px;
+}
+.analysis {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+.edit {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--grid);
+  display: grid;
+  gap: 8px;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stepper button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 22px;
+}
+.stepper input {
+  width: 80px;
+  height: 44px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+}
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+input {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+/* ---------- 단추 ---------- */
+button {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+button.small {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+button.wide {
+  width: 100%;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.seg {
+  display: inline-flex;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px;
+  flex-wrap: wrap;
+}
+.seg button {
+  background: none;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.seg button.on {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--border);
+  font-weight: 600;
+}
+
+/* ---------- 표 ---------- */
+.table-wrap {
+  overflow-x: auto;
+}
+.table-wrap.tall {
+  max-height: 420px;
+  overflow-y: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--grid);
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+}
+td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: top;
+}
+tr:last-child td {
+  border-bottom: 0;
+}
+tr.sel td {
+  background: var(--track);
+}
+tr.sum td {
+  font-weight: 700;
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- 그래프 ---------- */
+.chart {
+  position: relative;
+  width: 100%;
+}
+.chart svg {
+  display: block;
+}
+.grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+.baseline {
+  stroke: var(--baseline);
+  stroke-width: 1;
+}
+.crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+.sel-line {
+  stroke: var(--track);
+  stroke-width: 10;
+}
+.axis {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: -2px 0 6px;
+}
+.key-line {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.key-rect {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+.bar-top {
+  fill: var(--text-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.below {
+  font-size: 12px;
+  font-weight: 700;
+}
+.hover-band {
+  fill: var(--press);
+}
+.mark-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+/* 시간마다 ▲ ▼ (추세 선 아래, 그래프 칸과 같은 폭) */
+.arrows {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  margin: 2px 14px 0 46px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.up-text {
+  color: var(--good);
+}
+.down-text {
+  color: var(--bad);
+}
+.stat-label .chev {
+  vertical-align: -4px;
+}
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  min-width: 150px;
+}
+.tip-title {
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tip-row b {
+  font-variant-numeric: tabular-nums;
+}
+
+.steps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+.steps li + li {
+  margin-top: 6px;
+}
+.center {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.notice {
+  max-width: 360px;
+  display: grid;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+.top-gap {
+  margin-top: 8px;
+}
