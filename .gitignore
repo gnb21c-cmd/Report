@@ -14,3 +14,4 @@ __pycache__
 
 apps/view/dist-demo
 apps/entry/dist*
+firebase/public
