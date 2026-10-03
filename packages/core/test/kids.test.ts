@@ -243,6 +243,31 @@ describe("2025-01 교환권 값 바꾸는 달 — 평일 표는 2만원 ('/평�
   });
 });
 
+describe("2026-04 부터 숏타임 입장료 — 평일 1만원 · 휴일 1만1천원", () => {
+  it("숏타임 네이버 · 현장은 숏타임 값, 나머지는 입장료", () => {
+    const date = "2026-05-03"; // 일요일 (휴일)
+    const ks = [
+      line({ name: "11시50분 퇴장 [10시 입장]", qty: 10 }),
+      line({ name: "11시20분 퇴장 [10시 입장]", qty: 4 }),
+      line({ name: "[휴일] 10시 숏타임 입장권", qty: 1, gross: 11000, net: 11000 }),
+      line({ name: "[휴일] 1시간 50분 입장권", qty: 2, gross: 28000, net: 28000 }),
+    ];
+    const kids = buildStorePart({ store: "kids", date, file: "k", sheet: { from: date, to: date, lines: ks, sheetNet: null } as any, sectorOf: () => "기타" as any }).part;
+    const m = new Board([{ date, kids }]).day(date);
+    expect(m.walkIn).toBe(3);
+    expect(m.naver).toBe(11);
+    // 네이버 11 = 숏타임 3 (발행 4 − 현장 숏타임 1) + 일반 8
+    expect(m.fee.naver).toBe(8 * 14000 + 3 * 11000);
+    expect(m.fee.walkIn).toBe(2 * 14000 + 1 * 11000);
+    expect(m.box.키즈입장료).toBe(8 * 14000 + 3 * 11000 + 2 * 14000 + 11000);
+  });
+  it("평일 숏타임은 1만원", () => {
+    const date = "2026-05-06"; // 수요일
+    const kids = buildStorePart({ store: "kids", date, file: "k", sheet: { from: date, to: date, lines: [line({ name: "11시20분 퇴장 [10시 입장]", qty: 2 })], sheetNet: null } as any, sectorOf: () => "기타" as any }).part;
+    expect(new Board([{ date, kids }]).day(date).fee.naver).toBe(2 * 10000);
+  });
+});
+
 describe("'퇴장시간 + 10~19분 지연' — 연장 요금은 입장 인원이 아니라 키즈 기타 매출", () => {
   it("이름에 '퇴장'이 있어도 '지연'이면 기타", () => {
     expect(kidsKind({ name: "퇴장시간 + 10~19분 지연", qty: 1, gross: 5000, net: 5000 })).toBe("기타");

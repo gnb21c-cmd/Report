@@ -13,7 +13,7 @@
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
 import { dayRange, daysInMonth, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
-import { kidsPrice, kidsSales, OLD_VOUCHER_PRICE, visitorsFromCups } from "./rules";
+import { isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
@@ -214,6 +214,8 @@ export class Board {
     }
     let i20 = 0;
     let w20 = 0;
+    let sIssued = 0;
+    let sWalk = 0;
     if (kids) {
       m.has.kids = 1;
       const k = kids.kids;
@@ -223,6 +225,12 @@ export class Board {
       const sales = kidsSales(date);
       // 키즈 상품 분류에는 섹터가 없으므로 sectors 는 0 — 혹시 들어 있으면 기타로
       if (sales) m.box.기타 += kids.sectors.바리스타 + kids.sectors.베이커리 + kids.sectors.키친 + kids.sectors.기타;
+      // 숏타임 장수 — 저장된 상품 목록에서 (이미 올린 날도 다시 넣지 않고 계산)
+      for (const p of kids.products || []) {
+        if (!isShortTime(p[0])) continue;
+        if (p[1] === "입장발행") sIssued += p[2];
+        else if (p[1] === "현장결제") sWalk += p[2];
+      }
       if (k) {
         i20 = k.issued20 || 0;
         w20 = k.walkIn20 || 0;
@@ -250,7 +258,11 @@ export class Board {
     const oldNaver = m.issued > 0 ? m.naverPos : m.naver;
     // 2025-01 평일 표는 2만원 (2만원 발행 − 2만원 현장), 나머지는 3만원
     const n20 = m.issued > 0 ? Math.min(oldNaver, Math.max(0, i20 - w20)) : 0;
-    m.fee = kidsSales(date) ? { naver: m.naver * price, walkIn: m.walkIn * price } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
+    // 4월부터 숏타임은 숏타임 입장료 (네이버 숏타임 = 숏타임 발행 − 숏타임 현장)
+    const sp = shortPrice(date);
+    const nShort = Math.min(m.naver, Math.max(0, sIssued - sWalk));
+    const wShort = Math.min(m.walkIn, sWalk);
+    m.fee = kidsSales(date) ? { naver: (m.naver - nShort) * price + nShort * sp, walkIn: (m.walkIn - wShort) * price + wShort * sp } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;

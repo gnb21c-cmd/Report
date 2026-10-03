@@ -36,7 +36,13 @@ export const OLD_VOUCHER_PRICE = 30000;
 
 /** 숏타임 (방학 · 휴일 10시 입장 → 11시20분 퇴장, 네이버 10장) — 이름에 2만원이 붙어도 3만원 표 */
 export function isShortTime(name: string): boolean {
-  return /11시\s*20분\s*퇴장/.test(name || "") && /10시\s*입장/.test(name || "");
+  return (/11시\s*20분\s*퇴장/.test(name || "") && /10시\s*입장/.test(name || "")) || /숏\s*타임/.test(name || "");
+}
+
+/** 2026-04 부터 숏타임 입장료 (평일 · 휴일) */
+export const SHORT_PRICE = { weekday: 10000, holiday: 11000 };
+export function shortPrice(date: string): number {
+  return isOffDay(date) ? SHORT_PRICE.holiday : SHORT_PRICE.weekday;
 }
 
 /** 교환권 방식 때 입장 발행 한 장 값 — 2025-01 은 값을 바꾸던 달이라 평일 표가 '/평일-20,000원' (2만원), 나머지는 3만원 */
