@@ -9,7 +9,7 @@
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { addDays, BOXES, changePct, comparable, count, holidayName, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -20,6 +20,7 @@ export type View =
   | { name: "naver" }
   | { name: "kids"; key: "walkIn" | "eventFree" }
   | { name: "cash" }
+  | { name: "settle" }
   | { name: "settings" };
 export type Open = (v: View) => void;
 
@@ -105,64 +106,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         ))}
       </div>
 
-
-      {/* 자금 현황 — 섹터 상자 바로 아래. 누르면 계좌 · 적요까지 자세히 */}
-      <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
-        <div className="stat-label">
-          자금 현황 · 잔액 합계 <small className="muted">증권계좌 별도</small> <Chevron />
-        </div>
-        {cash ? (
-          <>
-            <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
-            <CashBar inn={cash.krw.in} out={cash.krw.out} />
-            {cashFrom && <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>}
-            <span className="note">
-              대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
-            </span>
-          </>
-        ) : (
-          <span className="note">이날 자금 보고 없음 — 눌러서 가까운 날 보기</span>
-        )}
-      </button>
-
-      {/* 1. 당월 매출 합계 · 2. 전년도 같은 기간 매출 합계 / 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 */}
-      <div className="stats">
-        <button className="stat tap" onClick={() => open({ name: "month" })}>
-          <div className="stat-label">
-            당월 매출 합계 <Chevron />
-          </div>
-          <div className="stat-value">{won(d.month.total)}</div>
-          <Delta now={d.month.total} before={comparable(d.lyMonth) ? d.lyMonth.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyMonth)} />
-        </button>
-        <button className="stat tap" onClick={() => open({ name: "year" })}>
-          <div className="stat-label">
-            전년도 같은 기간 매출 합계 <Chevron />
-          </div>
-          <div className="stat-value">{comparable(d.lyYear) ? won(d.lyYear.total) : "—"}</div>
-          <span className="note">
-            {d.lyYear.from.slice(2).replace(/-/g, ".")} ~ {d.lyDate.slice(5).replace("-", ".")}
-          </span>
-        </button>
-      </div>
-      <div className="stats">
-        <button className="stat tap" onClick={() => open({ name: "year" })}>
-          <div className="stat-label">
-            {d.date.slice(2, 4)}년 총 매출 합계 <Chevron />
-          </div>
-          <div className="stat-value">{won(d.year.total)}</div>
-          <Delta now={d.year.total} before={comparable(d.lyYear) ? d.lyYear.total : null} label="작년 같은 기간" money={false} missing={partial(d.lyYear)} />
-        </button>
-        {settle && settle.days > 0 ? (
-          <SettleBox d={d} s={settle} />
-        ) : (
-          <div className="stat">
-            <div className="stat-label">{d.date.slice(2, 4)}년 (현금/신용) 정산완료 합계</div>
-            <div className="stat-value">—</div>
-            <span className="note">자금 보고가 아직 없습니다</span>
-          </div>
-        )}
-      </div>
-
+      {/* 그날 정보 — 방문인원 · 1인 평균소비 · 키즈 입장 (하루치라 섹터 바로 아래) */}
       <div className="stats">
         <div className="stat">
           <div className="stat-label">카페아스타나 방문인원</div>
@@ -193,12 +137,59 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <span className="note">쿠폰 입장</span>
         </button>
       </div>
-      <p className="note center-note">
-        {d.price.charged
-          ? `${d.price.kind} 단가 ${won(d.price.price)} × 입장권 ${count(day.naver + day.walkIn, "장")}${day.kidsCoupon ? ` − 사은권 ${won(day.kidsCoupon)}` : ""} = 키즈입장 ${won(day.box.키즈입장료)}`
-          : `교환권 방식(26년 3월까지) — 네이버 ${count(day.fee.naver / 30000, "장")} × 3만원 + 현장 ${won(day.fee.walkIn)} − 카페 교환권 사용 ${won(day.kidsCoupon)} = 키즈입장 ${won(day.box.키즈입장료)}`}
-      </p>
 
+      {/* 자금 현황 — 그날 정보 아래. 누르면 계좌 · 적요까지 자세히 */}
+      <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
+        <div className="stat-label">
+          자금 현황 · 잔액 합계 <small className="muted">증권계좌 별도</small> <Chevron />
+        </div>
+        {cash ? (
+          <>
+            <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
+            <CashBar inn={cash.krw.in} out={cash.krw.out} />
+            {cashFrom && <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>}
+            <span className="note">
+              대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
+            </span>
+          </>
+        ) : (
+          <span className="note">이날 자금 보고 없음 — 눌러서 가까운 날 보기</span>
+        )}
+      </button>
+
+      {/* 1. 당월 매출 합계 · 2. 전년도 동 기간 매출 합계 (좌우 비교) / 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 */}
+      <div className="stats">
+        <button className="stat tap" onClick={() => open({ name: "month" })}>
+          <div className="stat-label">
+            당월 매출 합계 <Chevron />
+          </div>
+          <div className="stat-value">{won(d.month.total)}</div>
+          <span className="note period">({span(d.month.from, d.date, true)})</span>
+        </button>
+        <button className="stat tap" onClick={() => open({ name: "month" })}>
+          <div className="stat-label">
+            전년도 동 기간 매출 합계 <Chevron />
+          </div>
+          <div className="stat-value">{hasData(d.lyMonth) ? won(d.lyMonth.total) : "—"}</div>
+          <span className="note period">({span(d.lyMonth.from, d.lyMonth.to, true)})</span>
+        </button>
+      </div>
+      <div className="stats">
+        <button className="stat tap" onClick={() => open({ name: "year" })}>
+          <div className="stat-label">
+            {d.date.slice(2, 4)}년 총 매출 합계 <Chevron />
+          </div>
+          <div className="stat-value">{won(d.year.total)}</div>
+          <span className="note period">({span(`${d.date.slice(0, 4)}-01-01`, d.date, true)})</span>
+        </button>
+        <button className="stat tap" onClick={() => open({ name: "settle" })}>
+          <div className="stat-label">
+            {d.date.slice(2, 4)}년 (현금/신용) 정산완료 합계 <Chevron />
+          </div>
+          <div className="stat-value">{settle && settle.days > 0 ? won(settle.total) : "—"}</div>
+          <span className="note period">({span(`${d.date.slice(0, 4)}-01-01`, d.date, false)})</span>
+        </button>
+      </div>
     </>
   );
 }
@@ -226,14 +217,10 @@ function CashBar({ inn, out }: { inn: number; out: number }) {
   );
 }
 
-/** 26년 (현금/신용) 정산완료 합계 — 1/1 ~ 마감일 통장에 들어온 매출 정산 (카드 · 네이버페이 · 배달앱 · 현금매출) */
-function SettleBox({ d, s }: { d: Dashboard; s: Settle }) {
-  const parts = (Object.keys(SETTLE_LABEL) as SettleKind[]).filter((k) => s.by[k]).map((k) => `${SETTLE_LABEL[k]} ${wonMan(s.by[k])}`);
-  return (
-    <div className="stat">
-      <div className="stat-label">{d.date.slice(2, 4)}년 (현금/신용) 정산완료 합계</div>
-      <div className="stat-value">{won(s.total)}</div>
-      <span className="note settle-note">{parts.join(" · ") || "정산 입금 없음"}</span>
-    </div>
-  );
+/** 기간 글자 — '26년 10월 1일 ~ 10월 2일' (year=false 면 해 없이) */
+export function span(from: string, to: string, year: boolean): string {
+  // 날짜 안에서는 줄이 안 바뀌게 (좁은 폰에서는 '~' 앞뒤에서만)
+  const nb = "\u00a0";
+  const k = (x: string) => `${Number(x.slice(5, 7))}월${nb}${Number(x.slice(8, 10))}일`;
+  return `${year ? `${from.slice(2, 4)}년${nb}` : ""}${k(from)} ~ ${from.slice(0, 4) !== to.slice(0, 4) ? `${to.slice(2, 4)}년${nb}` : ""}${k(to)}`;
 }

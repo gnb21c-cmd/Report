@@ -1176,3 +1176,32 @@ tr.sum td {
 .day-cmp td:first-child { white-space: nowrap; }
 .day-cmp th, .day-cmp td { font-size: 12px; padding-left: 2px; padding-right: 2px; }
 .day-cmp { width: 100%; }
+
+/* 정산완료 합계 상세 */
+.settle-hero .sh-value {
+  font-size: 28px;
+  font-weight: 800;
+  margin: 4px 0;
+}
+ul.plain {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+ul.plain li {
+  margin: 4px 0;
+}
+/* 홈 누계 상자 기간 — 좁은 폰에서는 두 줄로 */
+.stat .note.period {
+  word-break: keep-all;
+  white-space: normal;
+  font-size: 12px;
+  text-align: right;
+}
+.settle-month th,
+.settle-month td {
+  font-size: 12px;
+  padding-left: 3px;
+  padding-right: 3px;
+  white-space: nowrap;
+}

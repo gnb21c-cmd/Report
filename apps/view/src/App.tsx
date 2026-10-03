@@ -10,6 +10,7 @@ import { MonthDetail, YearDetail } from "./screens/CumDetail";
 import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { Settings } from "./screens/Settings";
 import { CashDetail } from "./screens/CashDetail";
+import { SettleDetail } from "./screens/SettleDetail";
 import { DayDetail } from "./screens/DayDetail";
 
 function Notice({ title, text }: { title: string; text: string }) {
@@ -89,6 +90,7 @@ export function App() {
   else if (view.name === "year") body = <YearDetail board={board} {...nav} />;
   else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
+  else if (view.name === "settle") body = <SettleDetail cashParts={cashParts} {...nav} />;
   else if (view.name === "cash") {
     const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;
     body = <CashDetail sum={cashDay?.sum} part={cashDay?.part} carriedFrom={cashDay?.carriedFrom || null} meta={cashDay?.carriedFrom ? undefined : board.report(date)?.meta?.cash} earlier={earlier !== date ? earlier : null} {...nav} />;

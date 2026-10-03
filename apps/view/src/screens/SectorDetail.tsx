@@ -17,6 +17,7 @@ import {
   hourDay,
   hourLabel,
   hourlyInsights,
+  kidsPrice,
   HOURS,
   shortLabel,
   weeksAverage,
@@ -25,6 +26,7 @@ import {
   wonShort,
   type Board,
   type BoxKey,
+  type Metrics,
   type WeatherMap,
 } from "@report/core";
 import { BarChart } from "../charts/BarChart";
@@ -59,6 +61,7 @@ export function SectorDetail(props: { board: Board; box: BoxKey; weather: Weathe
         <HeroBox label={`${shortLabel(date)} ${name}`} value={won(m.box[box])} date={date} w={props.weather[date]}>
           <Delta now={m.box[box]} before={pw.has.cafe + pw.has.kids ? pw.box[box] : null} label="지난주 같은 요일" money={false} />
           {m.total > 0 && <span className="note">총 매출의 {((m.box[box] / m.total) * 100).toFixed(1)}%</span>}
+          {box === "키즈입장료" && <span className="note">{kidsFormula(m, date)}</span>}
           {box === "기타" && extraTotal(m.extra) > 0 && (
             <span className="note">
               POS 밖 매출 포함 — {EXTRA_KINDS.filter((k) => m.extra[k]).map((k) => `${EXTRA_LABEL[k]} ${won(m.extra[k])}`).join(" · ")}
@@ -266,4 +269,12 @@ function BottomCard({ board, box, date }: { board: Board; box: BoxKey; date: str
       )}
     </section>
   );
+}
+
+/** 키즈입장 계산식 한 줄 (그날) */
+function kidsFormula(m: Metrics, date: string): string {
+  const p = kidsPrice(date);
+  return p.charged
+    ? `${p.kind} 단가 ${won(p.price)} × 입장권 ${count(m.naver + m.walkIn, "장")}${m.kidsCoupon ? ` − 사은권 ${won(m.kidsCoupon)}` : ""} = 키즈입장 ${won(m.box.키즈입장료)}`
+    : `교환권 방식(26년 3월까지) — 네이버 ${count(Math.round(m.fee.naver / 30000), "장")} × 3만원 + 현장 ${won(m.fee.walkIn)} − 카페 교환권 사용 ${won(m.kidsCoupon)} = 키즈입장 ${won(m.box.키즈입장료)}`;
 }
