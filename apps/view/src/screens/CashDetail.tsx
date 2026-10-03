@@ -21,7 +21,7 @@ const GROUPS: { g: CashGroup; mark?: string }[] = [
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 const krw = (v: number) => `${money(v, "KRW", false)}원`;
 
-export function CashDetail({ sum, part, meta, earlier, ...nav }: { sum?: CashSummary; part?: CashPart; meta?: PartMeta; earlier: string | null } & Nav) {
+export function CashDetail({ sum, part, meta, earlier, carriedFrom, ...nav }: { sum?: CashSummary; part?: CashPart; meta?: PartMeta; earlier: string | null; carriedFrom?: string | null } & Nav) {
   return (
     <>
       <DetailHeader title="자금 현황" {...nav} />
@@ -36,7 +36,10 @@ export function CashDetail({ sum, part, meta, earlier, ...nav }: { sum?: CashSum
             )}
           </div>
         ) : (
-          <Body sum={sum} part={part} meta={meta} />
+          <>
+            {carriedFrom && <div className="banner">휴일이라 입출금이 없습니다 — {shortLabel(carriedFrom)} 마감 잔고 그대로입니다.</div>}
+            <Body sum={sum} part={part} meta={meta} />
+          </>
         )}
       </main>
     </>

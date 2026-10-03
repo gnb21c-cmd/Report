@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, Board, cashBook, dashboard, settlements, todayKst, type CashPart } from "@report/core";
+import { addDays, Board, cashBook, cashOnDay, dashboard, settlements, todayKst, type CashPart } from "@report/core";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -72,6 +72,8 @@ export function App() {
   const to = latest && latest > today ? latest : today;
   const from = board.first && board.first < addDays(to, -60) ? board.first : addDays(to, -60);
   const nav = { date, minDate: from, maxDate: to, onDate: setDate, onBack: back };
+  // 휴일(보고 없음)은 가장 최근 잔액 그대로 · 입출금 0
+  const cashDay = cashOnDay(book, cashParts, date);
 
   let body: JSX.Element | null = null;
   if (view.name === "day") body = <DayDetail board={board} weather={d.weather} {...nav} />;
@@ -82,7 +84,7 @@ export function App() {
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
   else if (view.name === "cash") {
     const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;
-    body = <CashDetail sum={book.get(date)} part={board.report(date)?.cash} meta={board.report(date)?.meta?.cash} earlier={earlier !== date ? earlier : null} {...nav} />;
+    body = <CashDetail sum={cashDay?.sum} part={cashDay?.part} carriedFrom={cashDay?.carriedFrom || null} meta={cashDay?.carriedFrom ? undefined : board.report(date)?.meta?.cash} earlier={earlier !== date ? earlier : null} {...nav} />;
   } else if (view.name === "settings")
     body = <Settings board={board} status={d.status} source={d.source} latest={latest} syncedAt={d.syncedAt} syncing={d.syncing} onSync={d.sync} onReload={d.reload} onBack={back} />;
   if (body) return <div className="app">{body}</div>;
@@ -95,7 +97,7 @@ export function App() {
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={book.get(date)} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} />}
+        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} />}
       </main>
     </div>
   );

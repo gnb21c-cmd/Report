@@ -55,7 +55,7 @@ export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타",
 
 export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
 
-export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; settle?: Settle }) {
+export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -115,6 +115,7 @@ export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: O
           <>
             <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
             <CashBar inn={cash.krw.in} out={cash.krw.out} />
+            {cashFrom && <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>}
             <span className="note">
               대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
             </span>

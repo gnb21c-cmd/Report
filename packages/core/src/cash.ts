@@ -1,3 +1,6 @@
+import { addDays } from "./dates";
+import { isOffDay } from "./rules";
+
 /* ============================================================
    자금 현황 (현금흐름) — 지금 엑셀 '가. 자금요약' · '나. 자금 변동 내역 상세' · '다/라. 현금' 그대로
    - 계좌마다: 전일 잔고 + 입금 − 출금 = 금일 잔고
@@ -300,4 +303,20 @@ export function settlements(parts: CashPart[], from: string, to: string): { tota
   }
   const total = by.card + by.naver + by.delivery + by.cash;
   return { total: Math.round(total), by, days };
+}
+
+/** 그날 자금 — 보고가 있으면 그대로. 없는 휴일(토 · 일 · 공휴일)은 은행이 쉬어 입출금이 없으므로
+ *  가장 최근 보고의 금일 잔고를 전일 = 금일로, 입출금 0 으로 보여 줌.
+ *  최근 보고와 그날 사이가 모두 휴일일 때만 이어받음 (평일이 비어 있으면 없음) */
+export function cashOnDay(book: Map<string, CashSummary>, parts: CashPart[], date: string): { sum: CashSummary; part: CashPart; carriedFrom: string | null } | null {
+  const own = book.get(date);
+  const ownPart = parts.find((p) => p.date === date);
+  if (own && ownPart) return { sum: own, part: ownPart, carriedFrom: null };
+  if (!isOffDay(date)) return null;
+  const last = parts.filter((p) => p.date < date).sort((a, b) => (a.date < b.date ? -1 : 1)).pop();
+  const prev = last && book.get(last.date);
+  if (!last || !prev) return null;
+  for (let d = addDays(last.date, 1); d < date; d = addDays(d, 1)) if (!isOffDay(d)) return null;
+  const part: CashPart = { date, rates: { ...last.rates }, open: Object.fromEntries(prev.lines.map((l) => [l.account.id, l.close])), rows: {}, loans: last.loans.map((l) => ({ ...l })) };
+  return { sum: cashSummary(part, { openFrom: last.date, prevRates: last.rates }), part, carriedFrom: last.date };
 }

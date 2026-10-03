@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cashBook, cashSummary, cleanCashPart, emptyCashRow, money, startCashPart, type CashPart, type CashRow } from "../src/cash";
+import { cashBook, cashOnDay, cashSummary, cleanCashPart, emptyCashRow, money, startCashPart, type CashPart, type CashRow } from "../src/cash";
 
 const row = (x: Partial<CashRow>): CashRow => ({ ...emptyCashRow(), ...x });
 
@@ -102,5 +102,32 @@ describe("정산 총계 · 지급 수수료 (1/1 ~ 마감일)", () => {
     expect(s.total).toBe(1350000);
     expect(s.by).toEqual({ card: 1000000, naver: 300000, delivery: 0, cash: 50000 });
     expect(s.days).toBe(1);
+  });
+});
+
+describe("휴일 자금 — 입출금 없이 가장 최근 잔액", () => {
+  it("보고 없는 휴일(토 · 일 · 공휴일)은 앞 보고의 금일 잔고, 입출금 0", () => {
+    const parts = [sheet()]; // 10/2 금
+    const book = cashBook(parts);
+    const fri = book.get("2026-10-02")!;
+    for (const d of ["2026-10-03", "2026-10-04"]) {
+      const x = cashOnDay(book, parts, d)!;
+      expect(x.carriedFrom).toBe("2026-10-02");
+      expect(x.sum.total).toBe(fri.total);
+      expect(x.sum.net).toBe(fri.net);
+      expect(x.sum.krw.in).toBe(0);
+      expect(x.sum.krw.out).toBe(0);
+      expect(x.sum.krw.open).toBe(fri.krw.close);
+      expect(x.part.date).toBe(d);
+    }
+  });
+  it("평일에 보고가 없으면 없음 · 보고가 있는 날은 그대로", () => {
+    const parts = [sheet()];
+    const book = cashBook(parts);
+    expect(cashOnDay(book, parts, "2026-10-06")).toBeNull(); // 화요일
+    expect(cashOnDay(book, parts, "2026-10-05")!.carriedFrom).toBe("2026-10-02"); // 개천절 대체 휴일
+    expect(cashOnDay(book, parts, "2026-10-02")!.carriedFrom).toBeNull();
+    // 사이에 평일이 비어 있으면 휴일이라도 이어받지 않음
+    expect(cashOnDay(book, parts, "2026-10-10")).toBeNull();
   });
 });
