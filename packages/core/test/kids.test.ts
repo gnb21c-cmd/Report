@@ -120,3 +120,37 @@ describe("2026-03 까지 키즈 현장 손님 — '현장 구매 30,000원' (실
     expect(m.box.키즈입장료 + m.box.기타).toBe(0);
   });
 });
+
+describe("'[아키 2만원] 교환권' — 3월까지는 네이버로 받은 교환권, 4월부터는 마일리지 사은권(키즈 매출에서 뺌)", () => {
+  const cafeOf = (date: string) =>
+    buildStorePart({
+      store: "cafe",
+      date,
+      file: "c.xls",
+      sheet: { from: date, to: date, lines: [line({ name: "부라타토마토파스타", qty: 2, gross: 46000, net: 46000 }), line({ name: "[아키 2만원] 교환권", qty: 1, gross: -20000, net: -20000 }), line({ name: "[종이쿠폰]만원권", qty: 1, gross: -10000, net: -10000 })], sheetNet: null } as any,
+      sectorOf: () => "키친" as any,
+    }).part;
+  it("카페 매출은 언제나 그대로, 4월부터 키즈 매출에서 사은권만큼 뺌", async () => {
+    const { Board } = await import("../src");
+    const kidsLines = [line({ time: "10:40:00", name: "[평일] 1시간 50분 입장권", qty: 3, gross: 36000, net: 36000 })];
+    const before = "2026-03-26";
+    const after = "2026-04-02";
+    const b = new Board([
+      { date: before, cafe: cafeOf(before), kids: kidsDay(before, kidsLines) },
+      { date: after, cafe: cafeOf(after), kids: kidsDay(after, kidsLines) },
+    ]);
+    const p = cafeOf(after);
+    expect(p.voucher).toBe(30000);
+    expect(p.kidsCoupon).toBe(20000);
+    const m0 = b.day(before);
+    expect(m0.box.키친).toBe(46000);
+    expect(m0.box.키즈입장료).toBe(0);
+    expect(m0.kidsCoupon).toBe(0);
+    const m1 = b.day(after);
+    expect(m1.box.키친).toBe(46000);
+    expect(m1.kidsCoupon).toBe(20000);
+    expect(m1.box.키즈입장료).toBe(3 * 12000 - 20000);
+    expect(m1.total).toBe(46000 + 16000);
+    expect(b.range(before, after).kidsCoupon).toBe(20000);
+  });
+});

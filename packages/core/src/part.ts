@@ -6,7 +6,7 @@
    시간대: 10시 ~ 22시를 한 시간씩 12칸 (10시 전 주문은 10시 칸, 22시 넘은 주문은 21시 칸에)
    ============================================================ */
 import { guessSector, kidsKind, SECTORS, sectorFromCategory, type KidsKind, type Sector } from "./classify";
-import { cupsPerItem, isCup, isVoucherPayment } from "./rules";
+import { cupsPerItem, isCup, isKidsCoupon, isVoucherPayment } from "./rules";
 import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } from "./receipt";
 import type { SaleLine, StoreId } from "./types";
 import type { CashPart } from "./cash";
@@ -57,6 +57,8 @@ export interface StorePart {
   posNet: number;
   /** 상품권·교환권 결제 (양수) — 결제 수단이라 매출에서 빼지 않음 */
   voucher: number;
+  /** 그중 키즈 교환권 · 사은권 ('[아키 2만원] 교환권', 양수) — 2026-04 부터 키즈 매출에서 뺌 (없으면 0) */
+  kidsCoupon?: number;
   /** 분류별 실매출 (카페아스타나). 아스타나키즈는 모두 0 (kids 칸에) */
   sectors: Record<Sector, number>;
   cups: number;
@@ -142,6 +144,7 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
     else if (l.time && (!team.time || l.time < team.time)) Object.assign(team, { hour: h, time: l.time });
     if (isVoucherPayment(l)) {
       part.voucher -= l.net;
+      if (isKidsCoupon(l)) part.kidsCoupon = (part.kidsCoupon || 0) - l.net;
       continue;
     }
     const cls = addLine(part, store, l, sectorOf, products);
@@ -182,6 +185,7 @@ export function buildDailyPart(input: { store: StoreId; date: string; file: stri
     part.posNet += r.net;
     if (isVoucherPayment(r)) {
       part.voucher -= r.net;
+      if (isKidsCoupon(r)) part.kidsCoupon = (part.kidsCoupon || 0) - r.net;
       continue;
     }
     const fromCat = sectorFromCategory(r.cat1);

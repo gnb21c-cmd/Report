@@ -70,3 +70,10 @@ export function isVoucherPayment(line: Pick<SaleLine, "name" | "net">): boolean 
 export function visitorsFromCups(cups: number): number {
   return Math.max(0, Math.round(cups * VISITOR_FACTOR));
 }
+
+/** 키즈 쪽 교환권 · 사은권 줄 ('[아키 2만원] 교환권' — POS 키는 그대로 두고 이름만 바꿔 씀)
+ *  2026-03 까지: 네이버로 미리 받은 카페 교환권(−3만원) → 카페 결제 수단일 뿐 (키즈 매출 없음)
+ *  2026-04 부터: 마일리지 손님에게 주는 2만원 사은권 → 카페 매출은 그대로, 키즈 매출에서 뺌 (metrics) */
+export function isKidsCoupon(line: Pick<SaleLine, "name" | "net">): boolean {
+  return isVoucherPayment(line) && /아키/.test(line.name || "");
+}

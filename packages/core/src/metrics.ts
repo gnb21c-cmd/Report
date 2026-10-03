@@ -65,6 +65,8 @@ export interface Metrics {
   posNet: number;
   /** 상품권·교환권 결제 (양수) */
   voucher: number;
+  /** 키즈 사은권 ('[아키 2만원] 교환권', 2026-04 부터) — 키즈입장료에서 뺀 금액 */
+  kidsCoupon: number;
   /** 카페 잔 수 */
   cups: number;
   /** 카페아스타나 방문인원 */
@@ -100,6 +102,7 @@ function empty(from: string, to: string): Metrics {
     total: 0,
     posNet: 0,
     voucher: 0,
+    kidsCoupon: 0,
     cups: 0,
     visitors: 0,
     avgSpend: null,
@@ -204,6 +207,7 @@ export class Board {
       m.box.기타 += cafe.sectors.기타;
       m.posNet += cafe.posNet;
       m.voucher += cafe.voucher;
+      if (kidsSales(date)) m.kidsCoupon += cafe.kidsCoupon || 0;
       m.cups += cafe.cups;
       m.teams += cafe.teams;
     }
@@ -237,7 +241,8 @@ export class Board {
     } else m.naver = m.naverPos;
     const { price } = kidsPrice(date);
     m.fee = { naver: m.naver * price, walkIn: m.walkIn * price };
-    m.box.키즈입장료 = m.fee.naver + m.fee.walkIn;
+    // 4월부터 마일리지 사은권('[아키 2만원] 교환권')은 카페에서 쓰여도 키즈 매출에서 뺌
+    m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;
     m.visitors = visitorsFromCups(m.cups);
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
@@ -259,6 +264,7 @@ export class Board {
       m.total += x.total;
       m.posNet += x.posNet;
       m.voucher += x.voucher;
+      m.kidsCoupon += x.kidsCoupon;
       m.cups += x.cups;
       m.visitors += x.visitors;
       m.teams += x.teams;

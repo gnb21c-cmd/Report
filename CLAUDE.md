@@ -15,7 +15,7 @@
 - `pnpm demo` — 체험판 HTML 두 장 (B `apps/view/dist-demo/index.html`, A `apps/entry/dist-demo/index.html`)
 - `pnpm build:hosting` — 올릴 화면 (B 안에 A 를 /a/ 로). 올리기는 main 에서 GitHub Deploy
 - 구조: A(`apps/entry`, 직원 PC 입력 · 계산 · Firebase 에 직접) → Firebase → B(`apps/view`, 폰). 날씨는 `apps/weather` (GitHub Actions). 서버 · 24시간 PC 없음
-- 계산 규칙은 자금 `packages/core/src/cash.ts`(전일 잔고 이어받기 · 외화 환산 · 대출 제외), `packages/core/src/rules.ts`(키즈 단가 · 2026-03-31 까지 키즈 매출 없음(교환권 방식, 인원만) · 방문인원 × 0.96 · 잔 · 교환권 −금액은 결제 수단), `receipt.ts`(영수증 엑셀 · 반품 지우기), `part.ts`(매장 하루치), `metrics.ts`(대시보드 · 누계), `hourly.ts`(시간대 분석), 분류는 `classify.ts`. 바꾸면 `packages/core/test` 에 시험을 먼저 더한다.
+- 계산 규칙은 자금 `packages/core/src/cash.ts`(전일 잔고 이어받기 · 외화 환산 · 대출 제외), `packages/core/src/rules.ts`(키즈 단가 · 2026-03-31 까지 키즈 매출 없음(교환권 방식, 인원만) · 방문인원 × 0.96 · 잔 · 교환권 −금액은 결제 수단 · 4월부터 '[아키 2만원] 교환권'(사은권)은 키즈 매출에서 뺌), `receipt.ts`(영수증 엑셀 · 반품 지우기), `part.ts`(매장 하루치), `metrics.ts`(대시보드 · 누계), `hourly.ts`(시간대 분석), 분류는 `classify.ts`. 바꾸면 `packages/core/test` 에 시험을 먼저 더한다.
 - 폰 앱은 로그인 없음 — 설치 주소 `/b/{열쇠}/` 의 열쇠로 `boards/{열쇠}` 를 읽는다. 열쇠 · 기상청 키 · 서비스 계정은 저장소에 넣지 않는다 (GitHub Secrets).
 - 보고 문서 모양(`boards/{열쇠}/reports/{날짜}` 칸 cafe · kids · naver · cash(자금) = 조각 JSON)은 A 쓰기(`apps/entry/src/cloud.ts`), B 읽기(`apps/view/src/data/firebase.ts toReport`), 규칙(`firebase/firestore.rules`)을 같이 바꾼다.
 - 매출 자료 · 네이버 정리표(CSV)는 저장소에 넣지 않는다.

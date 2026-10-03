@@ -102,6 +102,7 @@ export function Settings(props: { board: Board; status: OfficeStatus | null; sou
                 <td className="num">
                   (네이버 + 현장 입장권) × 단가
                   <div className="note">26년 3월까지는 카페 교환권 방식이라 키즈 매출 없음 · 인원만</div>
+                  <div className="note">26년 4월부터 마일리지 사은권('[아키 2만원] 교환권')은 키즈 매출에서 뺌 · 카페 매출은 그대로</div>
                 </td>
               </tr>
               <tr>
