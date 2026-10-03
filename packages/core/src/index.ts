@@ -13,3 +13,4 @@ export * from "./sample";
 export * from "./format";
 export * from "./weather";
 export * from "./cash";
+export * from "./extra";

@@ -2,7 +2,7 @@
    A 가 자료를 주고받는 곳 — 클라우드 보관함(Firebase, cloud.ts)에 직접
    - 체험판: 클라우드 없이 이 브라우저 저장소(localStorage)에 흉내
    ============================================================ */
-import { addDays, mergeNaverPast, type CashPart, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
+import { addDays, applyExtra, mergeNaverPast, type CashPart, type ExtraPart, type ExtraUpdate, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
 import { addProducts, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readProducts, sessionEmail, writePieces, type Piece } from "./cloud";
 
 export const APP_VERSION = "0.4.0";
@@ -31,7 +31,7 @@ export interface DayInfo {
 export interface SubmitBody {
   date: string;
   by: string;
-  parts: { cafe?: StorePart; kids?: StorePart; naver?: NaverPart; cash?: CashPart };
+  parts: { cafe?: StorePart; kids?: StorePart; naver?: NaverPart; cash?: CashPart; extra?: ExtraPart };
   lines?: { cafe?: ReceiptLine[]; kids?: ReceiptLine[] };
   products?: Record<string, string>;
 }
@@ -136,6 +136,13 @@ const real = {
     if (body.products) await addProducts(cfg(), body.products);
     return { ok: true, saved: pieces.length, skipped };
   },
+  /** 자판기 · 인생네컷 · 주차 (나이스 엑셀) — 파일에 든 종류만 그날 값으로 바꿈 */
+  async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
+    const have = await readDays(cfg(), body.updates.map((u) => u.date));
+    const pieces: Piece[] = body.updates.map((u) => ({ kind: "extra", date: u.date, part: applyExtra(have.get(u.date)?.extra, u), file: body.file }));
+    await writePieces(cfg(), body.by, pieces);
+    return { ok: true, saved: pieces.length };
+  },
 };
 
 /* ---------- 체험판: 클라우드 흉내 ---------- */
@@ -236,6 +243,12 @@ const demo = {
     Object.assign(s.products, body.products || {});
     demoSave(s);
     return { ok: true, saved, skipped };
+  },
+  async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
+    const s = demoLoad();
+    for (const u of body.updates) s.reports[u.date] = mergeReport(s.reports[u.date] || null, u.date, body.by, { extra: applyExtra(s.reports[u.date]?.extra, u) });
+    demoSave(s);
+    return { ok: true, saved: body.updates.length };
   },
 };
 

@@ -11,6 +11,9 @@ import { useMemo, useState } from "react";
 import {
   bottomProducts,
   count,
+  EXTRA_KINDS,
+  EXTRA_LABEL,
+  extraTotal,
   hourDay,
   hourLabel,
   hourlyInsights,
@@ -56,6 +59,11 @@ export function SectorDetail(props: { board: Board; box: BoxKey; weather: Weathe
         <HeroBox label={`${shortLabel(date)} ${name}`} value={won(m.box[box])} date={date} w={props.weather[date]}>
           <Delta now={m.box[box]} before={pw.has.cafe + pw.has.kids ? pw.box[box] : null} label="지난주 같은 요일" money={false} />
           {m.total > 0 && <span className="note">총 매출의 {((m.box[box] / m.total) * 100).toFixed(1)}%</span>}
+          {box === "기타" && extraTotal(m.extra) > 0 && (
+            <span className="note">
+              POS 밖 매출 포함 — {EXTRA_KINDS.filter((k) => m.extra[k]).map((k) => `${EXTRA_LABEL[k]} ${won(m.extra[k])}`).join(" · ")}
+            </span>
+          )}
         </HeroBox>
 
         <ChartCard

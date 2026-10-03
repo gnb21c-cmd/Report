@@ -13,6 +13,7 @@
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
 import { dayRange, daysInMonth, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
+import { EXTRA_KINDS, type ExtraKind } from "./extra";
 import { isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
@@ -90,6 +91,8 @@ export interface Metrics {
   eventFree: number;
   fee: { naver: number; walkIn: number };
   kidsOtherNet: number;
+  /** POS 밖 매출 (자판기 · 인생네컷 · 주차) — 기타 상자에 더함 */
+  extra: Record<ExtraKind, number>;
 }
 
 function empty(from: string, to: string): Metrics {
@@ -118,6 +121,7 @@ function empty(from: string, to: string): Metrics {
     eventFree: 0,
     fee: { naver: 0, walkIn: 0 },
     kidsOtherNet: 0,
+    extra: { vending: 0, photo: 0, parking: 0 },
   };
 }
 
@@ -265,6 +269,9 @@ export class Board {
     m.fee = kidsSales(date) ? { naver: (m.naver - nShort) * price + nShort * sp, walkIn: (m.walkIn - wShort) * price + wShort * sp } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
+    // POS 밖 매출 (자판기 · 인생네컷 · 주차 — VAN 승인 내역) → 기타
+    if (r?.extra) for (const k of EXTRA_KINDS) m.extra[k] += r.extra[k] || 0;
+    m.box.기타 += m.extra.vending + m.extra.photo + m.extra.parking;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;
     m.visitors = visitorsFromCups(m.cups);
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
@@ -302,6 +309,7 @@ export class Board {
       m.fee.naver += x.fee.naver;
       m.fee.walkIn += x.fee.walkIn;
       m.kidsOtherNet += x.kidsOtherNet;
+      for (const k of EXTRA_KINDS) m.extra[k] += x.extra[k];
     }
     m.avgSpend = m.visitors > 0 ? Math.round(m.total / m.visitors) : null;
     return m;

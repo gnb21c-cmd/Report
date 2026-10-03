@@ -4,12 +4,17 @@
    ② 영수증별 매출 상세현황 엑셀: 하루치만 받아지므로 여러 날 파일을 한꺼번에 → 날짜 · 매장은 파일에서 알아냄 (시간대 분석은 최근 5주면 충분)
    ③ 네이버 지난 자료: 주 단위 화면 캡처를 정리한 표 (날짜 × 10:00~19:30)
    ④ Claude 가 정리한 파일 (.json): 자금(날짜별 자금현황표) · 매출(상품별 엑셀 여러 개를 하나로 묶은 것) — 이미 넣은 날은 그대로 둠
+   ⑤ 자판기 · 인생네컷 · 주차 (POS 밖 카드 매출): 나이스 '통합거래조회' 엑셀 (비밀번호 걸린 채로) — 파일에 든 종류 · 기간만 바꿈
    이미 A 에서 넣은 날(영수증별 · 네이버)은 상품별 · 네이버 정리표로 덮지 않음
    ============================================================ */
 import { useState } from "react";
 import {
   cashBook,
   cleanCashPart,
+  EXTRA_LABEL,
+  extraUpdates,
+  parseNiceSheet,
+  type NiceSheet,
   money,
   buildDailyPart,
   buildStorePart,
@@ -31,14 +36,16 @@ import {
   type StorePart,
 } from "@report/core";
 import { readRows } from "./excel";
+import { decryptXlsx, isEncrypted } from "./officeCrypto";
 import { api, type PastPart } from "./api";
 
-type Kind = "daily" | "receipt" | "naver" | "cash";
+type Kind = "daily" | "receipt" | "naver" | "cash" | "extra";
 const TABS: [Kind, string][] = [
   ["daily", "① 상품별 (일자별) — 1년치 하루 합계"],
   ["receipt", "② 영수증별 — 여러 날 파일"],
   ["naver", "③ 네이버 지난 자료"],
   ["cash", "④ Claude 정리 파일 (자금 · 매출)"],
+  ["extra", "⑤ 자판기 · 네컷 · 주차 (나이스)"],
 ];
 
 interface Row {
@@ -47,11 +54,35 @@ interface Row {
   text: string;
   parts: PastPart[];
   products?: Record<string, string>;
+  /** ⑤ 나이스 엑셀 */
+  nice?: NiceSheet;
 }
 
 /** 파일 하나 → 보낼 조각들 + 한 줄 설명 */
-async function readOne(kind: Kind, f: File, table: Record<string, string>, store: StoreId | "auto"): Promise<Row> {
+async function readOne(kind: Kind, f: File, table: Record<string, string>, store: StoreId | "auto", password: string): Promise<Row> {
   try {
+    if (kind === "extra") {
+      let buf = await f.arrayBuffer();
+      if (isEncrypted(buf)) {
+        try {
+          buf = await decryptXlsx(buf, password);
+        } catch (e) {
+          throw new SheetError((e as Error).message || "비밀번호 걸린 엑셀을 풀지 못했습니다.");
+        }
+      }
+      const s = parseNiceSheet(readRows(buf));
+      if (!s) throw new SheetError("나이스 '통합거래조회' 엑셀 모양이 아닙니다 (CAT_ID · 거래일자 칸이 없음).");
+      const ok = s.summary == null || Math.round(s.sum - s.summary) === 0;
+      const unknown = Object.entries(s.unknown);
+      const kinds = s.kinds.map((k) => EXTRA_LABEL[k]).join(" · ") || "해당 단말기 건 없음";
+      return {
+        file: f.name,
+        ok: ok && !unknown.length,
+        text: `${s.from} ~ ${s.to} · ${kinds} · ${won(s.sum - s.cafePos - unknown.reduce((a, [, v]) => a + v, 0))}${s.cafePos ? ` (카페 POS 결제 ${won(s.cafePos)} 뺌)` : ""}${unknown.length ? ` · ⚠ 모르는 단말기 ${unknown.map(([c, v]) => `${c} ${won(v)}`).join(", ")} 뺌` : ""}${ok ? "" : " · ⚠ 위 합계 줄과 다름"}`,
+        parts: [],
+        nice: s,
+      };
+    }
     if (kind === "cash") {
       // Claude 가 정리한 파일: { kind: "cash", parts: CashPart[] }
       let j: any;
@@ -114,6 +145,8 @@ async function readOne(kind: Kind, f: File, table: Record<string, string>, store
 export function ImportPast({ me, table, onClose, onDone }: { me: string; table: Record<string, string>; onClose: () => void; onDone: () => void }) {
   const [kind, setKind] = useState<Kind>("daily");
   const [store, setStore] = useState<StoreId | "auto">("auto");
+  // 나이스 엑셀 비밀번호 (내려받을 때 넣은 것 — 저장하지 않음)
+  const [password, setPassword] = useState("1");
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -125,11 +158,12 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     setErr(null);
     setBusy(true);
     const out: Row[] = [];
-    for (const f of Array.from(files).sort((a, b) => a.name.localeCompare(b.name, "ko"))) out.push(await readOne(kind, f, table, store));
+    for (const f of Array.from(files).sort((a, b) => a.name.localeCompare(b.name, "ko"))) out.push(await readOne(kind, f, table, store, password));
     setRows(out);
     setBusy(false);
   };
-  const good = rows.filter((r) => r.parts.length);
+  const good = rows.filter((r) => r.parts.length || r.nice);
+  const updates = kind === "extra" ? extraUpdates(good.map((r) => r.nice!)) : [];
   // 네이버는 10:00~17:30 캡처와 18:00~19:30(야간 무제한) 캡처가 따로 오므로 같은 날짜를 파일끼리 합침
   const mergeNaver = (parts: PastPart[]): PastPart[] => {
     const by = new Map<string, NaverPart>();
@@ -139,7 +173,7 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     }
     return [...by.values()].sort((a, b) => a.date.localeCompare(b.date));
   };
-  const n = good.reduce((s, r) => s + r.parts.length, 0);
+  const n = kind === "extra" ? updates.length : good.reduce((s, r) => s + r.parts.length, 0);
 
   const send = async () => {
     setBusy(true);
@@ -147,6 +181,18 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
     let saved = 0;
     let skipped = 0;
     try {
+      if (kind === "extra") {
+        const file = good.map((r) => r.file).join(", ").slice(0, 200);
+        for (let i = 0; i < updates.length; i += 300) {
+          const r = await api.importExtra({ by: me, updates: updates.slice(i, i + 300), file });
+          saved += r.saved;
+          setMsg(`보내는 중… ${count(Math.min(updates.length, i + 300))} / ${count(updates.length)}`);
+        }
+        setMsg(`${count(saved, "일치")} 넣었습니다 (자판기 · 네컷 · 주차).`);
+        setRows([]);
+        onDone();
+        return;
+      }
       // 한 번에 너무 크지 않게 300개씩
       const flat = good.flatMap((r) => r.parts);
       const all = kind === "naver" ? mergeNaver(flat) : flat;
@@ -201,6 +247,16 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
             <li>자금 파일: A 에서 이미 자금을 올린 날은 바꾸지 않습니다</li>
           </ol>
         )}
+        {kind === "extra" && (
+          <ol className="steps">
+            <li>
+              나이스 가맹점 사이트 → <b>통합거래조회</b> → 단말기(자판기 3974466 · 주차 3974965 · 인생네컷 3974963 · 3974964) · 기간 → 엑셀. 단말기마다 따로 받아도 되고, 여러 파일을 한 번에 올려도 됩니다
+            </li>
+            <li>내려받을 때 넣은 비밀번호를 아래 칸에 (풀기만 하고 저장하지 않음)</li>
+            <li>파일 기간 안의 날은 그 파일 종류(자판기 · 네컷 · 주차)만 새 값으로 바뀝니다 — 같은 파일을 다시 올려도 두 번 더해지지 않음. 승인거절은 빼고 취소는 뺌</li>
+            <li>2026-07-01 하루는 자판기 번호에 카페 POS 결제가 섞여 있어 카페 POS 단말기 결제를 뺍니다 (카페 매출에 이미 있음)</li>
+          </ol>
+        )}
         {kind === "naver" && (
           <ol className="steps">
             <li>네이버 예약 화면을 주 단위로 띄워 캡처 → Claude 가 표로 정리해 드림 (엑셀 · CSV)</li>
@@ -217,9 +273,14 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
               <option value="kids">매장: {STORE_LABEL.kids}</option>
             </select>
           )}
+          {kind === "extra" && (
+            <label>
+              엑셀 비밀번호 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: 80 }} autoComplete="off" />
+            </label>
+          )}
           <label className="button ghost">
             파일 고르기 (여러 개 가능)
-            <input type="file" multiple accept={kind === "cash" ? ".json" : ".xls,.xlsx,.csv"} hidden onChange={(e) => (void onFiles(e.target.files), (e.target.value = ""))} />
+            <input type="file" multiple accept={kind === "cash" ? ".json" : kind === "extra" ? ".xlsx,.xls" : ".xls,.xlsx,.csv"} hidden onChange={(e) => (void onFiles(e.target.files), (e.target.value = ""))} />
           </label>
           {busy && <span className="muted">읽는 중…</span>}
         </div>
@@ -236,8 +297,8 @@ export function ImportPast({ me, table, onClose, onDone }: { me: string; table: 
                 {rows.map((r) => (
                   <tr key={r.file}>
                     <td>{r.file}</td>
-                    <td className={r.parts.length ? (r.ok ? "" : "warn") : "error"}>
-                      {r.parts.length ? (r.ok ? "✓ " : "⚠ ") : "✗ "}
+                    <td className={r.parts.length || r.nice ? (r.ok ? "" : "warn") : "error"}>
+                      {r.parts.length || r.nice ? (r.ok ? "✓ " : "⚠ ") : "✗ "}
                       {r.text}
                     </td>
                   </tr>

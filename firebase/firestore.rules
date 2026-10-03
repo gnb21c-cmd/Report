@@ -20,14 +20,14 @@ service cloud.firestore {
     }
 
     match /boards/{board} {
-      // 그날 보고 — 칸 cafe · kids · naver · cash(자금) = 조각 JSON (A 가 보낸 칸만 바뀜)
+      // 그날 보고 — 칸 cafe · kids · naver · cash(자금) · extra(자판기 · 네컷 · 주차) = 조각 JSON (A 가 보낸 칸만 바뀜)
       match /reports/{date} {
         allow read: if true;
         allow write: if isSender(board)
           && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
           && request.resource.data.date == date
-          && request.resource.data.keys().hasOnly(["date", "at", "cafe", "kids", "naver", "cash"])
-          && piece("cafe") && piece("kids") && piece("naver") && piece("cash");
+          && request.resource.data.keys().hasOnly(["date", "at", "cafe", "kids", "naver", "cash", "extra"])
+          && piece("cafe") && piece("kids") && piece("naver") && piece("cash") && piece("extra");
       }
 
       // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜. GitHub 날씨 계정이 씀

@@ -71,12 +71,12 @@ function fieldsOf(doc: any): Record<string, any> {
   return out;
 }
 
-/** reports 문서 → 보고 자료. 칸 cafe · kids · naver · cash = 조각 JSON {p, by, at, file} (A 가 보낸 칸만 바뀜 — apps/entry/src/cloud.ts) */
+/** reports 문서 → 보고 자료. 칸 cafe · kids · naver · cash · extra = 조각 JSON {p, by, at, file} (A 가 보낸 칸만 바뀜 — apps/entry/src/cloud.ts) */
 export function toReport(f: Record<string, any>): DayReport | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) return null;
   const r: DayReport = { date: f.date, meta: {}, at: f.at || undefined };
   let any = false;
-  for (const k of ["cafe", "kids", "naver", "cash"] as const) {
+  for (const k of ["cafe", "kids", "naver", "cash", "extra"] as const) {
     if (!f[k]) continue;
     try {
       const x = JSON.parse(f[k]);

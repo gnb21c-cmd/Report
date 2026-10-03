@@ -8,7 +8,7 @@
    - 날씨: boards/{열쇠}/weather/{날짜} (GitHub 가 1시간마다 기상청에서 받아 넣음 — apps/weather)
    B 가 읽는 쪽: apps/view/src/data/firebase.ts toReport
    ============================================================ */
-import type { CashPart, DayReport, DayWeather, NaverPart, StorePart } from "@report/core";
+import type { CashPart, DayReport, DayWeather, ExtraPart, NaverPart, StorePart } from "@report/core";
 
 export interface CloudConfig {
   apiKey: string;
@@ -139,7 +139,7 @@ function plain(v: any): any {
 const fieldsOf = (doc: any) => Object.fromEntries(Object.entries(doc?.fields || {}).map(([k, v]) => [k, plain(v)]));
 const str = (s: string) => ({ stringValue: s });
 
-export const PARTS = ["cafe", "kids", "naver", "cash"] as const;
+export const PARTS = ["cafe", "kids", "naver", "cash", "extra"] as const;
 export type PartKind = (typeof PARTS)[number];
 
 /** 보고 문서 → 그날 보고 (B 와 같은 읽기) */
@@ -197,9 +197,9 @@ export async function readDays(cfg: CloudConfig, dates: string[]): Promise<Map<s
   return out;
 }
 
-export type Piece = { kind: PartKind; date: string; part: StorePart | NaverPart | CashPart; file?: string };
+export type Piece = { kind: PartKind; date: string; part: StorePart | NaverPart | CashPart | ExtraPart; file?: string };
 
-/** 조각 쓰기 — 보낸 칸(cafe · kids · naver · cash)만 바꿈. 400개씩 한 번에 (commit) */
+/** 조각 쓰기 — 보낸 칸(cafe · kids · naver · cash · extra)만 바꿈. 400개씩 한 번에 (commit) */
 export async function writePieces(cfg: CloudConfig, by: string, pieces: Piece[], lines?: { date: string; store: string; lines: unknown[] }[]): Promise<void> {
   const t = await idToken(cfg);
   const root = `projects/${cfg.projectId}/databases/(default)/documents/boards/${t.board}`;

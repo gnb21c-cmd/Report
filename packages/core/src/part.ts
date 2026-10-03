@@ -10,6 +10,7 @@ import { cupsPerItem, isCup, isKidsCoupon, isVoucherPayment, oldTicketPrice } fr
 import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } from "./receipt";
 import type { SaleLine, StoreId } from "./types";
 import type { CashPart } from "./cash";
+import type { ExtraPart } from "./extra";
 
 export const HOURS = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 export const hourLabel = (h: number) => `${h}시`;
@@ -102,7 +103,9 @@ export interface DayReport {
   naver?: NaverPart;
   /** 자금 현황 (cash.ts) */
   cash?: CashPart;
-  meta?: { cafe?: PartMeta; kids?: PartMeta; naver?: PartMeta; cash?: PartMeta };
+  /** POS 밖 매출 — 자판기 · 인생네컷 · 주차 (extra.ts) */
+  extra?: ExtraPart;
+  meta?: { cafe?: PartMeta; kids?: PartMeta; naver?: PartMeta; cash?: PartMeta; extra?: PartMeta };
   /** C 가 합친 시각 ISO */
   at?: string;
 }
