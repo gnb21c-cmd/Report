@@ -70,16 +70,20 @@ export function cupsPerItem(name: string): number {
  *  '퍼피 정산'(2025-09 까지): 아스타나퍼피 선결제 1만원 교환권 — 퍼피 POS · 네이버에서 이미 받은 돈 (따로 계산하지 않음)
  *  상품은 이미 제값으로 팔린 것으로 잡혀 있으므로, 이 음수 줄은 매출에서 빼지 않고 '상품권 결제' 로 따로 보여 줌 */
 export function isVoucherPayment(line: Pick<SaleLine, "name" | "net">): boolean {
-  return line.net < 0 && /종이쿠폰|상품권|교환권|금액권|퍼피\s*정산/.test(line.name || "");
+  return line.net < 0 && (/종이쿠폰|상품권|교환권|금액권|퍼피\s*정산/.test(line.name || "") || OLD_KIDS_COUPON.test(line.name || ""));
 }
+
+/** 2025-01 초(~1/18) 카페 POS 의 카페 교환권 이름 — 1/19 부터 '[아키 2만원] 교환권' 으로 바뀜 (분류 서비스.쿠폰 › 선결제 › 네이버 결제) */
+const OLD_KIDS_COUPON = /^\s*\[키즈\]\s*$/;
 
 export function visitorsFromCups(cups: number): number {
   return Math.max(0, Math.round(cups * VISITOR_FACTOR));
 }
 
 /** 키즈 쪽 교환권 · 사은권 줄 ('[아키 2만원] 교환권' — POS 키는 그대로 두고 이름만 바꿔 씀)
+ *  2025-01-18 까지는 이름이 '[키즈]' (같은 교환권)
  *  2026-03 까지: 네이버로 미리 받은 카페 교환권(−3만원) → 카페 결제 수단일 뿐 (키즈 매출 없음)
  *  2026-04 부터: 마일리지 손님에게 주는 2만원 사은권 → 카페 매출은 그대로, 키즈 매출에서 뺌 (metrics) */
 export function isKidsCoupon(line: Pick<SaleLine, "name" | "net">): boolean {
-  return isVoucherPayment(line) && /아키/.test(line.name || "");
+  return isVoucherPayment(line) && (/아키/.test(line.name || "") || OLD_KIDS_COUPON.test(line.name || ""));
 }

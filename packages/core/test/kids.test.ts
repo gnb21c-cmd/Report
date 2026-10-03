@@ -206,6 +206,22 @@ describe("'퍼피 정산' (2025-09 까지 아스타나퍼피 선결제 1만원 �
   });
 });
 
+describe("'[키즈]' (2025-01 초 카페 POS — '[아키 2만원] 교환권' 이전 이름) — 카페 교환권", () => {
+  it("음수 줄이면 결제 수단 + 키즈 교환권 (기타 매출이 아님), 0원 줄은 무시", async () => {
+    const { isVoucherPayment, isKidsCoupon } = await import("../src");
+    expect(isVoucherPayment({ name: "[키즈]", net: -20000 })).toBe(true);
+    expect(isKidsCoupon({ name: "[키즈]", net: -20000 })).toBe(true);
+    expect(isVoucherPayment({ name: "[키즈]", net: 0 })).toBe(false);
+    expect(isKidsCoupon({ name: "[키즈]플래터", net: -20000 })).toBe(false);
+    const date = "2025-01-02";
+    const p = buildStorePart({ store: "cafe", date, file: "c", sheet: { from: date, to: date, lines: [line({ name: "수제돈까스", qty: 1, gross: 14000, net: 14000 }), line({ name: "[키즈]", qty: 2, gross: -40000, net: -40000 })], sheetNet: null } as any, sectorOf: () => "키친" as any }).part;
+    expect(p.sectors.키친).toBe(14000);
+    expect(p.sectors.기타 || 0).toBe(0);
+    expect(p.voucher).toBe(40000);
+    expect(p.kidsCoupon).toBe(40000);
+  });
+});
+
 describe("'퇴장시간 + 10~19분 지연' — 연장 요금은 입장 인원이 아니라 키즈 기타 매출", () => {
   it("이름에 '퇴장'이 있어도 '지연'이면 기타", () => {
     expect(kidsKind({ name: "퇴장시간 + 10~19분 지연", qty: 1, gross: 5000, net: 5000 })).toBe("기타");
