@@ -103,6 +103,17 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(s.report("2025-10-02")["cafe"]["basis"], "receipt")
         self.assertEqual(s.report("2025-10-01")["cafe"]["basis"], "daily")
 
+    def test_naver_past_and_receipt_batch(self):
+        s = Store(":memory:")
+        s.submit("2025-10-02", "x", {"naver": naver("2025-10-02", 9)})
+        saved, skipped = s.import_daily("x", [naver("2025-10-01", 4), naver("2025-10-02", 1), store_part("kids", "2025-10-01")])
+        self.assertEqual((saved, skipped), (2, 1))
+        self.assertEqual(s.report("2025-10-02")["naver"]["tickets"][0], 9)  # A 에 넣은 값은 그대로
+        self.assertEqual(s.report("2025-10-01")["naver"]["tickets"][0], 4)
+        self.assertEqual(s.report("2025-10-01")["kids"]["basis"], "receipt")
+        with self.assertRaisesRegex(BadInput, "20칸"):
+            s.import_daily("x", [{"date": "2025-10-03", "tickets": [1]}])
+
 
 class OfficeTest(unittest.TestCase):
     def test_submit_publishes_and_retries(self):

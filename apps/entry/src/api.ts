@@ -6,6 +6,9 @@
    ============================================================ */
 import type { DayReport, DayWeather, NaverPart, ReceiptLine, StorePart } from "@report/core";
 
+/** 지난 자료 한 조각 — 매장 하루치(상품별 · 영수증별) 또는 네이버 정리표 하루 */
+export type PastPart = StorePart | NaverPart;
+
 export interface Info {
   name: string;
   version: string;
@@ -87,7 +90,7 @@ const real = {
   day: (date: string) => call<DayInfo>(`/api/day?date=${date}`),
   products: () => call<{ products: Record<string, string> }>("/api/products").then((r) => r.products || {}),
   submit: (body: SubmitBody) => call<SubmitResult>("/api/submit", { method: "POST", body: JSON.stringify(body) }),
-  importPast: (body: { by: string; parts: StorePart[]; products?: Record<string, string> }) => call<{ ok: boolean; saved: number; skipped: number }>("/api/import", { method: "POST", body: JSON.stringify(body) }),
+  importPast: (body: { by: string; parts: PastPart[]; products?: Record<string, string> }) => call<{ ok: boolean; saved: number; skipped: number }>("/api/import", { method: "POST", body: JSON.stringify(body) }),
 };
 
 /* ---------- 체험판: C 흉내 ---------- */
@@ -142,18 +145,26 @@ const demo = {
     demoSave(s);
     return { ok: true, report, publish: { ok: false, message: "체험판이라 이 브라우저에만 저장했습니다 (C · 폰으로는 가지 않음)." } };
   },
-  async importPast(body: { by: string; parts: StorePart[]; products?: Record<string, string> }) {
+  async importPast(body: { by: string; parts: PastPart[]; products?: Record<string, string> }) {
     const s = demoLoad();
     let saved = 0;
     let skipped = 0;
     for (const p of body.parts) {
       const prev = s.reports[p.date] || null;
-      const old = prev?.[p.store];
-      if (old && old.basis === "receipt") {
-        skipped++;
-        continue;
+      if ("tickets" in p) {
+        if (prev?.naver) {
+          skipped++;
+          continue;
+        }
+        s.reports[p.date] = mergeReport(prev, p.date, body.by, { naver: p });
+      } else {
+        const old = prev?.[p.store];
+        if (p.basis === "daily" && old && old.basis === "receipt") {
+          skipped++;
+          continue;
+        }
+        s.reports[p.date] = mergeReport(prev, p.date, body.by, { [p.store]: p });
       }
-      s.reports[p.date] = mergeReport(prev, p.date, body.by, { [p.store]: p });
       saved++;
     }
     Object.assign(s.products, body.products || {});

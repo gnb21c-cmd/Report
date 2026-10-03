@@ -488,7 +488,7 @@ export function App() {
         <p className="muted small center">
           작년 비교선을 채우려면{" "}
           <button className="link" onClick={() => setShowImport(true)}>
-            지난 자료 한꺼번에 넣기 (상품별 일자별 엑셀)
+            지난 자료 한꺼번에 넣기 (상품별 · 영수증별 여러 파일 · 네이버)
           </button>
           {info ? ` · C 프로그램 ${info.version}` : ""}
         </p>

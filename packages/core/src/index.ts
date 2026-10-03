@@ -6,6 +6,7 @@ export * from "./classify";
 export * from "./receipt";
 export * from "./part";
 export * from "./daily";
+export * from "./naverPast";
 export * from "./metrics";
 export * from "./hourly";
 export * from "./sample";

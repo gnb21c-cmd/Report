@@ -131,27 +131,40 @@ class Store:
             return self._rebuild(date, at)
 
     def import_daily(self, by: str, parts: list, products: dict | None = None) -> tuple:
-        """지난 자료(상품별 일자별) 여러 날 — 영수증별로 이미 올린 날은 건너뜀 → (넣은 날, 건너뛴 날)"""
+        """지난 자료 여러 날 → (넣은 것, 건너뛴 것)
+        - 상품별(일자별) 하루 합계: 영수증별로 이미 올린 날은 건너뜀
+        - 영수증별 여러 날: 그날 그 매장을 바꿈
+        - 네이버 정리표: 이미 네이버를 넣은 날은 건너뜀"""
         if not isinstance(parts, list) or len(parts) > 1200:
-            raise BadInput("지난 자료가 너무 많습니다 (한 번에 3년치까지).")
+            raise BadInput("지난 자료가 너무 많습니다 (한 번에 1,200개까지 — 나눠서 올려 주세요).")
         by = str(by or "")[:20]
         at = now_iso()
         saved = skipped = 0
         with self.lock, self.db:
             for p in parts:
-                if not isinstance(p, dict) or p.get("basis") != "daily" or p.get("store") not in ("cafe", "kids"):
+                if not isinstance(p, dict):
                     raise BadInput("지난 자료 모양이 이상합니다.")
                 date = str(p.get("date") or "")
                 if not DATE.match(date):
                     raise BadInput("지난 자료 날짜가 이상합니다.")
-                check_part(p["store"], p, date)
-                old = self.db.execute("SELECT body FROM parts WHERE date=? AND kind=?", (date, p["store"])).fetchone()
-                if old and json.loads(old[0]).get("basis") == "receipt":
-                    skipped += 1
-                    continue
+                if "tickets" in p:  # 네이버 지난 자료 (캡처 정리표) — A 에 이미 넣은 날은 그대로
+                    kind = "naver"
+                    check_part(kind, p, date)
+                    if self.db.execute("SELECT 1 FROM parts WHERE date=? AND kind='naver'", (date,)).fetchone():
+                        skipped += 1
+                        continue
+                else:  # 상품별(일자별) 하루 합계 · 영수증별 여러 날
+                    if p.get("basis") not in ("daily", "receipt") or p.get("store") not in ("cafe", "kids"):
+                        raise BadInput("지난 자료 모양이 이상합니다.")
+                    kind = p["store"]
+                    check_part(kind, p, date)
+                    old = self.db.execute("SELECT body FROM parts WHERE date=? AND kind=?", (date, kind)).fetchone()
+                    if p["basis"] == "daily" and old and json.loads(old[0]).get("basis") == "receipt":
+                        skipped += 1
+                        continue
                 self.db.execute(
                     "INSERT OR REPLACE INTO parts (date, kind, body, by, at, file) VALUES (?, ?, ?, ?, ?, ?)",
-                    (date, p["store"], json.dumps(p, ensure_ascii=False), by, at, str(p.get("file") or "")[:120]),
+                    (date, kind, json.dumps(p, ensure_ascii=False), by, at, str(p.get("file") or "")[:120] if kind != "naver" else ""),
                 )
                 self._rebuild(date, at)
                 saved += 1

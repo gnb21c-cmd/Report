@@ -190,3 +190,21 @@ describe("네이버 입력 · 지난 자료", () => {
     expect([p.basis, p.hourly, p.sectors.바리스타, p.voucher, p.cups]).toEqual(["daily", null, 16000, 10000, 2]);
   });
 });
+
+describe("네이버 지난 자료 · 매장 짐작", async () => {
+  const { parseNaverPast, naverPastPart, guessStore } = await import("../src");
+  it("날짜 × 30분 칸 표 (빈칸 0, 같은 날 두 줄이면 더함)", () => {
+    const rows = [["날짜", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30"], ["2025-10-01", 2, "", 3], ["2025.10.02", 1], ["2025-10-01", 1]];
+    const r = parseNaverPast(rows);
+    expect(r.map((x) => x.date)).toEqual(["2025-10-01", "2025-10-02"]);
+    expect(r[0].tickets.slice(0, 3)).toEqual([3, 0, 3]);
+    expect(naverPastPart(r[0]).newVisitors).toHaveLength(20);
+    expect(() => parseNaverPast([["아무거나"]])).toThrow(/10:00/);
+  });
+  it("매장 짐작", () => {
+    const l = (name: string, net: number) => ({ name, gross: net, net, refund: false });
+    expect(guessStore([l("[ICE] 아메리카노", 6500), l("소금빵", 3800)])).toBe("cafe");
+    expect(guessStore([l("[평일] 무제한 이용", 0), l("[평일] 1시간 50분 입장권", 12000)])).toBe("kids");
+    expect(guessStore([l("[ICE] 아메리카노", 6500), l("[평일] 무제한 이용", 0)])).toBeNull();
+  });
+});
