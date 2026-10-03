@@ -13,7 +13,7 @@
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
 import { dayRange, daysInMonth, monthOf, monthStart, sameDayYearsAgo, weekdayLabel } from "./dates";
-import { kidsPrice, kidsSales, visitorsFromCups } from "./rules";
+import { kidsPrice, kidsSales, OLD_VOUCHER_PRICE, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
@@ -207,7 +207,8 @@ export class Board {
       m.box.기타 += cafe.sectors.기타;
       m.posNet += cafe.posNet;
       m.voucher += cafe.voucher;
-      if (kidsSales(date)) m.kidsCoupon += cafe.kidsCoupon || 0;
+      // 키즈 교환권 · 사은권 — 3월까지는 쓰인 교환권, 4월부터는 사은권. 둘 다 키즈입장에서 뺌
+      m.kidsCoupon += cafe.kidsCoupon || 0;
       m.cups += cafe.cups;
       m.teams += cafe.teams;
     }
@@ -224,8 +225,8 @@ export class Board {
         m.issued += k.issued;
         m.walkIn += k.walkIn;
         m.eventFree += k.eventFree;
+        m.walkInPosNet += k.walkInNet;
         if (sales) {
-          m.walkInPosNet += k.walkInNet;
           m.kidsOtherNet += k.other;
           m.box.기타 += k.other;
         }
@@ -240,8 +241,9 @@ export class Board {
       m.newKnown = r.naver.noNew ? 0 : 1;
     } else m.naver = m.naverPos;
     const { price } = kidsPrice(date);
-    m.fee = { naver: m.naver * price, walkIn: m.walkIn * price };
-    // 4월부터 마일리지 사은권('[아키 2만원] 교환권')은 카페에서 쓰여도 키즈 매출에서 뺌
+    // 4월부터 입장료 × 장수. 3월까지는 교환권 방식 — 네이버 × 3만원 + 현장 구매 결제액
+    m.fee = kidsSales(date) ? { naver: m.naver * price, walkIn: m.walkIn * price } : { naver: m.naver * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
+    // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;
     m.visitors = visitorsFromCups(m.cups);

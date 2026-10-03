@@ -60,11 +60,11 @@ describe("네이버 지난 자료 — 낮 · 밤 캡처 합치기", () => {
   });
 });
 
-describe("2026-03-31 까지 — 키즈 매출 없음 (교환권 방식), 인원만", () => {
+describe("2026-03-31 까지 — 교환권 방식", () => {
   const sheet = (date: string, lines: ReceiptLine[]) => ({ from: date, to: date, lines, sheetNet: null }) as any;
   const cafeDay = (date: string, lines: ReceiptLine[]) => buildStorePart({ store: "cafe", date, file: "c.xls", sheet: sheet(date, lines), sectorOf: () => "키친" as any }).part;
 
-  it("3/31 까지 키즈입장 0원 · 키즈 기타 매출 0원, 입장 인원은 그대로", async () => {
+  it("3/31 까지 키즈입장 = 네이버 × 3만원 + 현장 결제 − 카페 교환권 사용, 키즈 기타 매출 0원, 인원은 그대로", async () => {
     const { Board } = await import("../src");
     const tickets = NAVER_SLOTS.map(() => 0);
     tickets[0] = 4;
@@ -78,12 +78,11 @@ describe("2026-03-31 까지 — 키즈 매출 없음 (교환권 방식), 인원�
     const m = b.day(before);
     expect(m.naver).toBe(4);
     expect(m.walkIn).toBe(2);
-    expect(m.box.키즈입장료).toBe(0);
+    // 카페 자료가 없는 날은 교환권 사용 0 — 네이버 4 × 30,000 + 현장 24,000
+    expect(m.box.키즈입장료).toBe(4 * 30000 + 24000);
     expect(m.box.기타).toBe(0);
-    expect(m.total).toBe(0);
     const h = hourDay(b, before, "키즈입장료")!;
     expect(h.people[0]).toBe(6); // 인원은 시간대별로 그대로
-    expect(h.total).toBe(0);
     // 4/1 부터는 입장료 · 키즈 기타 매출
     const n = b.day(after);
     expect(n.box.키즈입장료).toBe(6 * 12000);
@@ -101,7 +100,7 @@ describe("2026-03-31 까지 — 키즈 매출 없음 (교환권 방식), 인원�
 });
 
 describe("2026-03 까지 키즈 현장 손님 — '현장 구매 30,000원' (실제 2025-12-20 파일)", () => {
-  it("현장 구매는 현장 입장 인원 (결제 시각 칸에), 매출은 3월까지 0", async () => {
+  it("현장 구매는 현장 입장 인원 (결제 시각 칸에), 3월까지 키즈 매출은 교환권 값으로", async () => {
     const { Board } = await import("../src");
     expect(kidsKind({ name: "현장 구매 30,000원", qty: 1, gross: 30000, net: 30000 })).toBe("현장결제");
     expect(kidsKind({ name: "[분실] 열쇠뭉치 교체비", qty: 1, gross: 10000, net: 10000 })).toBe("기타");
@@ -117,11 +116,13 @@ describe("2026-03 까지 키즈 현장 손님 — '현장 구매 30,000원' (실
     expect(p.kids!.hourly!.walkIn[10]).toBe(1); // 20시
     const m = new Board([{ date, kids: p }]).day(date);
     expect(m.walkIn).toBe(2);
-    expect(m.box.키즈입장료 + m.box.기타).toBe(0);
+    // 네이버 입력이 없으면 POS 추정(발행 10 − 현장 2 = 8) × 3만원 + 현장 결제 6만원, 카페 자료 없음 → 교환권 사용 0
+    expect(m.box.키즈입장료).toBe(8 * 30000 + 60000);
+    expect(m.box.기타).toBe(0);
   });
 });
 
-describe("'[아키 2만원] 교환권' — 3월까지는 네이버로 받은 교환권, 4월부터는 마일리지 사은권(키즈 매출에서 뺌)", () => {
+describe("'[아키 2만원] 교환권' — 카페 매출은 그대로, 키즈 매출에서 뺌 (3월까지 쓰인 교환권 · 4월부터 사은권)", () => {
   const cafeOf = (date: string) =>
     buildStorePart({
       store: "cafe",
@@ -130,7 +131,7 @@ describe("'[아키 2만원] 교환권' — 3월까지는 네이버로 받은 교
       sheet: { from: date, to: date, lines: [line({ name: "부라타토마토파스타", qty: 2, gross: 46000, net: 46000 }), line({ name: "[아키 2만원] 교환권", qty: 1, gross: -20000, net: -20000 }), line({ name: "[종이쿠폰]만원권", qty: 1, gross: -10000, net: -10000 })], sheetNet: null } as any,
       sectorOf: () => "키친" as any,
     }).part;
-  it("카페 매출은 언제나 그대로, 4월부터 키즈 매출에서 사은권만큼 뺌", async () => {
+  it("카페 매출은 언제나 그대로, 키즈 매출에서 교환권 · 사은권만큼 뺌", async () => {
     const { Board } = await import("../src");
     const kidsLines = [line({ time: "10:40:00", name: "[평일] 1시간 50분 입장권", qty: 3, gross: 36000, net: 36000 })];
     const before = "2026-03-26";
@@ -144,13 +145,33 @@ describe("'[아키 2만원] 교환권' — 3월까지는 네이버로 받은 교
     expect(p.kidsCoupon).toBe(20000);
     const m0 = b.day(before);
     expect(m0.box.키친).toBe(46000);
-    expect(m0.box.키즈입장료).toBe(0);
-    expect(m0.kidsCoupon).toBe(0);
+    // 3월까지: 현장 결제 36,000 − 카페에서 쓴 교환권 20,000
+    expect(m0.kidsCoupon).toBe(20000);
+    expect(m0.box.키즈입장료).toBe(36000 - 20000);
     const m1 = b.day(after);
     expect(m1.box.키친).toBe(46000);
     expect(m1.kidsCoupon).toBe(20000);
     expect(m1.box.키즈입장료).toBe(3 * 12000 - 20000);
     expect(m1.total).toBe(46000 + 16000);
-    expect(b.range(before, after).kidsCoupon).toBe(20000);
+    expect(b.range(before, after).kidsCoupon).toBe(40000);
+  });
+});
+
+describe("2026-03 까지 키즈 매출 = 받은 교환권 값 − 카페에서 쓴 교환권 (2025-12-20 실제 숫자)", () => {
+  const cafeWith = (date: string, n: number) =>
+    buildStorePart({ store: "cafe", date, file: "c", sheet: { from: date, to: date, lines: [line({ name: "[A세트]시그니처플래터", qty: 50, gross: 2150000, net: 2150000 }), line({ name: "[아키 2만원] 교환권", qty: n, gross: -30000 * n, net: -30000 * n })], sheetNet: null } as any, sectorOf: () => "키친" as any }).part;
+  it("안 쓰고 간 교환권만큼 + 키즈 매출, 더 쓰이면 − 키즈 매출", async () => {
+    const { Board } = await import("../src");
+    const date = "2025-12-20";
+    const tickets = NAVER_SLOTS.map(() => 0);
+    tickets[0] = 201;
+    const kids = kidsDay(date, [line({ time: "19:20:34", name: "현장 구매 30,000원", qty: 3, gross: 90000, net: 90000 })]);
+    const naver = naverPastPart({ date, tickets });
+    const plus = new Board([{ date, cafe: cafeWith(date, 200), kids, naver }]).day(date);
+    expect(plus.box.키즈입장료).toBe(201 * 30000 + 90000 - 200 * 30000); // +120,000
+    expect(plus.box.키친).toBe(2150000); // 카페 매출은 교환권을 빼지 않음
+    expect(plus.kidsCoupon).toBe(6000000);
+    const minus = new Board([{ date, cafe: cafeWith(date, 206), kids, naver }]).day(date);
+    expect(minus.box.키즈입장료).toBe(-60000); // 교환권을 더 준 실수 → − 키즈 매출
   });
 });

@@ -169,7 +169,7 @@ export function Home({ d, open, weather, cash, settle }: { d: Dashboard; open: O
       <p className="note center-note">
         {d.price.charged
           ? `${d.price.kind} 단가 ${won(d.price.price)} × 입장권 ${count(day.naver + day.walkIn, "장")}${day.kidsCoupon ? ` − 사은권 ${won(day.kidsCoupon)}` : ""} = 키즈입장 ${won(day.box.키즈입장료)}`
-          : `26년 3월까지는 카페 교환권 방식 — 키즈 매출 없음, 입장 ${count(day.naver + day.walkIn, "명")}만 셈`}
+          : `교환권 방식(26년 3월까지) — 네이버 ${count(day.naver, "장")} × 3만원 + 현장 ${won(day.fee.walkIn)} − 카페 교환권 사용 ${won(day.kidsCoupon)} = 키즈입장 ${won(day.box.키즈입장료)}`}
       </p>
 
     </>
