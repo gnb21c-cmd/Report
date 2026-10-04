@@ -181,3 +181,27 @@ export async function writeExtraPieces(fb: Fb, by: string, items: { date: string
   for (let i = 0; i < writes.length; i += 400)
     await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes: writes.slice(i, i + 400) }) });
 }
+
+/** 그날 보고의 한 칸 원문 조각 { p, by, at, file } — 없으면 null (문서가 없는 날은 null, 그 밖의 오류는 멈춤) */
+export async function readPiece(fb: Fb, date: string, field: "naver" | "extra"): Promise<any | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/reports/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    const v = doc.fields?.[field]?.stringValue;
+    return v ? JSON.parse(v) : null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
+/** 그날 보고의 한 칸만 바꿔 씀 (입력 화면과 같은 모양 { p, by, at, file }) */
+export async function writePiecesOf(fb: Fb, field: "naver", by: string, file: string, items: { date: string; part: unknown }[]): Promise<void> {
+  if (!items.length) return;
+  const root = `projects/${fb.projectId}/databases/(default)/documents/boards/${fb.board}`;
+  const now = new Date().toISOString();
+  const writes = items.map((x) => {
+    const fields = { date: str(x.date), at: { timestampValue: now }, [field]: str(JSON.stringify({ p: x.part, by, at: now, file })) };
+    return { update: { name: `${root}/reports/${x.date}`, fields }, updateMask: { fieldPaths: Object.keys(fields) } };
+  });
+  await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
+}

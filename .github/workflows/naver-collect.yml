@@ -1,0 +1,65 @@
+# 네이버 예약 자동 수집 — 매일 아침 9시 40분(한국 시간) POS 메인 PC(실행기 nice-pos)에서 어제 예약현황을 읽어 A 네이버 칸을 채움
+# 판매입장권 = 이용완료 (평일 무제한 · 야간자유 입장), 신규방문자 = 어제 목록에 나온 줄 수 = '완료 N' 인 손님. apps/collector/src/naver.ts · packages/core/src/naverAuto.ts
+# 어제 + 지난 7일 중 네이버 칸이 빈 날 · 사람이 A 에서 넣은 칸은 그대로
+# 로그인은 POS 메인 PC에서 사람이 한 번 해 둔 상태(실행기 도구 폴더의 naver-login\state.json) — 풀리면 C:\actions-runner\naver-login.cmd 로 다시
+# 공개 저장소라 기록에는 칸 수 · 같음/다름만 남김 (인원 숫자 · 이름 · 사업장 번호 없음)
+name: 네이버 예약 자동 수집
+on:
+  schedule:
+    - cron: "40 0 * * *" # 00:40 UTC = 09:40 한국
+  # 작업 브랜치에 올리면 POS 메인 PC에서 최근 며칠을 읽어 사람이 넣은 값과 견주기만 (올리지 않음)
+  push:
+    branches: ["feature/naver-collect"]
+    paths: ["apps/collector/**", "packages/core/src/naverAuto.ts", ".github/workflows/naver-collect.yml"]
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "시작 날짜 (YYYY-MM-DD, 비우면 어제 + 지난 7일 중 빈 날)"
+        required: false
+      to:
+        description: "끝 날짜 (YYYY-MM-DD, 비우면 시작 날짜 하루)"
+        required: false
+      dry:
+        description: "확인만 (올리지 않음, 사람이 넣은 값과 견줌)"
+        type: boolean
+        default: false
+concurrency:
+  group: naver-collect
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: [self-hosted, Windows, nice-pos]
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.tool_cache }}\setup-pnpm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector exec playwright install chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+      - name: 네이버 → 클라우드
+        run: pnpm --filter @report/collector naver
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          # 로그인 상태 · 로그인 창(naver-login.cmd)을 두는 곳 — 실행할 때마다 지워지지 않는 도구 폴더
+          NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
+          NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
+          COLLECT_FROM: ${{ inputs.date }}
+          COLLECT_TO: ${{ inputs.to }}
+          COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
+          NAVER_PROBE: ${{ github.event_name == 'push' && '1' || '' }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
