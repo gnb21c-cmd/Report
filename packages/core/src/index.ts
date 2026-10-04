@@ -9,6 +9,7 @@ export * from "./daily";
 export * from "./naverPast";
 export * from "./metrics";
 export * from "./hourly";
+export * from "./insight";
 export * from "./sample";
 export * from "./format";
 export * from "./weather";

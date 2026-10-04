@@ -4,7 +4,7 @@
    ② 마감일 시간대별 매출 (10~22시, 핑크 막대 · 막대 위 추정 인원)
    ③ 지난 4주 같은 요일 평균 (같은 눈금)
    ④ 시간대별 4주 같은 요일 추세 (선 · 시간마다 ▲ ▼)
-   ⑤ 분석 (선호 시간 이동 · 피크 · 비슷한 날씨 · 매출 속도 · 다음 주 예측)
+   ⑤ 분석 (판단 · 달라진 이유 · 흐름 · 운영 관점 해석 · 다음 주 — packages/core/src/insight.ts)
    ⑥ 적게 팔린 상품 5개 (그날 · 이달) — 기타는 뺌 (자판기 · 네컷 · 주차 등 상품이 아님)
    ============================================================ */
 import { useEffect, useMemo, useState } from "react";
@@ -13,12 +13,12 @@ import {
   extraTotal,
   hourDay,
   hourLabel,
-  hourlyInsights,
   kidsPrice,
   HOURS,
   madeTotal,
   nowKst,
   orderRows,
+  sectorAnalysis,
   shortLabel,
   weeksAverage,
   weeksTrend,
@@ -57,7 +57,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
   const today = useMemo(() => hourDay(board, date, box), [board, date, box]);
   const avg = useMemo(() => weeksAverage(board, date, box), [board, date, box]);
   const trend = useMemo(() => weeksTrend(board, date, box), [board, date, box]);
-  const lines = useMemo(() => hourlyInsights(board, date, box, props.weather), [board, date, box, props.weather]);
+  const analysis = useMemo(() => sectorAnalysis(board, date, box, props.weather), [board, date, box, props.weather]);
   const yMax = Math.max(0, ...(today?.sales || []), ...avg.sales.map((v) => v || 0));
   const unit = kids ? "장" : "명";
 
@@ -120,12 +120,17 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
         <TrendCard trend={trend} />
 
         <section className="card">
-          <h2>분석 · 4주 추세</h2>
-          <ul className="analysis">
-            {lines.map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
+          <h2>분석</h2>
+          {analysis.map((s) => (
+            <div className="analysis-part" key={s.title}>
+              <h3>{s.title}</h3>
+              <ul className="analysis">
+                {s.lines.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </section>
 
       </main>
