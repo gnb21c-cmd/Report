@@ -9,7 +9,15 @@
    ============================================================ */
 import { buildStorePart, dayRange, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
 import { fbLogin, readProducts, readStores, writeStores } from "./firebase";
+import type { Frame } from "playwright";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
+
+/** 정한 시간 안에 안 끝나면 실패 */
+const timeout = <T>(p: Promise<T>, ms: number) => {
+  p.catch(() => {}); // 늦게 실패해도 프로그램이 죽지 않게 (브라우저를 닫으면 남은 일이 실패함)
+  let t: NodeJS.Timeout | undefined;
+  return Promise.race([p, new Promise<never>((_, no) => (t = setTimeout(() => no(new Error(`${ms / 1000}초 안에 안 끝남`)), ms)))]).finally(() => clearTimeout(t));
+};
 
 export const AUTO_BY = "자동 수집 (OKPOS)";
 const STORES: Store[] = ["cafe", "kids"];
@@ -34,12 +42,31 @@ async function main() {
     : null;
   const table = fb ? await readProducts(fb) : {};
 
-  const ok = await Okpos.open();
+  // OKPOS 화면이 가끔 응답 없이 멈춤 → 한 칸에 2분이 넘으면 끊고 다시 로그인해서 한 번 더
+  let ok = await Okpos.open();
+  let mf: Frame;
+  const start = async () => {
+    await ok.login(env("OKPOS_ID"), env("OKPOS_PW"));
+    mf = await ok.openReceipts();
+  };
+  const restart = async () => {
+    await ok.close().catch(() => {});
+    ok = await Okpos.open();
+    await start();
+  };
+  const fetchDay = (store: Store, date: string) =>
+    timeout(
+      (async () => {
+        await ok.pickShop(mf, store);
+        return ok.download(mf, date);
+      })(),
+      120_000,
+    );
+  const range = dates.length > 1;
   const problems: string[] = [];
   let sent = 0;
   try {
-    await ok.login(env("OKPOS_ID"), env("OKPOS_PW"));
-    const mf = await ok.openReceipts();
+    await start();
     for (const date of dates) {
       const have = fb ? await readStores(fb, date) : {};
       const out: Parameters<typeof writeStores>[3] = [];
@@ -50,9 +77,17 @@ async function main() {
           say(`${date} ${LABEL[store]}: 사람이 영수증별로 올린 칸이라 건너뜀`);
           continue;
         }
+        // 여러 날 채우기는 이미 자동으로 올린 날을 건너뜀 (멈춘 데서 이어 하기)
+        if (!dry && range && old?.by === AUTO_BY) continue;
         try {
-          await ok.pickShop(mf, store);
-          const d = await ok.download(mf, date);
+          let d: Awaited<ReturnType<typeof fetchDay>>;
+          try {
+            d = await fetchDay(store, date);
+          } catch (e) {
+            say(`${date} ${LABEL[store]}: ${mask((e as Error).message)} → 다시 로그인해서 한 번 더`);
+            await restart();
+            d = await fetchDay(store, date);
+          }
           const sheet = parseReceiptSheet(readRows(d.buf));
           if (sheet.from && (sheet.from !== date || sheet.to !== date)) throw new Error(`엑셀 조회일자가 ${sheet.from} ~ ${sheet.to} (요청 ${date})`);
           const file = `OKPOS 자동 ${date} ${LABEL[store]}.xls`;
