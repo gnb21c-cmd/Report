@@ -104,8 +104,14 @@ async function main() {
     try {
       await start();
     } catch (e) {
+      say(`처음 들어가기: ${mask((e as Error).message)} → 새로 열어 한 번 더`);
       if (probe) await nb.probe("로그인 · 메뉴");
-      throw e;
+      try {
+        await restart();
+      } catch (e2) {
+        if (probe) await nb.probe("로그인 · 메뉴 (두 번째)");
+        throw e2;
+      }
     }
     for (const [a, b] of chunks(from, to)) {
       say(`${a} ~ ${b}`);

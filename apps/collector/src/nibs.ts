@@ -112,6 +112,14 @@ export class Nibs {
     }
   }
 
+  /** 지금 창 주소 (물음표 뒤 · 숫자 가림) */
+  private where() {
+    return this.ctx
+      .pages()
+      .map((p) => mask(p.url().replace(/\?.*$/, "")))
+      .join(" | ");
+  }
+
   async login(id: string, pw: string) {
     const p = this.page;
     const res = await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 });
@@ -123,8 +131,10 @@ export class Nibs {
     if (!idBox) throw new Error("로그인 칸(아이디)을 못 찾음");
     await idBox.fill(id);
     await pwBox.fill(pw);
+    say(`로그인 화면: ${this.where()}`);
     await pwBox.press("Enter");
     await p.waitForTimeout(3000);
+    say(`Enter 뒤: ${this.where()}`);
     if (await pwBox.isVisible().catch(() => false)) {
       const btn = await this.visible((f) => f.locator("button, a, input[type=button], input[type=submit], [role=button]").filter({ hasText: /^\s*로그인\s*$/ }));
       if (btn) await btn.click();
@@ -136,10 +146,11 @@ export class Nibs {
       const ok = await this.visible((f) => byName(f, "확인"));
       if (ok) {
         await ok.click({ timeout: 5000 }).catch(() => {});
-        say("알림 확인");
+        say(`알림 확인 (${t / 1000}초) → ${this.where()}`);
         await p.waitForTimeout(800);
       }
       inside = !!(await this.visible((f) => f.locator('[id*="LogOut" i], [id*="Logout" i]'))) || !!(await this.visible((f) => byName(f, "거래조회")));
+      if (p.url().startsWith("chrome-error")) throw new Error(`화면을 못 읽음 (${t / 1000}초)`);
       if (inside && !ok && t >= 3000) break; // 알림이 늦게 뜰 수 있어 3초는 더 봄
       await p.waitForTimeout(1000);
     }
