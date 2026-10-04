@@ -121,10 +121,10 @@ function Login({ onDone }: { onDone: () => void }) {
 
 /* ---------- D 매니저 ---------- */
 type Tab = "week" | "final" | "order" | "result" | "outlook" | "tablet";
-/** 큰 화면 둘 — 다음 주 잠정 확정 · 3일 뒤 최종 확정 */
+/** 큰 화면 둘 — 3일 뒤 최종 확정(매일, 처음 열면 이 화면) · 다음 주 잠정 확정(목요일) */
 const TABS: [Tab, string][] = [
-  ["week", "다음 주 잠정 확정"],
   ["final", "3일 뒤 최종 확정"],
+  ["week", "다음 주 잠정 확정"],
 ];
 /** 그 밖 (작게) */
 const MORE: [Tab, string][] = [
