@@ -13,7 +13,11 @@ import { mask, say } from "./okpos";
 export const NIBS = "https://nibs.nicevan.co.kr/";
 
 /** 화면 구조를 알아볼 때 글자를 보여도 되는 낱말 (가맹점 · 회사 이름이 나오지 않게 정해 둔 것만) */
-const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "신용카드", "통합거래조회", "조회", "엑셀", "다운로드", "전체", "All", "선택", "정산 통계용", "가맹점", "합계", "비밀번호", "사유"];
+const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "신용카드", "통합거래조회", "조회", "엑셀", "다운로드", "전체", "All", "선택", "정산 통계용", "가맹점", "합계", "비밀번호", "사유", "거래상세내역", "엑셀비밀번호", "다운로드사유선택", "주요업무", "로그아웃"];
+
+/** 글자 · 단추(input value 포함) 이름으로 — 띄어쓰기 · 줄바꿈 무시 */
+const loose = (t: string) => new RegExp(`^\\s*${t.split("").filter((c) => c.trim()).map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*")}\\s*$`);
+const byName = (f: Frame, t: string) => f.getByText(loose(t)).or(f.getByRole("button", { name: loose(t) })).or(f.locator(`input[type=button][value="${t}"], input[type=submit][value="${t}"]`));
 
 export class Nibs {
   private downloads: Download[] = [];
@@ -66,8 +70,8 @@ export class Nibs {
     }
   }
 
-  private async clickText(text: string | RegExp, ms = 10000, exact = true): Promise<boolean> {
-    const el = await this.visible((f) => f.getByText(text, { exact }), ms);
+  private async clickText(text: string, ms = 10000): Promise<boolean> {
+    const el = await this.visible((f) => byName(f, text), ms);
     if (!el) return false;
     await el.click({ timeout: 5000 });
     return true;
@@ -87,12 +91,23 @@ export class Nibs {
             out.push({ tag: el.tagName.toLowerCase(), id: el.id || "", cls: String(el.className || "").slice(0, 60), type: el.getAttribute("type") || "", title: el.getAttribute("title") || el.getAttribute("alt") || "", text: (el.innerText || el.value || "").trim().slice(0, 40) });
             if (out.length > 150) break;
           }
+          // 메뉴 글자 (정해 둔 낱말만, 띄어쓰기 · 줄바꿈 무시)
+          const safe = ${JSON.stringify(SAFE_WORDS.map((w) => w.replace(/\s/g, "")))};
+          for (const el of document.querySelectorAll("li,a,span,div,p,label,td,th,button")) {
+            if (el.children.length > 1) continue;
+            const t = (el.innerText || "").replace(/\\s/g, "");
+            if (!safe.includes(t)) continue;
+            const r = el.getBoundingClientRect();
+            if (!r.width || !r.height) continue;
+            out.push({ tag: el.tagName.toLowerCase(), id: el.id || "", cls: String(el.className || "").slice(0, 60), type: "", title: "", text: t });
+            if (out.length > 260) break;
+          }
           return out;
         })()`)
         .catch(() => [])) as { tag: string; id: string; cls: string; type: string; title: string; text: string }[];
       if (!items.length) continue;
       say(`틀: ${mask(f.url().replace(/\?.*$/, ""))} · ${items.length}개`);
-      const safe = (s: string) => (SAFE_WORDS.includes(s.trim()) ? s.trim() : s ? `(${s.length}자)` : "");
+      const safe = (s: string) => (SAFE_WORDS.map((w) => w.replace(/\s/g, "")).includes(s.replace(/\s/g, "")) ? s.trim() : s ? `(${s.length}자)` : "");
       for (const x of items) say(`  ${x.tag}${x.type ? `[${x.type}]` : ""} #${mask(x.id)} .${mask(x.cls)}${x.title ? ` title=${safe(x.title)}` : ""}${x.text ? ` 글=${safe(x.text)}` : ""}`);
     }
   }
@@ -115,23 +130,22 @@ export class Nibs {
       if (btn) await btn.click();
       else await this.clickText("로그인", 2000);
     }
-    // 로그인 시각 알림 → [확인]
-    for (let t = 0; t < 20000; t += 1000) {
-      if (await this.visible((f) => f.getByText("거래조회", { exact: true }))) {
-        const ok = await this.visible((f) => f.getByText("확인", { exact: true }));
-        if (ok) {
-          await ok.click({ timeout: 5000 }).catch(() => {});
-          say("로그인 알림 확인");
-        }
-        say("로그인 됨");
-        return;
-      }
-      const ok = await this.visible((f) => f.getByText("확인", { exact: true }));
+    // 들어가졌는지 = 로그아웃 단추 또는 왼쪽 메뉴가 보임 · 로그인 시각 알림 → [확인]
+    let inside = false;
+    for (let t = 0; t < 25000; t += 1000) {
+      const ok = await this.visible((f) => byName(f, "확인"));
       if (ok) {
         await ok.click({ timeout: 5000 }).catch(() => {});
         say("알림 확인");
+        await p.waitForTimeout(800);
       }
+      inside = !!(await this.visible((f) => f.locator('[id*="LogOut" i], [id*="Logout" i]'))) || !!(await this.visible((f) => byName(f, "거래조회")));
+      if (inside && !ok && t >= 3000) break; // 알림이 늦게 뜰 수 있어 3초는 더 봄
       await p.waitForTimeout(1000);
+    }
+    if (inside) {
+      say("로그인 됨");
+      return;
     }
     throw new Error("로그인 안 됨 — 아이디 · 비밀번호(NICE_ID · NICE_PW)를 확인해 주세요");
   }
@@ -139,16 +153,16 @@ export class Nibs {
   /** 거래조회 → 신용카드 → 통합거래조회 */
   async openSearch() {
     // 로그인 알림이 늦게 뜨는 때
-    const late = await this.visible((f) => f.getByText("확인", { exact: true }), 1500);
+    const late = await this.visible((f) => byName(f, "확인"), 1500);
     if (late) await late.click({ timeout: 3000 }).catch(() => {});
     if (!(await this.clickText("거래조회"))) throw new Error("메뉴 '거래조회' 를 못 찾음");
     await this.page.waitForTimeout(800);
-    if (!(await this.visible((f) => f.getByText("통합거래조회", { exact: true }), 2000))) {
+    if (!(await this.visible((f) => byName(f, "통합거래조회"), 2000))) {
       if (!(await this.clickText("신용카드"))) throw new Error("메뉴 '신용카드' 를 못 찾음");
       await this.page.waitForTimeout(800);
     }
     if (!(await this.clickText("통합거래조회"))) throw new Error("메뉴 '통합거래조회' 를 못 찾음");
-    if (!(await this.visible((f) => f.getByText("거래상세내역", { exact: true }), 30000))) throw new Error("통합거래조회 화면이 안 열림");
+    if (!(await this.visible((f) => byName(f, "거래상세내역"), 30000))) throw new Error("통합거래조회 화면이 안 열림");
     await this.page.waitForTimeout(1500);
     say("통합거래조회 열림");
   }
@@ -227,7 +241,7 @@ export class Nibs {
       ["alt", (f) => f.locator('[alt="조회"]')],
       ["이름", (f) => f.getByRole("button", { name: "조회", exact: true })],
       ["아이디", (f) => f.locator('[id*="btnSearch" i], [id*="btn_search" i], [id*="btnSch" i], [id*="btn_sch" i]')],
-      ["글", (f) => f.getByText("조회", { exact: true })],
+      ["글", (f) => byName(f, "조회")],
       ["모양", (f) => f.locator('[class*="btn_search" i], [class*="btnSearch" i], [class*="btn_sch" i], [class*="search" i]').filter({ hasNotText: /./ })],
     ];
     let how = "";
@@ -304,7 +318,7 @@ export class Nibs {
       await item.click({ timeout: 5000 });
     }
     // 확인 — 다운로드 창의 [확인] (마지막에 보이는 것)
-    const oks = win.getByText("확인", { exact: true });
+    const oks = byName(win, "확인");
     let ok: Locator | null = null;
     for (let i = (await oks.count()) - 1; i >= 0 && !ok; i--) if (await oks.nth(i).isVisible().catch(() => false)) ok = oks.nth(i);
     if (!ok) throw new Error("다운로드 창 [확인] 을 못 찾음");
