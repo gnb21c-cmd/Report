@@ -121,6 +121,7 @@ async function main() {
           const d = naverDiff(r.part, old.p as NaverPart);
           say(`  사람이 넣은 값과 견줌: 판매입장권 ${d.tickets.length ? `다름 (${d.tickets.join(",")})` : "같음"} · 신규방문자 ${(old.p as NaverPart).noNew ? "(손 입력에 없음)" : r.part.noNew ? "(자동 쪽 모름)" : d.newVisitors.length ? `다름 (${d.newVisitors.join(",")})` : "같음"}`);
         }
+        if (date === yesterday && listOk && !visits.length) say("  진단 — 완료자 목록은 열렸는데 줄을 하나도 못 읽음");
         if (dry && date === yesterday && visits.length) {
           // 확인만: 신규방문자가 왜 다른지 — 예전 방식('완료 1' 줄 수)과 손 입력 비교 · 이름/전화 읽힘 · 묶인 손님의 '완료 N' 이 서로 같은지 (숫자 없이)
           const all = (f: (v: (typeof visits)[number]) => boolean | undefined) => (visits.every(f) ? "모두" : visits.some(f) ? "일부" : "없음");

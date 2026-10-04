@@ -218,11 +218,18 @@ export class NaverBook {
         for (const el of document.querySelectorAll("body *")) {
           if (!leaf(el)) continue;
           const m = txt(el).match(/^완료\\s*(\\d+)$/);
-          if (!m || el.closest("button, a, [role=tab], [role=tablist]")) continue;
+          if (!m || el.closest("[role=tab], [role=tablist]")) continue;
           const r = el.getBoundingClientRect();
           if (!r.width || r.left < window.innerWidth * 0.45) continue;
+          // 카드 = 예약번호가 딱 하나 든 가장 작은 위 칸 (둘 이상이면 목록 전체라 멈춤)
           let card = el.parentElement, id = "";
-          for (let k = 0; k < 6 && card; k++, card = card.parentElement) { const n = txt(card).match(/예약번호\\s*(\\d{6,})/); if (n) { id = n[1]; break; } }
+          for (let k = 0; k < 8 && card; k++, card = card.parentElement) {
+            const ns = [...txt(card).matchAll(/예약번호\\s*(\\d{6,})/g)];
+            if (ns.length > 1) { card = null; break; }
+            if (ns.length === 1) { id = ns[0][1]; break; }
+          }
+          // 카드 줄이 단추 · 링크여도 됨 — 다만 예약번호가 없는 단추(목록 위 '완료 N' 탭)는 뺌
+          if (!id && el.closest("button, a")) continue;
           if (!card) card = el.parentElement && el.parentElement.parentElement;
           let name = "", tel = "";
           if (card) {
