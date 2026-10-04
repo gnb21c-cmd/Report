@@ -5,7 +5,10 @@
      주소의 긴 숫자(매장코드 등)와 물음표 뒤 값은 가림
    필요한 값: Secrets OKPOS_ID · OKPOS_PW (없으면 로그인 화면만 봄)
    ============================================================ */
+import { readFile } from "node:fs/promises";
+import { parseReceiptSheet } from "@report/core";
 import { chromium, type Frame, type Page } from "playwright";
+import * as XLSX from "xlsx";
 
 const LOGIN = process.env.OKPOS_URL || "https://nice.okpos.co.kr/login/login_form.jsp";
 const MENU = ["매출관리", "매출현황", "영수증별매출상세현황"];
@@ -85,6 +88,13 @@ async function clickText(page: Page, text: string): Promise<boolean> {
   return false;
 }
 
+/** 엑셀 → 행 × 칸 (입력 화면 excel.ts 와 같게) */
+function readRows(buf: ArrayBuffer): unknown[][] {
+  const book = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: false, cellNF: false, cellText: false });
+  const ws = book.Sheets[book.SheetNames[0]];
+  return ws ? XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: "", blankrows: false }) : [];
+}
+
 async function main() {
   const id = process.env.OKPOS_ID || "";
   const pw = process.env.OKPOS_PW || "";
@@ -155,30 +165,79 @@ async function main() {
     say("MainFrm 틀을 못 찾음");
     return browser.close();
   }
-  // 화면 함수 원문 (프로그램 글자만 — 매출 숫자 없음)
-  for (const fn of ["fnCommSearchPopup4", "fnSearch", "doAction", "fnShowCal1"]) {
-    const src = String(await mf.evaluate(`typeof ${fn} === "function" ? String(${fn}) : ""`).catch(() => ""));
-    if (src) say(`\n[함수 ${fn}]\n${src.replace(/\d{6,}/g, "#").slice(0, 2500)}`);
-    else say(`[함수 ${fn}] 없음`);
-  }
-  say(`조회일자 칸 모양: ${mask(String(await mf.inputValue("#date1").catch(() => "")))}`);
+  const date = process.env.OKPOS_DATE || new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10); // 어제 (한국 시간)
+  say(`\n시험 날짜: ${date}`);
+  for (const store of ["cafe", "kids"] as const) {
+    say(`\n===== 4. ${store} 매장 고르기 =====`);
+    const urls = new Map(page.frames().map((f) => [f, f.url()]));
+    await mf.click("#ss_SHOP_NM").catch((e) => say(`매장 칸 누르기 실패: ${mask(e.message)}`));
+    await page.waitForTimeout(3500);
+    const pf = page.frames().find((f) => f.url().includes("shop_group_type_tree.jsp") && (urls.get(f) !== f.url() || store === "kids"));
+    if (!pf) {
+      say("매장선택 창을 못 찾음");
+      break;
+    }
+    // 표 (IBSheet) 읽기 — 매장 이름은 기록에 남기지 않음
+    const grid = (await pf.evaluate(`(() => {
+      const s = mySheet1; const out = [];
+      for (let r = 0; r <= s.LastRow(); r++) { const row = []; for (let c = 0; c <= s.LastCol(); c++) row.push(String(s.GetCellText(r, c))); out.push(row); }
+      const ev = Object.keys(window).filter((k) => /^mySheet1_On/.test(k));
+      return { rows: out, header: s.HeaderRows(), ev };
+    })()`).catch((e) => ({ error: String(e) }))) as { rows?: string[][]; header?: number; ev?: string[]; error?: string };
+    if (!grid.rows) {
+      say(`표를 못 읽음: ${mask(grid.error || "")}`);
+      break;
+    }
+    say(`표 줄 ${grid.rows.length}개 · 머리 ${grid.header}줄 · 이벤트 함수: ${grid.ev?.join(", ") || "없음"}`);
+    const head = grid.rows[0];
+    const cName = head.indexOf("매장명");
+    const cCode = head.indexOf("매장코드");
+    const shops = grid.rows.map((r, i) => ({ i, name: r[cName] || "", code: r[cCode] || "" })).filter((x) => x.i >= (grid.header || 1) && x.code);
+    say(`매장 ${shops.length}곳 (이름에 '키즈' 든 곳 ${shops.filter((x) => /키즈/.test(x.name)).length}곳)`);
+    const pick = shops.filter((x) => (store === "kids" ? /키즈/.test(x.name) : !/키즈/.test(x.name)));
+    if (pick.length !== 1) {
+      say(`${store} 매장을 하나로 못 고름 (${pick.length}곳)`);
+      break;
+    }
+    const row = pick[0].i;
+    // 그 줄을 두 번 누름 (사람이 하는 것과 같게)
+    const r = await pf.evaluate(`(() => { mySheet1.SelectCell(${row}, ${cName}); if (typeof mySheet1_OnDblClick === "function") { mySheet1_OnDblClick(${row}, ${cName}); return "OnDblClick"; } return "없음"; })()`).catch((e) => `실패 ${String(e)}`);
+    say(`두 번 누름 처리: ${mask(String(r))}`);
+    if (r === "없음") {
+      await pf.getByText(pick[0].name, { exact: true }).first().dblclick().catch((e) => say(`글자 두 번 누르기 실패: ${mask(e.message)}`));
+    }
+    await page.waitForTimeout(2500);
+    const got = await mf.evaluate(`({ cd: !!document.getElementById("ss_SHOP_CD").value, pos: document.getElementById("ss_POS_NO").options.length })`).catch(() => null);
+    say(`매장 들어감: ${JSON.stringify(got)}`);
 
-  // 매장선택 — 누르면 뜨는 창 · 층
-  const urls = new Map(page.frames().map((f) => [f, f.url()]));
-  const pop = page.waitForEvent("popup", { timeout: 6000 }).catch(() => null);
-  await mf.click("#ss_SHOP_NM").catch((e) => say(`매장 칸 누르기 실패: ${mask(e.message)}`));
-  const p2 = await pop;
-  await page.waitForTimeout(3000);
-  const targets: Frame[] = p2 ? p2.frames() : page.frames().filter((f) => urls.get(f) !== f.url());
-  if (p2) say(`[매장선택] 새 창 ${mask(p2.url())}`);
-  for (const f of targets) {
-    say(`\n===== 4. 매장선택 (${f.name() || "이름 없음"}) =====`);
-    await dumpFrame(f, 0);
-    // 표는 머리줄 글과 줄 수만 (매장 이름은 공개 기록에 남기지 않음)
-    const rows = (await f.evaluate(`[...document.querySelectorAll("tr")].map(r => r.innerText.replace(/\\s+/g, " ").trim()).filter(Boolean)`).catch(() => [])) as string[];
-    if (rows.length) say(`  표 머리줄: ${mask(rows[0])} · 줄 ${rows.length}개`);
+    // 날짜 → 조회
+    await mf.evaluate(`document.getElementById("date1").value = "${date}"`);
+    await mf.evaluate(`fnSearch()`).catch((e) => say(`조회 실패: ${mask(String(e))}`));
+    for (let i = 0; i < 30; i++) {
+      await page.waitForTimeout(1000);
+      const n = await mf.evaluate(`mySheet1.RowCount()`).catch(() => -1);
+      if (Number(n) > 0) break;
+    }
+    say(`조회 줄 수: ${await mf.evaluate("mySheet1.RowCount()").catch(() => "?")}`);
+
+    // 엑셀
+    const dl = page.waitForEvent("download", { timeout: 60000 }).catch(() => null);
+    await mf.evaluate(`doAction("excel", 1)`).catch((e) => say(`엑셀 실패: ${mask(String(e))}`));
+    const d = await dl;
+    if (!d) {
+      say("엑셀 받기 안 됨 (60초)");
+      continue;
+    }
+    const buf = await readFile((await d.path()) || "");
+    say(`엑셀 받음: ${buf.length} 바이트 · 파일 이름 모양 ${mask(d.suggestedFilename())}`);
+    try {
+      const sheet = parseReceiptSheet(readRows(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer));
+      const net = sheet.lines.reduce((a, l) => a + l.net, 0);
+      say(`읽기 성공: 조회일자 ${sheet.from} ~ ${sheet.to} · 판매 줄 ${sheet.lines.length}개 · 합계 줄과 ${sheet.sheetNet == null ? "비교 못 함" : sheet.sheetNet === net ? "일치" : "다름"}`);
+    } catch (e) {
+      say(`읽기 실패: ${mask((e as Error).message)}`);
+    }
   }
-  if (!targets.length) say("매장선택을 눌러도 바뀐 틀 · 새 창이 없음");
   await browser.close();
 }
 
