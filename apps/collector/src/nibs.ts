@@ -237,6 +237,12 @@ export class Nibs {
   async openSearch() {
     // 로그인 시각 알림이 늦게 떠서 메뉴를 가림
     await this.closeAlerts(4000);
+    // 새로고침 뒤에는 왼쪽 메뉴가 늦게 채워짐 → 메뉴가 보일 때까지 기다림 (30초)
+    const menuItem = (f: Frame) => f.locator('[id^="mf_side_gen_topMenu_"][id$="_btn_menu"]').filter({ hasText: loose("거래조회") });
+    if (!(await this.visible(menuItem, 30000))) {
+      const n = await this.page.evaluate("document.querySelectorAll('#mf_side_gen_topMenu li').length").catch(() => -1);
+      throw new Error(`왼쪽 메뉴가 30초 안에 안 채워짐 (메뉴 칸 ${n}개)`);
+    }
     // 알림창이 몇 초 뒤에 떠서 메뉴를 가리기도 함 → 짧게 눌러 보고, 막히면 알림창 닫고 다시
     let clicked = false;
     for (let t = 0; t < 40000 && !clicked; t += 3000) {
