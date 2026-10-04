@@ -102,6 +102,15 @@ export class Nibs {
             out.push({ tag: el.tagName.toLowerCase(), id: el.id || "", cls: String(el.className || "").slice(0, 60), type: "", title: "", text: t });
             if (out.length > 260) break;
           }
+          // 왼쪽 파란 줄 (메뉴 아이콘) — 화면 왼쪽 90px 안
+          let left = 0;
+          for (const el of document.querySelectorAll("body *")) {
+            const r = el.getBoundingClientRect();
+            if (!r.width || !r.height || r.left > 90 || r.width > 120 || r.top > 500) continue;
+            const t = (el.innerText || el.value || "").replace(/\\s/g, "");
+            out.push({ tag: "왼쪽 " + el.tagName.toLowerCase(), id: el.id || "", cls: String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className || "").slice(0, 60), type: el.getAttribute("type") || "", title: el.getAttribute("title") || el.getAttribute("alt") || "", text: safe.includes(t) ? t : t ? "(" + t.length + "자)" : "" });
+            if (++left > 60) break;
+          }
           return out;
         })()`)
         .catch(() => [])) as { tag: string; id: string; cls: string; type: string; title: string; text: string }[];
@@ -124,7 +133,12 @@ export class Nibs {
     const p = this.page;
     const res = await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 });
     if (!res || res.status() >= 400) throw new Error(`로그인 화면을 못 엶 (${res?.status()})`);
-    const pwBox = await this.visible((f) => f.locator("input[type=password]"), 30000);
+    let pwBox = await this.visible((f) => f.locator("input[type=password]"), 20000);
+    if (!pwBox) {
+      say("로그인 화면이 덜 열려 새로고침");
+      await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 });
+      pwBox = await this.visible((f) => f.locator("input[type=password]"), 25000);
+    }
     if (!pwBox) throw new Error("로그인 칸(비밀번호)을 못 찾음");
     // 아이디 칸 = 비밀번호 칸 앞의 보이는 글 칸
     const idBox = await this.visible((f) => f.locator("input:not([type=password]):not([type=hidden]):not([type=checkbox]):not([type=radio])"));
@@ -166,7 +180,16 @@ export class Nibs {
     // 로그인 알림이 늦게 뜨는 때
     const late = await this.visible((f) => byName(f, "확인"), 1500);
     if (late) await late.click({ timeout: 3000 }).catch(() => {});
-    if (!(await this.clickText("거래조회"))) throw new Error("메뉴 '거래조회' 를 못 찾음");
+    if (!(await this.clickText("거래조회", 10000))) {
+      const side = await this.visible((f) => f.locator('[id$="btn_sideIcon"], [id$="btn_aside"]'));
+      if (side) {
+        await side.click({ timeout: 5000 }).catch(() => {});
+        say("옆 메뉴 펼침");
+        await this.page.waitForTimeout(1500);
+      }
+      if (!(await this.clickText("거래조회", 5000))) throw new Error("메뉴 '거래조회' 를 못 찾음");
+    }
+    say("거래조회 누름");
     await this.page.waitForTimeout(800);
     if (!(await this.visible((f) => byName(f, "통합거래조회"), 2000))) {
       if (!(await this.clickText("신용카드"))) throw new Error("메뉴 '신용카드' 를 못 찾음");
