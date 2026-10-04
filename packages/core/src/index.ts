@@ -7,6 +7,7 @@ export * from "./receipt";
 export * from "./part";
 export * from "./daily";
 export * from "./naverPast";
+export * from "./naverAuto";
 export * from "./metrics";
 export * from "./hourly";
 export * from "./insight";
