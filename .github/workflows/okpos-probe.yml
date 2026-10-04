@@ -1,0 +1,28 @@
+# OKPOS 점주 웹 시험 조회 (손으로 실행) — 자동 수집을 만들기 전에 화면 구조만 알아봄
+# 필요한 값: Secrets OKPOS_ID · OKPOS_PW (없으면 로그인 화면만 봄)
+# 공개 저장소라 기록에는 칸 이름 · 버튼 글자 · 주소 모양만 남기고 매출 숫자 · 화면 사진은 남기지 않음
+name: OKPOS 시험 조회
+on:
+  # 작업 브랜치에 올리면 한 번 돎 (Secrets 를 넣은 뒤에는 Actions 화면에서 'Re-run jobs')
+  push:
+    branches: ["feature/pos-auto"]
+    paths: ["apps/collector/**", ".github/workflows/okpos-probe.yml"]
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector exec playwright install --with-deps chromium
+      - name: 시험 조회
+        run: pnpm --filter @report/collector probe
+        env:
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
