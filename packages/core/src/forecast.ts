@@ -105,6 +105,8 @@ export interface Learned {
   weatherDays: Record<WeatherClass, number>;
   /** 기간 스티커별 배수 */
   season: Record<string, number>;
+  /** 되돌림 세기 (없으면 TREND_LAMBDA) */
+  lambda?: number;
 }
 
 export const DEFAULT_LEARNED: Learned = {
@@ -140,7 +142,7 @@ export function forecastVisitors(board: Board, weather: WeatherMap, asOf: string
     base = avg(ly.map((d) => visitorsOn(board, d)!));
     const long = r56 ?? r14!;
     const short = r14 ?? long;
-    used = clamp(long + TREND_LAMBDA * (short - long), 0.5, 2);
+    used = clamp(long + (learned.lambda ?? TREND_LAMBDA) * (short - long), 0.5, 2);
   } else {
     // 작년 자료가 없으면 최근 4주 같은 날 유형 평균
     const recent = dayRange(addDays(asOf, -27), asOf)

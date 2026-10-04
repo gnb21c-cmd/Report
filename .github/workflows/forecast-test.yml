@@ -1,0 +1,29 @@
+# 작업지시 예측 시험 (손으로 실행) — 지난 자료로 예측 오차를 봄. 기록에는 오차 % 만 (매출 · 인원 숫자 없음)
+name: 예측 시험
+on:
+  push:
+    branches: ["feature/bakery-order"]
+    paths: ["packages/core/src/forecast.ts", "apps/collector/src/backtest.ts", ".github/workflows/forecast-test.yml"]
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "시험 시작 (YYYY-MM-DD)"
+        required: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector backtest
+        env:
+          BT_FROM: ${{ inputs.from }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
