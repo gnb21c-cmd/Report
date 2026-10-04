@@ -8,7 +8,7 @@
    공개 저장소라 기록(로그)에는 줄 수 · 일치 여부만 남김 (매출 숫자 · 매장 이름 없음)
    ============================================================ */
 import { buildStorePart, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
-import { fbLogin, readBy, readProducts, writeStores } from "./firebase";
+import { fbLogin, readProducts, readStores, writeStores } from "./firebase";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
 
 export const AUTO_BY = "자동 수집 (OKPOS)";
@@ -25,11 +25,12 @@ async function main() {
   if (!env("OKPOS_ID") || !env("OKPOS_PW")) throw new Error("OKPOS_ID · OKPOS_PW 가 없습니다 (GitHub Secrets)");
   say(`날짜 ${date}${dry ? " · 확인만 (올리지 않음)" : ""}`);
 
-  const fb = dry
-    ? null
-    : await fbLogin({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY"), email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") });
+  // 확인만 할 때도 클라우드는 읽음 (분류표 · 이미 올린 값과 견주기)
+  const fb = env("WEATHER_EMAIL")
+    ? await fbLogin({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY"), email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") })
+    : null;
   const table = fb ? await readProducts(fb) : {};
-  const have = fb ? await readBy(fb, date) : {};
+  const have = fb ? await readStores(fb, date) : {};
 
   const ok = await Okpos.open();
   const out: Parameters<typeof writeStores>[3] = [];
@@ -38,7 +39,7 @@ async function main() {
     await ok.login(env("OKPOS_ID"), env("OKPOS_PW"));
     const mf = await ok.openReceipts();
     for (const store of STORES) {
-      if (have[store] && have[store] !== AUTO_BY) {
+      if (!dry && have[store] && have[store].by !== AUTO_BY) {
         say(`${LABEL[store]}: 사람이 이미 올린 칸이라 건너뜀`);
         continue;
       }
@@ -52,6 +53,15 @@ async function main() {
         const check = partCheck(r.part);
         say(`${LABEL[store]}: 화면 ${d.rows}줄 · 판매 줄 ${sheet.lines.length}개 · 반품 짝 ${r.matches.length}건 · 짝 없는 반품 ${r.unmatched.length}건 · ${check.ok ? "엑셀 합계와 일치" : "엑셀 합계와 다름"}`);
         if (!check.ok) throw new Error("엑셀 합계와 계산이 다름 — 입력 화면에서 직접 확인해 주세요");
+        const old = have[store];
+        if (old?.p) {
+          // 이미 올린 값과 견줌 (숫자는 기록에 남기지 않고 같다 · 다르다만)
+          const same = (k: string) => Math.round(Number(old.p[k]) || 0) === Math.round(Number((r.part as any)[k]) || 0);
+          const keys = ["posNet", "voucher", "cups", "teams"].filter((k) => k in old.p);
+          const diff = keys.filter((k) => !same(k));
+          const sec = Object.keys(old.p.sectors || {}).filter((k) => Math.round(old.p.sectors[k]) !== Math.round((r.part.sectors as any)[k] || 0));
+          say(`  이미 올린 값(${old.by === AUTO_BY ? "자동" : "사람"})과 견줌: ${diff.length || sec.length ? `다름 — ${[...diff, ...sec.map((k) => `분류 ${k}`)].join(", ")}` : `같음 (${keys.join(" · ")} · 분류별)`}`);
+        }
         out.push({ kind: store, part: r.part, file, lines: r.lines });
       } catch (e) {
         problems.push(`${LABEL[store]}: ${mask((e as Error).message)}`);
@@ -60,7 +70,7 @@ async function main() {
   } finally {
     await ok.close();
   }
-  if (fb && out.length) {
+  if (fb && !dry && out.length) {
     await writeStores(fb, AUTO_BY, date, out);
     say(`클라우드에 올림: ${out.map((o) => LABEL[o.kind as Store]).join(" · ")}`);
   }

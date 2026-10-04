@@ -37,14 +37,17 @@ export async function readProducts(fb: Fb): Promise<Record<string, string>> {
   }
 }
 
-/** 그날 보고에 이미 있는 칸 → 누가 올렸는지 (사람이 올린 칸은 덮지 않으려고) */
-export async function readBy(fb: Fb, date: string): Promise<Record<string, string>> {
+/** 그날 보고에 이미 있는 칸 → 누가 올렸는지 · 그 값 (사람이 올린 칸은 덮지 않으려고, 확인할 때 견주려고) */
+export async function readStores(fb: Fb, date: string): Promise<Record<string, { by: string; p: any }>> {
   try {
     const doc = await http(`${base(fb)}/boards/${fb.board}/reports/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
-    const out: Record<string, string> = {};
+    const out: Record<string, { by: string; p: any }> = {};
     for (const k of ["cafe", "kids"]) {
       const v = doc.fields?.[k]?.stringValue;
-      if (v) out[k] = String(JSON.parse(v).by || "");
+      if (v) {
+        const j = JSON.parse(v);
+        out[k] = { by: String(j.by || ""), p: j.p };
+      }
     }
     return out;
   } catch {
