@@ -143,9 +143,9 @@ export class NaverBook {
         .map((el) => ({ el, b: box(el), t: (el.getAttribute("title") || txt(el)).replace(/\\s+/g, " ") }));
       const times = timeEls.map((el) => ({ b: box(el), t: txt(el) }));
       // '이용완료' 를 품은 가장 작은 칸 ('이용완료' 만 · '이용완료 7' · '이용완료7' 모두)
-      // 칸이 좁으면 '완료', 넓으면 '이용완료' 로 보임 — 표 안(첫 회차 아래 · 회차 이름 오른쪽)에서만
+      // 칸이 좁으면 '완료', 넓으면 '이용완료' 로 보임 — 표 안(첫 회차 아래 · 회차 이름 오른쪽)에서만 (칸 줄은 단추일 수 있음)
       const doneRe = /^(이용)?완료\\s*\\d*$/;
-      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => /완료/.test(txt(c))) && !el.closest("button, [role=tab], [role=tablist]"); });
+      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => /완료/.test(txt(c))) && !el.closest("[role=tab], [role=tablist]"); });
       const cells = [];
       dones.forEach((el, i) => {
         const b = box(el); const cx = b.left + b.width / 2;
