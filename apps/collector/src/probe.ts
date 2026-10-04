@@ -194,14 +194,16 @@ async function main() {
     const cCode = head.indexOf("매장코드");
     const shops = grid.rows.map((r, i) => ({ i, name: r[cName] || "", code: r[cCode] || "" })).filter((x) => x.i >= (grid.header || 1) && x.code);
     say(`매장 ${shops.length}곳 (이름에 '키즈' 든 곳 ${shops.filter((x) => /키즈/.test(x.name)).length}곳)`);
-    const pick = shops.filter((x) => (store === "kids" ? /키즈/.test(x.name) : !/키즈/.test(x.name)));
+    say(`  이름 모양: ${shops.map((x) => [/키즈/.test(x.name) ? "키즈" : "", /카페/.test(x.name) ? "카페" : "", /아스타나/.test(x.name) ? "아스타나" : "", /본사|사무|폐점|테스트|교육/.test(x.name) ? "본사·폐점류" : ""].filter(Boolean).join("+") || "그 밖").join(" / ")}`);
+    const pick = shops.filter((x) => (store === "kids" ? /키즈/.test(x.name) : /카페/.test(x.name) && !/키즈/.test(x.name)));
     if (pick.length !== 1) {
       say(`${store} 매장을 하나로 못 고름 (${pick.length}곳)`);
       break;
     }
     const row = pick[0].i;
+    if (store === "cafe") say(`[함수 mySheet1_OnClick]\n${String(await pf.evaluate(`typeof mySheet1_OnClick === "function" ? String(mySheet1_OnClick) : ""`).catch(() => "")).replace(/\d{6,}/g, "#").slice(0, 1500)}`);
     // 그 줄을 두 번 누름 (사람이 하는 것과 같게)
-    const r = await pf.evaluate(`(() => { mySheet1.SelectCell(${row}, ${cName}); if (typeof mySheet1_OnDblClick === "function") { mySheet1_OnDblClick(${row}, ${cName}); return "OnDblClick"; } return "없음"; })()`).catch((e) => `실패 ${String(e)}`);
+    const r = await pf.evaluate(`(() => { mySheet1.SelectCell(${row}, ${cName}); if (typeof mySheet1_OnDblClick === "function") { mySheet1_OnDblClick(${row}, ${cName}); return "OnDblClick"; } if (typeof mySheet1_OnClick === "function") { mySheet1_OnClick(${row}, ${cName}); return "OnClick"; } return "없음"; })()`).catch((e) => `실패 ${String(e)}`);
     say(`두 번 누름 처리: ${mask(String(r))}`);
     if (r === "없음") {
       await pf.getByText(pick[0].name, { exact: true }).first().dblclick().catch((e) => say(`글자 두 번 누르기 실패: ${mask(e.message)}`));
