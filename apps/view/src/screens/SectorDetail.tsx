@@ -7,7 +7,7 @@
    ⑤ 분석 (선호 시간 이동 · 피크 · 비슷한 날씨 · 매출 속도 · 다음 주 예측)
    ⑥ 적게 팔린 상품 5개 (그날 · 이달) — 기타는 뺌 (자판기 · 네컷 · 주차 등 상품이 아님)
    ============================================================ */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   bottomProducts,
   count,
@@ -18,6 +18,9 @@ import {
   kidsPrice,
   lowSellers,
   HOURS,
+  madeTotal,
+  nowKst,
+  orderRows,
   shortLabel,
   weeksAverage,
   weeksTrend,
@@ -28,6 +31,7 @@ import {
   type Metrics,
   type WeatherMap,
 } from "@report/core";
+import { bakeryDay } from "../data/firebase";
 import { BarChart } from "../charts/BarChart";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
@@ -375,8 +379,18 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
 function BreadCount({ board, date }: { board: Board; date: string }) {
   const sold = board.products(date, date, "베이커리").reduce((a, p) => a + p.qty, 0);
   const half = board.report(date)?.cafe?.bakeryHalf;
-  // 생산 = 작업지시 앱에서 매니저가 확정한 수량 (작업지시를 쓰기 전 날은 모름)
-  const made: number | null = null;
+  // 생산 = 작업지시 앱(D)에서 매니저가 확정한 수량 (확정 안 한 빵은 계획 수량 '자동'). 작업지시를 쓰기 전 날은 모름
+  const [made, setMade] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    setMade(null);
+    void bakeryDay(date).then((x) => {
+      if (live && x && (x.plan || x.order)) setMade(madeTotal(orderRows(x.plan, x.order, nowKst())));
+    });
+    return () => {
+      live = false;
+    };
+  }, [date]);
   const cells: [string, number | null | undefined][] = [
     ["생산", made],
     ["판매", board.report(date)?.cafe ? sold : null],

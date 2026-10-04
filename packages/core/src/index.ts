@@ -16,3 +16,4 @@ export * from "./cash";
 export * from "./extra";
 export * from "./settings";
 export * from "./forecast";
+export * from "./bakery";

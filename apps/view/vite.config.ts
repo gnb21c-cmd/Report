@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
             registerType: "autoUpdate",
             manifest: false,
             includeAssets: ["icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "manifest.webmanifest"],
-            workbox: { navigateFallback: "/index.html", navigateFallbackDenylist: [/^\/__/, /^\/a\//] },
+            workbox: { navigateFallback: "/index.html", navigateFallbackDenylist: [/^\/__/, /^\/a\//, /^\/d\//, /^\/d1\//] },
           }),
         ],
     build: demo ? { outDir: "dist-demo", emptyOutDir: true } : undefined,

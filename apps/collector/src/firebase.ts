@@ -65,3 +65,22 @@ export async function writeStores(fb: Fb, by: string, date: string, parts: { kin
   for (const p of parts) writes.push({ update: { name: `${root}/lines/${date}_${p.kind}`, fields: { date: str(date), store: str(p.kind), lines: str(JSON.stringify(p.lines)), at: { timestampValue: now } } } });
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
 }
+
+/** 작업지시 계획 쓰기 — plans/{날짜} = { date, at, json } */
+export async function writePlans(fb: Fb, plans: { date: string; json: string }[]): Promise<void> {
+  if (!plans.length) return;
+  const root = `projects/${fb.projectId}/databases/(default)/documents/boards/${fb.board}`;
+  const now = new Date().toISOString();
+  const writes = plans.map((p) => ({ update: { name: `${root}/plans/${p.date}`, fields: { date: str(p.date), at: { timestampValue: now }, json: str(p.json) } } }));
+  await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
+}
+
+/** 작업지시 계획 읽기 (없으면 undefined) */
+export async function readPlan(fb: Fb, date: string): Promise<string | undefined> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/plans/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return doc.fields?.json?.stringValue;
+  } catch {
+    return undefined;
+  }
+}

@@ -3,7 +3,8 @@ rules_version = '2';
 //
 // 매장 자료는 boards/{열쇠}/ 아래에 둡니다. 열쇠 = 긴 무작위 글자 (docs/SETUP.md ③)
 //   보는 폰 (B, 로그인 없음) → 설치 주소 /b/{열쇠}/ 를 아는 폰만 보고(reports) · 날씨(weather)를 읽음. 쓰기 없음
-//   입력 계정 (A 직원 · 날씨) → senders/{이메일} = { board: "{열쇠}" } 명단에 있는 계정만 씀
+//   베이커리 매니저 (D) · 현장 태블릿 (D-1, 주소 /d1/{열쇠}/ 를 아는 태블릿만 읽음)
+//   입력 계정 (A 직원 · 날씨 · 베이커리 매니저) → senders/{이메일} = { board: "{열쇠}" } 명단에 있는 계정만 씀
 //   senders 문서는 Firebase 콘솔에서만 만듦 (A 는 로그인 때 자기 문서에서 열쇠를 읽음)
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -42,6 +43,24 @@ service cloud.firestore {
       match /settings/{doc} {
         allow read: if true;
         allow write: if isSender(board) && piece("json");
+      }
+
+      // 베이커리 작업지시 — 계획(plans: 매일 16시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
+      match /plans/{date} {
+        allow read: if true;
+        allow write: if isSender(board)
+          && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.date == date
+          && request.resource.data.keys().hasOnly(["date", "at", "json"])
+          && piece("json");
+      }
+      match /orders/{date} {
+        allow read: if true;
+        allow write: if isSender(board)
+          && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.date == date
+          && request.resource.data.keys().hasOnly(["date", "at", "json"])
+          && piece("json");
       }
 
       // 상품 분류표 · 정리한 영수증 줄 — 입력 계정만 (폰은 안 읽음)

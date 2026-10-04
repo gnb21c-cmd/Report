@@ -7,6 +7,7 @@
   "scripts": {
     "collect": "tsx src/collect.ts",
     "backtest": "tsx src/backtest.ts",
+    "plan": "tsx src/plan.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },

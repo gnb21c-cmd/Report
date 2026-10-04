@@ -10,6 +10,18 @@
     ],
     "rewrites": [
       {
+        "source": "/d",
+        "destination": "/d/index.html"
+      },
+      {
+        "source": "/d/**",
+        "destination": "/d/index.html"
+      },
+      {
+        "source": "/d1/**",
+        "destination": "/d1/index.html"
+      },
+      {
         "source": "/a",
         "destination": "/a/index.html"
       },
@@ -23,6 +35,24 @@
       }
     ],
     "headers": [
+      {
+        "source": "/d/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/d1/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
       {
         "source": "/a/**",
         "headers": [

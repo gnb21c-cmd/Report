@@ -1,0 +1,38 @@
+# 베이커리 작업지시 계획 — 매일 16시(한국 시간) 내일 · 모레 · 글피 빵별 수량을 세어 클라우드 plans/{날짜} 에 씀
+# apps/collector/src/plan.ts (계산은 packages/core/src/bakery.ts) · 매니저 앱(D)이 18시 전에 내일 수량을 확정
+# 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD
+# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작할 수 있어 15:40 에 걸어 둠
+name: 베이커리 계획
+on:
+  schedule:
+    - cron: "40 6 * * *" # 06:40 UTC = 15:40 한국
+  # 작업 브랜치에 올리면 확인만 (쓰지 않음)
+  push:
+    branches: ["feature/bakery-order"]
+    paths: ["apps/collector/src/plan.ts", "packages/core/src/bakery.ts", "packages/core/src/forecast.ts", ".github/workflows/bakery-plan.yml"]
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "확인만 (쓰지 않음)"
+        type: boolean
+        default: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector plan
+        env:
+          PLAN_DRY: ${{ (github.event_name == 'push' || inputs.dry == true) && '1' || '' }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
