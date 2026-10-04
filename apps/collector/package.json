@@ -8,6 +8,7 @@
     "collect": "tsx src/collect.ts",
     "backtest": "tsx src/backtest.ts",
     "plan": "tsx src/plan.ts",
+    "halfoff": "tsx src/halfoff.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },

@@ -65,6 +65,8 @@ export interface StorePart {
   kidsCoupon?: number;
   /** 베이커리 50% 마감 할인으로 팔린 개수 (영수증별 · 카페만. 이 칸이 생기기 전에 올린 날은 없음 = 모름) */
   bakeryHalf?: number;
+  /** 빵별 50% 할인 개수 (작업지시 폐기 · 오차 계산용) */
+  bakeryHalfBy?: Record<string, number>;
   /** 분류별 실매출 (카페아스타나). 아스타나키즈는 모두 0 (kids 칸에) */
   sectors: Record<Sector, number>;
   cups: number;
@@ -138,7 +140,10 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
   const { store, date, file, sheet, sectorOf } = input;
   const { lines, matches, unmatched } = removeRefunds(sheet.lines);
   const part = emptyPart(store, date, "receipt", file, sheet.sheetNet);
-  if (store === "cafe") part.bakeryHalf = 0;
+  if (store === "cafe") {
+    part.bakeryHalf = 0;
+    part.bakeryHalfBy = {};
+  }
   const hourly = (part.hourly = { sectors: bySector(() => zeros()), cups: zeros(), teams: zeros() });
   const kh = store === "kids" ? (part.kids!.hourly = { issued: zeros(), walkIn: zeros(), eventFree: zeros(), other: zeros() }) : null;
   const teams = new Map<string, { cups: number; hour: number | null; time: string }>();
@@ -157,7 +162,11 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
       continue;
     }
     const cls = addLine(part, store, l, sectorOf, products);
-    if (store === "cafe" && cls.sector === "베이커리" && isHalfOff(l)) part.bakeryHalf = (part.bakeryHalf || 0) + l.qty;
+    if (store === "cafe" && cls.sector === "베이커리" && isHalfOff(l)) {
+      part.bakeryHalf = (part.bakeryHalf || 0) + l.qty;
+      const by = (part.bakeryHalfBy ||= {});
+      by[l.name] = (by[l.name] || 0) + l.qty;
+    }
     if (cls.cups) {
       team.cups += cls.cups;
       if (h != null) hourly.cups[h] += cls.cups;

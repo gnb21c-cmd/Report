@@ -84,3 +84,35 @@ export async function readPlan(fb: Fb, date: string): Promise<string | undefined
     return undefined;
   }
 }
+
+/** 정리한 영수증 줄 (lines/{날짜}_{매장}) — 없으면 null */
+export async function readLines(fb: Fb, date: string, store: "cafe" | "kids"): Promise<any[] | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/lines/${date}_${store}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    const v = doc.fields?.lines?.stringValue;
+    return v ? JSON.parse(v) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 그날 카페 칸 원문 조각 { p, by, at, file } */
+export async function readCafePiece(fb: Fb, date: string): Promise<any | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/reports/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    const v = doc.fields?.cafe?.stringValue;
+    return v ? JSON.parse(v) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 카페 칸만 바꿔 씀 (올린 사람 · 시각은 그대로, 문서 at 은 지금 → 보고 앱이 새로 받음) */
+export async function writeCafePiece(fb: Fb, date: string, piece: unknown): Promise<void> {
+  const now = new Date().toISOString();
+  await http(`${base(fb)}/boards/${fb.board}/reports/${date}?updateMask.fieldPaths=cafe&updateMask.fieldPaths=at&updateMask.fieldPaths=date`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields: { date: str(date), at: { timestampValue: now }, cafe: str(JSON.stringify(piece)) } }),
+  });
+}

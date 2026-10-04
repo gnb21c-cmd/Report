@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, Board, dayKind, dayRange, DEFAULT_LEARNED, HOURS, makePlans, nowKst, orderRows, orderText, type DayReport, type OrderDoc, type PlanDoc, type StorePart } from "../src";
+import { addDays, Board, corrections, dayKind, dayRange, dayResult, DEFAULT_LEARNED, HOURS, makePlans, nowKst, orderRows, orderText, type BreadResult, type DayReport, type OrderDoc, type PlanDoc, type StorePart } from "../src";
 
 const H = () => HOURS.map(() => 0);
 function day(date: string, cups: number, bread: [string, number][]): DayReport {
@@ -65,5 +65,44 @@ describe("만들 목록 — 확정 · 자동 · 확정 전", () => {
   it("한국 시간", () => {
     expect(nowKst(new Date("2026-10-04T09:30:00Z"))).toEqual({ date: "2026-10-04", time: "18:30" });
     expect(addDays("2026-10-04", 1)).toBe("2026-10-05");
+  });
+});
+
+describe("결과 · 오차 → 다음 예측", () => {
+  // 10-05: 소금빵 60개(예측 60) 만들어 50개 팔림(그중 8개 50% 할인) · 크루아상 20개 만들어 20개 다 팔림
+  const r = day("2026-10-05", 100, [["소금빵", 50], ["크루아상", 20]]);
+  r.cafe!.bakeryHalfBy = { 소금빵: 8 };
+  const board = new Board([r]);
+  const plan = { v: 1, date: "2026-10-05", items: [{ name: "소금빵", qty: 60, base: 60 }, { name: "크루아상", qty: 20, base: 20 }] } as PlanDoc;
+  const rows = dayResult(board, "2026-10-05", plan, null);
+
+  it("생산(확정 없으면 자동) · 판매 · 50% 할인 · 폐기 = 생산 − 판매", () => {
+    expect(rows.find((x) => x.name === "소금빵")).toMatchObject({ made: 60, sold: 50, half: 8, full: 42, waste: 10, soldOut: false });
+    expect(rows.find((x) => x.name === "크루아상")).toMatchObject({ made: 20, sold: 20, waste: 0, soldOut: true });
+  });
+
+  it("많이 만들면 줄이고, 다 팔리면 조금 올림 (하루뿐이라 1 쪽으로 당김)", () => {
+    const c = corrections([{ date: "2026-10-05", rows }], "2026-10-05");
+    expect(c["소금빵"]).toBeLessThan(1); // 정가 42 / 예측 60
+    expect(c["소금빵"]).toBeGreaterThan(42 / 60);
+    expect(c["크루아상"]).toBeGreaterThan(1);
+  });
+
+  it("보정이 쌓이지 않음 — 줄여서 만든 만큼 정가로 다 팔리면 같은 배수 유지", () => {
+    // 예측(base) 60 인데 보정해 45개 만들어 45개 정가로 다 팔림 → 다 팔림이라 45/60 × 1.1
+    const x: BreadResult = { name: "소금빵", made: 45, base: 60, sold: 45, half: 0, full: 45, waste: 0, soldOut: true };
+    const c = corrections([1, 2, 3, 4, 5, 6].map((k) => ({ date: addDays("2026-10-05", -k), rows: [x] })), "2026-10-05");
+    expect(c["소금빵"]).toBeCloseTo(Math.exp((6 / 8) * Math.log(0.75 * 1.1)), 2);
+  });
+
+  it("계획에 보정 배수를 곱하고 보정 전 수량을 남김", () => {
+    const b = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 1)]);
+    const plain = makePlans(b, {}, DEFAULT_LEARNED, "2026-10-04", "2026-10-03", () => undefined);
+    const fixed = makePlans(b, {}, DEFAULT_LEARNED, "2026-10-04", "2026-10-03", () => undefined, { 소금빵: 0.8 });
+    const s0 = plain[0].items.find((i) => i.name === "소금빵")!;
+    const s1 = fixed[0].items.find((i) => i.name === "소금빵")!;
+    expect(s1.qty).toBe(Math.round(s0.qty * 0.8));
+    expect(s1.base).toBe(s0.qty);
+    expect(s1.adj).toBe(0.8);
   });
 });

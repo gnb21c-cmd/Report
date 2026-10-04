@@ -21,6 +21,10 @@ export const STAGE_LABEL: Record<number, string> = { 1: "확정안", 2: "잠정 
 export interface PlanItem {
   name: string;
   qty: number;
+  /** 보정 배수 (1 이 아니면 지난 결과로 고친 것) */
+  adj?: number;
+  /** 보정 전 예측 수량 (다음 보정의 기준 — 보정이 되풀이해 쌓이지 않게) */
+  base?: number;
   /** 잠정일 때 알려 주는 범위 */
   lo?: number;
   hi?: number;
@@ -66,7 +70,16 @@ export interface OrderDoc {
 }
 
 /** 오늘(16시) 계획 세 장 — prev(날짜) = 이미 있던 계획 (범위 묶기) */
-export function makePlans(board: Board, weather: WeatherMap, learned: Learned, today: string, asOf: string, prev: (date: string) => PlanDoc | undefined): PlanDoc[] {
+export function makePlans(
+  board: Board,
+  weather: WeatherMap,
+  learned: Learned,
+  today: string,
+  asOf: string,
+  prev: (date: string) => PlanDoc | undefined,
+  /** 빵별 보정 배수 (지난 생산 대비 정가 판매 — corrections) */
+  corr: Record<string, number> = {},
+): PlanDoc[] {
   const out: PlanDoc[] = [];
   for (const stage of [1, 2, 3]) {
     const date = addDays(today, stage);
@@ -76,11 +89,13 @@ export function makePlans(board: Board, weather: WeatherMap, learned: Learned, t
     const yesterday = old?.history?.[addDays(today, -1)];
     const yBand = STAGE_BAND[stage + 1] ?? 0;
     const items: PlanItem[] = p.items.map((it) => {
-      let qty = it.qty;
+      let qty = Math.round(it.qty * (corr[it.name] ?? 1));
       const y = yesterday?.[it.name];
       if (y != null && yBand > 0) qty = withinBand(y, qty, yBand);
       const band = STAGE_BAND[stage];
-      return band ? { name: it.name, qty, lo: Math.floor(qty * (1 - band)), hi: Math.ceil(qty * (1 + band)) } : { name: it.name, qty };
+      const adj = corr[it.name] != null && Math.abs(corr[it.name] - 1) >= 0.005 ? Math.round(corr[it.name] * 100) / 100 : undefined;
+      const base = { name: it.name, qty, base: it.qty, ...(adj ? { adj } : {}) };
+      return band ? { ...base, lo: Math.floor(qty * (1 - band)), hi: Math.ceil(qty * (1 + band)) } : base;
     });
     const history = { ...(old?.history || {}), [today]: Object.fromEntries(items.map((i) => [i.name, i.qty])) };
     for (const k of Object.keys(history).sort().slice(0, -3)) delete history[k];
@@ -146,4 +161,73 @@ export function orderText(date: string, rows: OrderRow[], label = "생산 명령
 export function nowKst(d = new Date()): { date: string; time: string } {
   const k = new Date(d.getTime() + 9 * 3600e3).toISOString();
   return { date: k.slice(0, 10), time: k.slice(11, 16) };
+}
+
+/* ---------- 결과 · 오차 → 다음 예측 ---------- */
+
+/** 그날 빵별 결과 — 생산(확정 · 자동) · 판매 · 50% 할인 · 폐기(생산 − 판매) */
+export interface BreadResult {
+  name: string;
+  made: number | null;
+  /** 보정 전 예측 수량 (계획에 있으면) */
+  base: number | null;
+  sold: number;
+  half: number;
+  /** 정가로 팔린 개수 = 판매 − 50% 할인 */
+  full: number;
+  waste: number | null;
+  /** 다 팔림 (판매 ≥ 생산 · 할인 없음) */
+  soldOut: boolean;
+}
+
+export function dayResult(board: Board, date: string, plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): BreadResult[] {
+  // 지난 날이라 확정 안 한 빵은 모두 '자동'
+  const rows = orderRows(plan, order, { date: "9999-12-31", time: "00:00" });
+  const made = new Map(rows.map((r) => [r.name, r.qty]));
+  const sold = new Map(board.products(date, date, "베이커리").map((p) => [p.name, p.qty]));
+  const halfBy = board.report(date)?.cafe?.bakeryHalfBy || {};
+  const baseOf = new Map((plan?.items || []).map((i) => [i.name, i.base ?? i.qty]));
+  const names = [...new Set([...made.keys(), ...sold.keys()])];
+  return names
+    .map((name) => {
+      const m = made.get(name) ?? null;
+      const s = sold.get(name) || 0;
+      const h = Math.min(s, halfBy[name] || 0);
+      return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: m == null ? null : Math.max(0, m - s), soldOut: m != null && m > 0 && s >= m && h === 0 };
+    })
+    .sort((a, b) => (b.made ?? b.sold) - (a.made ?? a.sold) || a.name.localeCompare(b.name, "ko"));
+}
+
+/** 다 팔린 날 — 실제로는 더 팔 수 있었다고 보고 올리는 배수 */
+export const SOLD_OUT_STEP = 1.1;
+
+/**
+ * 빵별 보정 배수 — 지난 날들(앱 수량대로 만든 날)의 '정가 판매 ÷ 보정 전 예측'
+ * 목표: 저녁 7시쯤이면 거의 다 팔림 → 정가 판매가 예측만큼이면 1, 50% 할인 · 폐기가 나오면 그만큼 낮춤, 다 팔렸으면 만든 양보다 조금 올림
+ * 보정 전 예측과 견주므로 보정이 날마다 되풀이해 쌓이지 않음
+ * 최근 날일수록 무겁게(하루 0.85배씩), 날이 적으면 1 쪽으로 (2일이면 반반)
+ */
+export function corrections(days: { date: string; rows: BreadResult[] }[], asOf: string): Record<string, number> {
+  const acc = new Map<string, { s: number; w: number; n: number }>();
+  for (const d of days) {
+    if (d.date > asOf) continue;
+    const age = Math.max(0, Math.round((Date.parse(asOf) - Date.parse(d.date)) / 86400e3));
+    const w = Math.pow(0.85, age);
+    for (const r of d.rows) {
+      if (!r.made) continue;
+      const base = r.base || r.made;
+      const ratio = Math.min(1.5, Math.max(0.3, r.soldOut ? (r.made / base) * SOLD_OUT_STEP : r.full / base));
+      const a = acc.get(r.name) || { s: 0, w: 0, n: 0 };
+      a.s += w * Math.log(ratio);
+      a.w += w;
+      a.n++;
+      acc.set(r.name, a);
+    }
+  }
+  const out: Record<string, number> = {};
+  for (const [name, a] of acc) {
+    const shrink = a.n / (a.n + 2);
+    out[name] = Math.min(1.5, Math.max(0.6, Math.exp(shrink * (a.s / a.w))));
+  }
+  return out;
 }

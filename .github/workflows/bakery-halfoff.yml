@@ -1,0 +1,36 @@
+# 베이커리 50% 할인 개수 채우기 (손으로 실행) — 이미 올린 날의 영수증 줄로 다시 셈 (apps/collector/src/halfoff.ts)
+# 공개 저장소라 기록에는 날짜 · 처리 여부만
+name: 50% 할인 채우기
+on:
+  push:
+    branches: ["feature/bakery-feedback"]
+    paths: ["apps/collector/src/halfoff.ts", ".github/workflows/bakery-halfoff.yml"]
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "시작 (YYYY-MM-DD)"
+        required: false
+      to:
+        description: "끝 (YYYY-MM-DD, 비우면 어제)"
+        required: false
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector halfoff
+        env:
+          HALF_FROM: ${{ inputs.from }}
+          HALF_TO: ${{ inputs.to }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
