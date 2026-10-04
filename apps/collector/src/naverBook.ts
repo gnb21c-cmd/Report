@@ -18,6 +18,10 @@ const DATE_RE = "(\\d{4})\\.\\s*(\\d{1,2})\\.\\s*(\\d{1,2})\\.";
 export class NaverBook {
   /** 손님 표시를 만들 때 섞는 값 — 실행마다 새로, 어디에도 남기지 않음 */
   private salt = randomBytes(16).toString("hex");
+  private biz = "";
+  private date = "";
+  private told = false;
+  private toldLost = false;
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -71,6 +75,7 @@ export class NaverBook {
     }
     if (/nid\.naver\.com/.test(p.url())) throw new Error("네이버 로그인이 풀렸습니다 — POS 메인 PC의 naver-login.cmd 를 더블클릭해 다시 로그인해 주세요");
     say("네이버 예약현황 열림");
+    this.biz = biz;
     return biz;
   }
 
@@ -92,6 +97,7 @@ export class NaverBook {
   /** '일간' · '전체' 로 두고 날짜를 date 로 — 날짜 글 옆의 < · > 단추를 누름 */
   async gotoDate(date: string) {
     const p = this.page;
+    this.date = date;
     await p.getByText("전체", { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
     for (let i = 0; i < 40; i++) {
       const now = await this.shownDate();
@@ -171,12 +177,35 @@ export class NaverBook {
   async readList(key: number): Promise<{ who: string; n: number; id: string }[]> {
     const p = this.page;
     await this.closePanel();
-    const cell = p.locator(`[data-nv="${key}"]`).first();
-    await cell.scrollIntoViewIfNeeded().catch(() => {});
+    // 앞 칸을 누른 뒤 화면이 새로 그려지면 칸 표시(data-nv)가 사라짐 → 표가 없으면 되돌아가고, 표시를 다시 붙임
+    let cell = p.locator(`[data-nv="${key}"]`).first();
+    if (!(await cell.count())) {
+      if (!this.toldLost) {
+        this.toldLost = true;
+        say(`  칸 표시가 사라짐 — ${mask(p.url().replace(/\?.*$/, ""))} · 회차 ${await this.gridRows()} · '완료 N' ${await this.panelCount()}`);
+      }
+      if (!(await this.gridRows())) {
+        await p.goBack({ timeout: 15000 }).catch(() => {});
+        await p.waitForTimeout(1500);
+      }
+      if (!(await this.gridRows())) {
+        await this.enter(this.biz);
+        await this.gotoDate(this.date);
+      } else await this.closePanel();
+      await this.readCells();
+      cell = p.locator(`[data-nv="${key}"]`).first();
+      if (!(await cell.count())) throw new Error("칸을 다시 못 찾음");
+    }
+    await cell.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     // 보통 누르기 → 안 되면(무언가 가림) 화면 안에서 직접 누름
-    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click()));
+    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click(), undefined, { timeout: 3000 }));
     // 오른쪽에 '완료 N' 이 나올 때까지
     for (let t = 0; t < 16 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+    if (!this.told) {
+      // 처음 한 번만: 누른 뒤 화면이 어떻게 됐는지 (주소 모양 · 표 · 목록 글 수)
+      this.told = true;
+      say(`  칸 누른 뒤 — ${mask(p.url().replace(/\?.*$/, ""))} · 회차 ${await this.gridRows()} · '완료 N' ${await this.panelCount()}`);
+    }
     if (!(await this.panelCount())) throw new Error("완료자 목록이 안 열림");
     await p.waitForTimeout(800);
     const seen = new Map<string, { who: string; n: number; id: string }>();
@@ -218,6 +247,11 @@ export class NaverBook {
     }
     await this.closePanel();
     return [...seen.values()];
+  }
+
+  /** 보이는 'N회차' 글 수 (예약현황 표가 있나) */
+  private gridRows(): Promise<number> {
+    return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^\\d+회차$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
   }
 
   /** 오른쪽에 보이는 '완료 N' 글 수 (목록이 열려 있나) */
