@@ -174,7 +174,7 @@ export class NaverBook {
 
   /** 이용완료 칸을 눌러 오른쪽 완료자 목록을 읽음 — 줄(예약 1건)마다 손님 표시 · '완료 N' · 예약번호
    *  손님 표시는 이름 · 전화 뒷자리를 이번 실행에서만 쓰는 무작위 값과 섞어 바꾼 것 (원래 글은 바로 버림) */
-  async readList(key: number): Promise<{ who: string; n: number; id: string }[]> {
+  async readList(key: number): Promise<{ who: string; n: number; id: string; hasName: boolean; hasTel: boolean }[]> {
     const p = this.page;
     await this.closePanel();
     // 앞 칸을 누른 뒤 화면이 새로 그려지면 칸 표시(data-nv)가 사라짐 → 표가 없으면 되돌아가고, 표시를 다시 붙임
@@ -208,7 +208,7 @@ export class NaverBook {
     }
     if (!(await this.panelCount())) throw new Error("완료자 목록이 안 열림");
     await p.waitForTimeout(800);
-    const seen = new Map<string, { who: string; n: number; id: string }>();
+    const seen = new Map<string, { who: string; n: number; id: string; hasName: boolean; hasTel: boolean }>();
     for (let round = 0; round < 30; round++) {
       // 완료자 카드: '완료 N' 줄 (탭 · 단추 안은 뺌) → 카드(예약번호를 품은 곳) 안에서 바로 위 글 = 이름, 전화번호 뒷 4자리
       const got = (await p.evaluate(`(() => {
@@ -232,7 +232,7 @@ export class NaverBook {
             const ph = txt(card).match(/01\\d[-\\s.]?[\\d*]{3,4}[-\\s.]?(\\d{4})/);
             if (ph) tel = ph[1];
           }
-          out.push({ id: id || "y" + Math.round(r.top + window.scrollY), n: Number(m[1]), raw: name || tel ? name + "|" + tel : "" });
+          out.push({ id: id || "y" + Math.round(r.top + window.scrollY), n: Number(m[1]), raw: name || tel ? name + "|" + tel : "", hasName: !!name, hasTel: !!tel });
         }
         // 목록을 아래로 (스크롤 되는 칸)
         let sc = null;
@@ -240,8 +240,8 @@ export class NaverBook {
         let more = false;
         if (sc) { const before = sc.scrollTop; sc.scrollTop = before + sc.clientHeight * 0.8; more = sc.scrollTop > before; }
         return { out, more };
-      })()`)) as { out: { id: string; n: number; raw: string }[]; more: boolean };
-      for (const x of got.out) seen.set(x.id, { id: x.id, n: x.n, who: x.raw ? createHash("sha256").update(this.salt + x.raw).digest("hex").slice(0, 16) : "" });
+      })()`)) as { out: { id: string; n: number; raw: string; hasName: boolean; hasTel: boolean }[]; more: boolean };
+      for (const x of got.out) seen.set(x.id, { id: x.id, n: x.n, hasName: x.hasName, hasTel: x.hasTel, who: x.raw ? createHash("sha256").update(this.salt + x.raw).digest("hex").slice(0, 16) : "" });
       if (!got.more) break;
       await p.waitForTimeout(500);
     }

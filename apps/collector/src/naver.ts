@@ -12,7 +12,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addDays, dayRange, isNaverTicketProduct, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
+import { addDays, dayRange, isNaverTicketProduct, NAVER_SLOTS, naverTime, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
 import { fbLogin, readPiece, writePiecesOf } from "./firebase";
 import { NaverBook } from "./naverBook";
 import { mask, say } from "./okpos";
@@ -89,7 +89,7 @@ async function main() {
         if (probe) await nb.probe(md(date));
         if (!rows) throw new Error("회차 표를 못 찾음");
         const reads: NaverCellRead[] = [];
-        const visits: NaverVisit[] = [];
+        const visits: (NaverVisit & { hasName?: boolean; hasTel?: boolean })[] = [];
         let listOk = 0;
         let listFail = 0;
         for (const c of cells) {
@@ -120,6 +120,24 @@ async function main() {
         if (old?.p && old.by !== NAVER_AUTO_BY) {
           const d = naverDiff(r.part, old.p as NaverPart);
           say(`  사람이 넣은 값과 견줌: 판매입장권 ${d.tickets.length ? `다름 (${d.tickets.join(",")})` : "같음"} · 신규방문자 ${(old.p as NaverPart).noNew ? "(손 입력에 없음)" : r.part.noNew ? "(자동 쪽 모름)" : d.newVisitors.length ? `다름 (${d.newVisitors.join(",")})` : "같음"}`);
+        }
+        if (dry && date === yesterday && visits.length) {
+          // 확인만: 신규방문자가 왜 다른지 — 예전 방식('완료 1' 줄 수)과 손 입력 비교 · 이름/전화 읽힘 · 묶인 손님의 '완료 N' 이 서로 같은지 (숫자 없이)
+          const all = (f: (v: (typeof visits)[number]) => boolean | undefined) => (visits.every(f) ? "모두" : visits.some(f) ? "일부" : "없음");
+          const groups = new Map<string, Set<number>>();
+          for (const v of visits) if (v.who) groups.set(v.who, (groups.get(v.who) || new Set()).add(v.n));
+          const odd = [...groups.values()].filter((s) => s.size > 1).length;
+          const many = [...groups.keys()].filter((w) => new Set(visits.filter((v) => v.who === w).map((v) => v.id)).size > 1).length;
+          say(`  진단 — 이름 읽힘 ${all((v) => v.hasName)} · 전화 뒷자리 ${all((v) => v.hasTel)} · 예약번호 ${all((v) => !/^y/.test(v.id))} · 여러 줄로 묶인 손님 ${many ? "있음" : "없음"} · 묶였는데 '완료 N' 이 서로 다른 손님 ${odd}`);
+          if (old?.p && old.by !== NAVER_AUTO_BY && !(old.p as NaverPart).noNew) {
+            const oldWay = naverPartFrom(date, reads.map((c) => ({ ...c, first: 0 })), undefined).part;
+            for (const v of visits) {
+              const i = isNaverTicketProduct(v.product) && v.n === 1 ? NAVER_SLOTS.indexOf(naverTime(v.time) || "") : -1;
+              if (i >= 0) oldWay.newVisitors[i]++;
+            }
+            const d = naverDiff(oldWay, old.p as NaverPart);
+            say(`  예전 방식('완료 1' 줄 수)으로 세면 손 입력과: ${d.newVisitors.length ? `다름 (${d.newVisitors.join(",")})` : "같음"}`);
+          }
         }
         if (!naverAutoWritable(old)) {
           say(`  ${md(date)}: 사람이 A 에서 넣은 칸이라 그대로`);
