@@ -562,7 +562,16 @@ function OrderList({ rows, big }: { rows: OrderRow[]; big: boolean }) {
   );
 }
 
-/* ---------- D-1 현장 태블릿 — 아침 6시부터 오늘 생산 + 내일 준비 ---------- */
+/* ---------- D-1 현장 태블릿 — 아침 6시부터: 제품명 · 오늘 생산 · 내일 생산준비 · 3 ~ 5일 뒤(잠정) 한 표 ---------- */
+/** 태블릿 칸 — 오늘 · 내일은 최종, 3 ~ 5일 뒤는 잠정 (최종 확정 아님) */
+const FLOOR_COLS: { off: number; label: string; final: boolean }[] = [
+  { off: 0, label: "오늘 생산", final: true },
+  { off: 1, label: "내일 생산준비", final: true },
+  { off: 3, label: "3일 뒤", final: false },
+  { off: 4, label: "4일 뒤", final: false },
+  { off: 5, label: "5일 뒤", final: false },
+];
+
 function Floor({ api }: { api: Api }) {
   const [tick, setTick] = useState(0);
   // 1분마다 날짜 넘김 확인, 5분마다 자료 새로
@@ -575,32 +584,91 @@ function Floor({ api }: { api: Api }) {
       clearInterval(r);
     };
   }, []);
-  const [d0, d1] = displayDays(now);
+  const [d0] = displayDays(now);
   return (
     <div className="app floor">
       <header className="top">
-        <h1>🥐 생산 명령서</h1>
+        <h1>🥐 생산 명령서 · {shortLabel(d0)}</h1>
         <span className="sub">5분마다 새로 고침 · 아침 6시에 날이 바뀜</span>
       </header>
-      <main className="floor-grid">
-        <FloorDay key={`${d0}-${tick}`} api={api} date={d0} label="오늘 생산" />
-        <FloorDay key={`${d1}-${tick}`} api={api} date={d1} label="내일 준비" />
-      </main>
+      <FloorTable key={`${d0}-${tick}`} api={api} today={d0} />
     </div>
   );
 }
-function FloorDay({ api, date, label }: { api: Api; date: string; label: string }) {
-  const { plan, order, err, loaded } = useDay(api, date);
-  const rows = orderRows(plan, order, nowKst());
+
+function FloorTable({ api, today }: { api: Api; today: string }) {
+  const dates = FLOOR_COLS.map((c) => addDays(today, c.off));
+  const [cols, setCols] = useState<Map<string, number>[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let live = true;
+    const now = nowKst();
+    Promise.all(dates.map(async (d) => orderRows(await api.plan(d), await api.order(d), now)))
+      .then((all) => {
+        if (!live) return;
+        // 오늘 · 내일 = 만들 수량, 3 ~ 5일 뒤 = 지금까지 정해진 수량(없으면 주간 계획 수량)
+        setCols(all.map((rows, i) => new Map(rows.map((r) => [r.name, (FLOOR_COLS[i].final ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
+      })
+      .catch((e) => live && setErr((e as Error).message));
+    return () => {
+      live = false;
+    };
+  }, [api, today]);
+  if (err) return <p className="error box floor-msg">{err}</p>;
+  if (!cols) return <p className="muted center">불러오는 중…</p>;
+  const names = [...new Set(cols.flatMap((m) => [...m.keys()]))].sort((a, b) => (cols[0].get(b) ?? 0) - (cols[0].get(a) ?? 0) || (cols[1].get(b) ?? 0) - (cols[1].get(a) ?? 0) || a.localeCompare(b, "ko"));
+  if (!names.length) return <p className="empty box floor-msg">작업지시가 없는 날입니다.</p>;
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} (${WEEKDAY_KO[weekday(d)]})`;
+  const sum = (i: number) => names.reduce((a, n) => a + (cols[i].get(n) ?? 0), 0);
   return (
-    <section className="floor-day">
-      <h2 className="floor-date">
-        {label} <span>{shortLabel(date)}</span>
-      </h2>
-      {err && <p className="error box">{err}</p>}
-      {loaded && !rows.length && !err && <p className="empty box">작업지시가 없는 날입니다.</p>}
-      <OrderList rows={rows} big />
-    </section>
+    <div className="floor-wrap">
+      <table className="floor-table">
+        <thead>
+          <tr className="note-row">
+            <th colSpan={3} />
+            <th colSpan={3} className="tentative-note">
+              최종확정 아님. 소폭 변경될 수 있음
+            </th>
+          </tr>
+          <tr>
+            <th className="hl hl-top hl-left">제품명</th>
+            <th className="num hl hl-top hl-right">
+              오늘 생산
+              <small>{md(dates[0])}</small>
+            </th>
+            {FLOOR_COLS.slice(1).map((c, i) => (
+              <th key={c.off} className={`num${c.final ? "" : " tentative"}`}>
+                {c.label}
+                <small>{md(dates[i + 1])}</small>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {names.map((n, r) => (
+            <tr key={n}>
+              <td className={`hl hl-left${r === names.length - 1 ? " hl-bottom" : ""}`}>{n}</td>
+              <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cols[0].get(n) ?? "—"}</td>
+              {FLOOR_COLS.slice(1).map((c, i) => (
+                <td key={c.off} className={`num${c.final ? "" : " tentative"}`}>
+                  {cols[i + 1].get(n) ?? "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>합계</td>
+            {FLOOR_COLS.map((c, i) => (
+              <td key={c.off} className={`num${c.final ? "" : " tentative"}`}>
+                {sum(i)}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   );
 }
 
