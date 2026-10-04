@@ -67,7 +67,7 @@ async function main() {
   };
   const restart = async () => {
     await nb.close().catch(() => {});
-    await new Promise((r) => setTimeout(r, 10000)); // 바로 다시 들어가면 나이스가 빈 응답을 줄 때가 있음
+    await new Promise((r) => setTimeout(r, 30000)); // 바로 다시 들어가면 나이스가 빈 응답을 줄 때가 있음
     nb = await Nibs.open();
     await start();
   };
@@ -125,9 +125,15 @@ async function main() {
           try {
             s = await fetchOne(cat, a, b);
           } catch (e) {
-            say(`  ${catLabel(cat)}: ${mask((e as Error).message)} → 다시 로그인해서 한 번 더`);
             if (probe) await nb.probe(catLabel(cat));
-            await restart();
+            // 같은 화면에서 한 번 더 (다시 로그인은 접속이 끊겼을 때만 — 자주 들어가면 나이스가 막음)
+            if (await nb.alive()) {
+              say(`  ${catLabel(cat)}: ${mask((e as Error).message)} → 같은 화면에서 한 번 더`);
+              await nb.openSearch().catch(() => {});
+            } else {
+              say(`  ${catLabel(cat)}: ${mask((e as Error).message)} → 접속이 끊겨 다시 로그인`);
+              await restart();
+            }
             s = await fetchOne(cat, a, b);
           }
           if (!s.lines) say(`  ${catLabel(cat)}: 건 없음`);

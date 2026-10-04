@@ -45,8 +45,20 @@ export class Nibs {
     return n;
   }
 
-  close() {
-    return this.browser.close();
+  /** 로그아웃하고 닫음 — 세션을 남기면 다음 접속을 나이스가 막기도 함 */
+  async close() {
+    const out = await this.visible((f) => f.locator('[id$="btn_LogOut"]')).catch(() => null);
+    if (out) {
+      await out.click({ timeout: 3000 }).catch(() => {});
+      await this.closeAlerts(1500).catch(() => {});
+    }
+    await this.browser.close();
+  }
+
+  /** 아직 들어가 있는지 (오류 화면 · 로그아웃이면 false) */
+  async alive(): Promise<boolean> {
+    if (this.page.url().startsWith("chrome-error")) return false;
+    return !!(await this.visible((f) => f.locator('[id$="btn_LogOut"]')));
   }
 
   /** 열린 창(팝업 창 포함) · 틀 전부 */
@@ -226,57 +238,47 @@ export class Nibs {
     say("통합거래조회 열림");
   }
 
-  /** 가맹점(단말기 번호) 고르기 */
+  /** 통합거래조회 화면 안 요소 (탭 번호가 바뀌어도 끝 아이디로) */
+  private async el(suffix: string, ms = 5000): Promise<Locator> {
+    const el = await this.visible((f) => f.locator(`[id$="_body_${suffix}"]`), ms);
+    if (!el) throw new Error(`화면에서 '${suffix}' 를 못 찾음`);
+    return el;
+  }
+
+  /** 가맹점(단말기 번호) 고르기 — 검색해서 고르는 칸: 번호를 치고 목록에서 고름 */
   async pickTerminal(cat: string) {
     await this.closeAlerts(500);
     const re = new RegExp(`\\[\\s*${cat}\\s*\\]`);
-    // 1) 보통 고르기 칸(select)
-    const sel = await this.visible((f) => f.locator("select").filter({ has: f.locator("option", { hasText: re }) }));
-    if (sel) {
-      const label = (await sel.locator("option", { hasText: re }).first().textContent()) || "";
-      await sel.selectOption({ label: label.trim() }).catch(async () => sel.selectOption({ label }));
-    } else {
-      // 2) 화면 고르기 칸 — 지금 보이는 값('선택' 또는 '[ 번호 ] …')을 누르고 목록에서 고름
-      const box = (await this.visible((f) => f.getByText(/^\s*\[\s*\d+\s*\]/))) || (await this.visible((f) => f.getByText("선택", { exact: true })));
-      if (!box) throw new Error("가맹점 고르기 칸을 못 찾음");
-      await box.click({ timeout: 5000 });
-      await this.page.waitForTimeout(600);
-      let item: Locator | null = null;
-      for (const f of this.frames()) {
-        const all = f.getByText(re);
-        const n = await all.count().catch(() => 0);
-        // 목록 쪽(마지막에 보이는 것)
-        for (let i = n - 1; i >= 0 && !item; i--) if (await all.nth(i).isVisible().catch(() => false)) item = all.nth(i);
-        if (item) break;
+    const box = await this.el("sbx_CatIdS_input");
+    await box.click({ timeout: 5000 });
+    await box.press("Control+A");
+    await box.pressSequentially(cat, { delay: 60 });
+    await this.page.waitForTimeout(1200);
+    // 목록에서 그 번호 줄 (입력칸 자신은 빼고)
+    let item: Locator | null = null;
+    for (const f of this.frames()) {
+      const all = f.getByText(re);
+      const n = await all.count().catch(() => 0);
+      for (let i = 0; i < n && !item; i++) {
+        const x = all.nth(i);
+        if ((await x.evaluate((e: any) => e.tagName).catch(() => "")) === "INPUT") continue;
+        if (await x.isVisible().catch(() => false)) item = x;
       }
-      if (!item) throw new Error("가맹점 목록에 그 단말기가 없음");
-      await item.click({ timeout: 5000 });
+      if (item) break;
+    }
+    if (item) await item.click({ timeout: 5000 });
+    else {
+      await box.press("ArrowDown");
+      await box.press("Enter");
     }
     await this.page.waitForTimeout(800);
-    // 골라졌는지 — 고르기 칸 값에 번호가 보여야 함
-    const shown = await this.visible((f) => f.locator("select").filter({ has: f.locator("option", { hasText: re }) }));
-    const ok = shown ? re.test((await shown.evaluate((s: any) => s.options[s.selectedIndex]?.text || "")) as string) : !!(await this.visible((f) => f.getByText(re)));
-    if (!ok) throw new Error("가맹점이 골라지지 않음");
+    const v = await box.inputValue().catch(() => "");
+    if (!v.includes(cat)) throw new Error(`가맹점이 골라지지 않음 (${item ? "목록 누름" : "목록 없음"})`);
   }
 
   /** 조회기간 (YYYY-MM-DD 두 칸) */
   async setDates(from: string, to: string) {
-    let boxes: Locator[] = [];
-    for (const f of this.frames()) {
-      const all = f.locator("input");
-      const n = await all.count().catch(() => 0);
-      const got: Locator[] = [];
-      for (let i = 0; i < n && got.length < 2; i++) {
-        const el = all.nth(i);
-        if (!(await el.isVisible().catch(() => false))) continue;
-        if (/^\d{4}-?\d{2}-?\d{2}$/.test(await el.inputValue().catch(() => ""))) got.push(el);
-      }
-      if (got.length === 2) {
-        boxes = got;
-        break;
-      }
-    }
-    if (boxes.length !== 2) throw new Error("조회기간 칸을 못 찾음");
+    const boxes = [await this.el("wfm_day_ibx_frDay"), await this.el("wfm_day_ibx_toDay")];
     const put = async (el: Locator, d: string) => {
       await el.click({ timeout: 5000 });
       await el.press("Control+A");
@@ -296,24 +298,7 @@ export class Nibs {
 
   /** 조회(돋보기) → 위 '거래집계내역' 합계 줄의 총건수 (모르면 null) */
   async search(): Promise<number | null> {
-    const tries: [string, (f: Frame) => Locator][] = [
-      ["title", (f) => f.locator('[title="조회"]')],
-      ["alt", (f) => f.locator('[alt="조회"]')],
-      ["이름", (f) => f.getByRole("button", { name: "조회", exact: true })],
-      ["아이디", (f) => f.locator('[id*="btnSearch" i], [id*="btn_search" i], [id*="btnSch" i], [id*="btn_sch" i]')],
-      ["글", (f) => byName(f, "조회")],
-      ["모양", (f) => f.locator('[class*="btn_search" i], [class*="btnSearch" i], [class*="btn_sch" i], [class*="search" i]').filter({ hasNotText: /./ })],
-    ];
-    let how = "";
-    for (const [name, make] of tries) {
-      const el = await this.visible(make);
-      if (el) {
-        await el.click({ timeout: 5000 });
-        how = name;
-        break;
-      }
-    }
-    if (!how) throw new Error("조회 단추를 못 찾음");
+    await (await this.el("btn_Search")).click({ timeout: 5000 });
     await this.page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
     await this.page.waitForTimeout(2500);
     await this.closeAlerts(1000);
@@ -329,16 +314,7 @@ export class Nibs {
   async excelAll(): Promise<{ buf: Uint8Array; password: string }> {
     const password = randomBytes(6).toString("hex"); // 영문 · 숫자 12자
     const before = this.downloads.length;
-    const tries: ((f: Frame) => Locator)[] = [
-      (f) => f.locator('[title*="All"], [alt*="All"]'),
-      (f) => f.locator('[title*="전체"][title*="엑셀"], [alt*="전체"][alt*="엑셀"]'),
-      (f) => f.locator('[id*="excelAll" i], [id*="ExcelAll" i], [id*="xlsAll" i], [id*="allExcel" i]'),
-      (f) => f.getByText("All", { exact: true }),
-    ];
-    let btn: Locator | null = null;
-    for (const make of tries) if ((btn = await this.visible(make))) break;
-    if (!btn) throw new Error("전체 엑셀(All) 단추를 못 찾음");
-    await btn.click({ timeout: 5000 });
+    await (await this.el("btnPexl2")).click({ timeout: 5000 });
     // 전체 엑셀 다운로드 창 (따로 뜨는 창 또는 화면 안 창) — 그 틀 안에서만 찾음
     let win: Frame | null = null;
     for (let t = 0; t < 20000 && !win; t += 500) {
