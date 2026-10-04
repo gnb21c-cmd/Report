@@ -60,17 +60,12 @@ async function main() {
     ? await fbLogin({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY"), email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") })
     : null;
 
-  let nb = await Nibs.open();
+  const nb = await Nibs.open();
   const start = async () => {
     await nb.login(env("NICE_ID"), env("NICE_PW"));
     await nb.openSearch();
   };
-  const restart = async () => {
-    await nb.close().catch(() => {});
-    await new Promise((r) => setTimeout(r, 120000)); // 바로 다시 들어가면 나이스가 빈 응답을 줄 때가 있음
-    nb = await Nibs.open();
-    await start();
-  };
+
   /** 단말기 하나 · 기간 하나 → 나이스 시트 (건이 없으면 빈 시트) */
   const fetchOne = (cat: string, a: string, b: string) =>
     timeout(
@@ -102,48 +97,33 @@ async function main() {
   const problems: string[] = [];
   let sent = 0;
   try {
+    // 실패하면 다시 시도하지 않고 바로 멈춤 (자주 들어가면 나이스가 접속을 막음 — 다음 예약 실행이 다시 받음)
     try {
       await start();
     } catch (e) {
-      say(`처음 들어가기: ${mask((e as Error).message)} → 새로 열어 한 번 더`);
       if (probe) await nb.probe("로그인 · 메뉴");
-      try {
-        await restart();
-      } catch (e2) {
-        if (probe) await nb.probe("로그인 · 메뉴 (두 번째)");
-        throw e2;
-      }
+      throw e;
     }
+    let stop = false;
     for (const [a, b] of chunks(from, to)) {
+      if (stop) break;
       say(`${a} ~ ${b}`);
       const sheets: NiceSheet[] = [];
       const failed = new Set<ExtraKind>();
       for (const [cat, kind] of CATS) {
-        if (failed.has(kind)) continue;
         try {
-          let s: NiceSheet;
-          try {
-            s = await fetchOne(cat, a, b);
-          } catch (e) {
-            if (probe) await nb.probe(catLabel(cat));
-            // 같은 화면에서 한 번 더 (다시 로그인은 접속이 끊겼을 때만 — 자주 들어가면 나이스가 막음)
-            if (await nb.alive()) {
-              say(`  ${catLabel(cat)}: ${mask((e as Error).message)} → 같은 화면에서 한 번 더`);
-              await nb.openSearch().catch(() => {});
-            } else {
-              say(`  ${catLabel(cat)}: ${mask((e as Error).message)} → 접속이 끊겨 다시 로그인`);
-              await restart();
-            }
-            s = await fetchOne(cat, a, b);
-          }
+          const s = await fetchOne(cat, a, b);
           if (!s.lines) say(`  ${catLabel(cat)}: 건 없음`);
           sheets.push(s);
         } catch (e) {
           failed.add(kind);
           problems.push(`${a} ~ ${b} ${catLabel(cat)}: ${mask((e as Error).message)}`);
           if (probe) await nb.probe(`${catLabel(cat)} 실패`);
+          stop = true;
+          break;
         }
       }
+      if (stop) break; // 한 대라도 못 받으면 이 기간은 올리지 않음
       // 한 대라도 못 받은 종류는 빼고 (네컷 두 대 중 하나만 받으면 합이 틀림)
       const good = sheets.filter((s) => !s.kinds.some((k) => failed.has(k)));
       const items: { date: string; part: ExtraPart }[] = [];
