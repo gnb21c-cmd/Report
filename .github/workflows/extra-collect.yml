@@ -46,10 +46,10 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           dest: ${{ runner.tool_cache }}\setup-pnpm
+      # 받은 꾸러미는 PC(실행기 도구 폴더)에 남으니 GitHub 캐시로 올리지 않음 (올리는 데만 2~3분)
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       # 크롬은 한 번 받아 두고 다시 씀 (실행기 도구 폴더)
       - run: pnpm --filter @report/collector exec playwright install chromium
