@@ -202,6 +202,13 @@ export class Nibs {
       inside = !!(await this.visible((f) => f.locator('[id*="LogOut" i], [id*="Logout" i]'))) || !!(await this.visible((f) => byName(f, "거래조회")));
       if (p.url().startsWith("chrome-error")) throw new Error(`화면을 못 읽음 (${t / 1000}초)`);
       if (inside && !ok && t >= 3000) break; // 알림이 늦게 뜰 수 있어 3초는 더 봄
+      // 들어가졌는데(index.jsp) 화면이 비어 있으면 — 나이스 화면 파일이 덜 온 것 → 새로고침 (로그인은 유지됨)
+      if (!inside && (t === 15000 || t === 30000) && /index\.jsp/.test(p.url())) {
+        const n = await p.evaluate("document.querySelectorAll('body *').length").catch(() => -1);
+        say(`메인 화면이 비어 있음 (요소 ${n}개) → 새로고침`);
+        await p.reload({ waitUntil: "domcontentloaded", timeout: 40000 }).catch(() => {});
+        await p.waitForTimeout(3000);
+      }
       await p.waitForTimeout(1000);
     }
     if (inside) {
