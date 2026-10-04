@@ -567,9 +567,10 @@ function OrderList({ rows, big }: { rows: OrderRow[]; big: boolean }) {
 const FLOOR_COLS: { off: number; label: string; final: boolean }[] = [
   { off: 0, label: "오늘 생산", final: true },
   { off: 1, label: "내일 생산준비", final: true },
-  { off: 3, label: "3일 뒤", final: false },
-  { off: 4, label: "4일 뒤", final: false },
-  { off: 5, label: "5일 뒤", final: false },
+  // 오늘을 1일째로 셈 — 3일 뒤 = 모레
+  { off: 2, label: "3일 뒤", final: false },
+  { off: 3, label: "4일 뒤", final: false },
+  { off: 4, label: "5일 뒤", final: false },
 ];
 
 function Floor({ api }: { api: Api }) {
