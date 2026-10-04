@@ -1206,21 +1206,6 @@ ul.plain li {
   padding-right: 3px;
   white-space: nowrap;
 }
-/* 베이커리 60일 최저 판매 — 제목 옆에 60일 이동 합계 */
-.low-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-}
-.low-total {
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-}
-.low-total b {
-  font-size: 17px;
-}
 /* 기타 상세 — 한 줄에 하나씩 */
 .etc-list {
   display: flex;
