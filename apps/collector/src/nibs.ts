@@ -11,6 +11,15 @@ import { chromium, type Browser, type BrowserContext, type Download, type Frame,
 import { mask, say } from "./okpos";
 
 export const NIBS = "https://nibs.nicevan.co.kr/";
+
+/** 통합거래조회 위 '거래집계내역' 합계 줄 */
+export interface NiceSummary {
+  count: number;
+  /** 매출금액 (승인 − 취소) */
+  sales: number;
+  approve: number | null;
+  cancel: number | null;
+}
 /** 로그인 화면 — 첫 화면(websquare.html)에서 들어가면 연결이 끊기는 때가 많고, login.jsp 에서는 잘 들어가짐 */
 export const NIBS_LOGIN = "https://nibs.nicevan.co.kr/websquare/login.jsp";
 export const NIBS_MAIN = "https://nibs.nicevan.co.kr/websquare/index.jsp";
@@ -86,6 +95,11 @@ export class Nibs {
       await this.closeAlerts(1500).catch(() => {});
     }
     await this.browser.close();
+  }
+
+  /** 따로 뜬 창(다운로드 창 등) 닫기 */
+  async closePopups() {
+    for (const p of this.ctx.pages()) if (p !== this.page && !p.isClosed()) await p.close().catch(() => {});
   }
 
   /** 아직 들어가 있는지 (오류 화면 · 로그아웃이면 false) */
@@ -375,19 +389,20 @@ export class Nibs {
     await put(boxes[1], to);
   }
 
-  /** 조회(돋보기) → 위 '거래집계내역' 합계 줄의 총건수 (모르면 null) */
-  async search(): Promise<number | null> {
+  /** 조회(돋보기) → 위 '거래집계내역' 합계 줄 (모르면 null)
+      칸 순서: 총건수 · 매출건수 · 매출금액 · 부가세 · 봉사료 · 면세금액 · 승인건수 · 승인금액 · 취소건수 · 취소금액 */
+  async search(): Promise<NiceSummary | null> {
     await pause();
     await (await this.el("btn_Search")).click({ timeout: 5000 });
     await this.page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
     await this.page.waitForTimeout(2500);
     await this.closeAlerts(1000);
-    // 합계 줄 → 첫 숫자 = 총건수
     const sum = await this.visible((f) => f.getByText("합계", { exact: true }));
     if (!sum) return null;
     const row = (await sum.evaluate((el: any) => (el.closest("tr") || el.parentElement)?.innerText || "").catch(() => "")) as string;
-    const nums = row.replace(/합계/, "").match(/-?[\d,]+/g);
-    return nums ? Number(nums[0].replace(/,/g, "")) : null;
+    const nums = (row.replace(/합계/, "").match(/-?[\d,]+/g) || []).map((x) => Number(x.replace(/,/g, "")));
+    if (nums.length < 3) return null;
+    return { count: nums[0], sales: nums[2], approve: nums.length >= 10 ? nums[7] : null, cancel: nums.length >= 10 ? Math.abs(nums[9]) : null };
   }
 
   /** 따로 뜬 엑셀 다운로드 창 — 오류 화면이면 닫고 단추를 한 번 더 누름 */

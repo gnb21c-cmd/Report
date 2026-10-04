@@ -73,25 +73,49 @@ async function main() {
         const kind = EXTRA_TERMINALS[cat];
         await nb.pickTerminal(cat);
         await nb.setDates(a, b);
-        const count = await nb.search();
+        const total = await nb.search();
+        const count = total?.count ?? null;
         let s: NiceSheet | null;
         if (count === 0) {
           s = { days: new Map(), sum: 0, summary: 0, cafePos: 0, unknown: {}, lines: 0, from: a, to: b, kinds: [], items: [] };
         } else {
-          const { buf, password } = await nb.excelAll();
-          let ab: ArrayBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
-          if (isEncrypted(ab)) ab = await decryptXlsx(ab, password);
-          s = parseNiceSheet(readRows(new Uint8Array(ab)));
-          if (!s) throw new Error("받은 엑셀이 통합거래조회 모양이 아님");
-          if (s.from && (s.from !== a || s.to !== b)) throw new Error(`엑셀 조회기간이 ${s.from} ~ ${s.to} (요청 ${a} ~ ${b})`);
-          const other = s.kinds.filter((k) => k !== kind);
-          if (other.length || Object.keys(s.unknown).length) throw new Error("다른 단말기 건이 섞여 있음");
-          say(`  ${catLabel(cat)}: 건 ${s.lines}개${count != null ? ` · 화면 총건수와 ${count === s.lines ? "같음" : "다름(승인거절 등)"}` : ""}${s.summary != null ? ` · 엑셀 합계와 ${Math.round(s.summary) === Math.round(s.sum) ? "일치" : "다름"}` : ""}`);
+          try {
+            const { buf, password } = await nb.excelAll();
+            let ab: ArrayBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+            if (isEncrypted(ab)) ab = await decryptXlsx(ab, password);
+            s = parseNiceSheet(readRows(new Uint8Array(ab)));
+            if (!s) throw new Error("받은 엑셀이 통합거래조회 모양이 아님");
+            if (s.from && (s.from !== a || s.to !== b)) throw new Error(`엑셀 조회기간이 ${s.from} ~ ${s.to} (요청 ${a} ~ ${b})`);
+            const other = s.kinds.filter((k) => k !== kind);
+            if (other.length || Object.keys(s.unknown).length) throw new Error("다른 단말기 건이 섞여 있음");
+            say(`  ${catLabel(cat)}: 엑셀 건 ${s.lines}개${count != null ? ` · 화면 총건수와 ${count === s.lines ? "같음" : "다름(승인거절 등)"}` : ""}${s.summary != null ? ` · 엑셀 합계와 ${Math.round(s.summary) === Math.round(s.sum) ? "일치" : "다름"}` : ""}${total ? ` · 화면 합계표 매출금액과 ${Math.round(total.sales) === Math.round(s.sum - s.cafePos) ? "일치" : "다름"}` : ""}`);
+          } catch (e) {
+            // 엑셀 다운로드가 막히면 → 화면 합계표의 매출금액을 날짜별로 받음 (단말기 하나 · 하루씩 조회)
+            if (!total) throw e;
+            say(`  ${catLabel(cat)}: 엑셀을 못 받음 (${mask((e as Error).message).split("\n")[0].slice(0, 80)}) → 날짜별 합계표로 받음`);
+            await nb.closePopups();
+            const items: NiceSheet["items"] = [];
+            let lines = 0;
+            for (const d of dayRange(a, b)) {
+              let t = total;
+              if (a !== b) {
+                await nb.setDates(d, d);
+                const x = await nb.search();
+                if (!x) throw new Error(`${d} 합계표를 못 읽음`);
+                t = x;
+              }
+              if (t.approve != null && t.cancel != null && Math.round(t.approve - t.cancel) !== Math.round(t.sales)) say(`  ${d}: 합계표 승인 − 취소와 매출금액이 다름 (매출금액을 씀)`);
+              lines += t.count;
+              if (t.sales) items.push({ key: `합계표|${cat}|${d}`, date: d, kind, amt: t.sales });
+            }
+            s = { days: new Map(), sum: items.reduce((x, it) => x + it.amt, 0), summary: null, cafePos: 0, unknown: {}, lines, from: a, to: b, kinds: [kind], items };
+            say(`  ${catLabel(cat)}: 합계표 ${dayRange(a, b).length}일 · 건 ${lines}개`);
+          }
         }
         // 이 단말기 · 이 기간은 받은 값으로 (건이 없는 날은 0)
         return { ...s, from: a, to: b, kinds: [kind] };
       })(),
-      150_000,
+      240_000,
     );
 
   const problems: string[] = [];
