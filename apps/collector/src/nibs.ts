@@ -19,6 +19,9 @@ const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "
 const loose = (t: string) => new RegExp(`^\\s*${t.split("").filter((c) => c.trim()).map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*")}\\s*$`);
 const byName = (f: Frame, t: string) => f.getByText(loose(t)).or(f.getByRole("button", { name: loose(t) })).or(f.locator(`input[type=button][value="${t}"], input[type=submit][value="${t}"]`));
 
+/** 사람처럼 단계 사이에 쉼 (1.5 ~ 3초) */
+const pause = (min = 1500, max = 3000) => new Promise((r) => setTimeout(r, min + Math.random() * (max - min)));
+
 export class Nibs {
   private downloads: Download[] = [];
   private constructor(
@@ -29,7 +32,13 @@ export class Nibs {
 
   static async open(): Promise<Nibs> {
     const browser = await chromium.launch();
-    const ctx = await browser.newContext({ locale: "ko-KR", timezoneId: "Asia/Seoul", acceptDownloads: true, viewport: { width: 1600, height: 1000 } });
+    // 보통 PC 크롬처럼 (headless 표시가 있으면 막는 곳이 있음)
+    const ua = (await browser.newPage().then(async (p) => {
+      const u = await p.evaluate(() => navigator.userAgent);
+      await p.close();
+      return u;
+    })).replace(/HeadlessChrome/g, "Chrome");
+    const ctx = await browser.newContext({ locale: "ko-KR", timezoneId: "Asia/Seoul", acceptDownloads: true, viewport: { width: 1600, height: 1000 }, userAgent: ua.replace(/X11; Linux x86_64/, "Windows NT 10.0; Win64; x64") });
     await ctx.addInitScript("globalThis.__name = (f) => f");
     const page = await ctx.newPage();
     const n = new Nibs(browser, ctx, page);
@@ -163,8 +172,13 @@ export class Nibs {
     // 아이디 칸 = 비밀번호 칸 앞의 보이는 글 칸
     const idBox = await this.visible((f) => f.locator("input:not([type=password]):not([type=hidden]):not([type=checkbox]):not([type=radio])"));
     if (!idBox) throw new Error("로그인 칸(아이디)을 못 찾음");
-    await idBox.fill(id);
-    await pwBox.fill(pw);
+    await pause();
+    await idBox.click();
+    await idBox.pressSequentially(id, { delay: 90 + Math.random() * 60 });
+    await pause(600, 1200);
+    await pwBox.click();
+    await pwBox.pressSequentially(pw, { delay: 90 + Math.random() * 60 });
+    await pause(600, 1200);
     say(`로그인 화면: ${this.where()}`);
     await pwBox.press("Enter");
     await p.waitForTimeout(3000);
@@ -227,6 +241,7 @@ export class Nibs {
     }
     if (!clicked) throw new Error("메뉴 '거래조회' 가 눌리지 않음 (알림창에 가림)");
     say("거래조회 누름");
+    await pause();
     await this.page.waitForTimeout(800);
     if (!(await this.visible((f) => byName(f, "통합거래조회"), 2000))) {
       if (!(await this.clickText("신용카드"))) throw new Error("메뉴 '신용카드' 를 못 찾음");
@@ -247,6 +262,7 @@ export class Nibs {
 
   /** 가맹점(단말기 번호) 고르기 — 검색해서 고르는 칸: 번호를 치고 목록에서 고름 */
   async pickTerminal(cat: string) {
+    await pause();
     await this.closeAlerts(500);
     const re = new RegExp(`\\[\\s*${cat}\\s*\\]`);
     const box = await this.el("sbx_CatIdS_input");
@@ -278,6 +294,7 @@ export class Nibs {
 
   /** 조회기간 (YYYY-MM-DD 두 칸) */
   async setDates(from: string, to: string) {
+    await pause();
     const boxes = [await this.el("wfm_day_ibx_frDay"), await this.el("wfm_day_ibx_toDay")];
     const put = async (el: Locator, d: string) => {
       await el.click({ timeout: 5000 });
@@ -298,6 +315,7 @@ export class Nibs {
 
   /** 조회(돋보기) → 위 '거래집계내역' 합계 줄의 총건수 (모르면 null) */
   async search(): Promise<number | null> {
+    await pause();
     await (await this.el("btn_Search")).click({ timeout: 5000 });
     await this.page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
     await this.page.waitForTimeout(2500);
@@ -314,6 +332,7 @@ export class Nibs {
   async excelAll(): Promise<{ buf: Uint8Array; password: string }> {
     const password = randomBytes(6).toString("hex"); // 영문 · 숫자 12자
     const before = this.downloads.length;
+    await pause();
     await (await this.el("btnPexl2")).click({ timeout: 5000 });
     // 전체 엑셀 다운로드 창 (따로 뜨는 창 또는 화면 안 창) — 그 틀 안에서만 찾음
     let win: Frame | null = null;
