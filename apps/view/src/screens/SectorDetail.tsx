@@ -9,7 +9,6 @@
    ============================================================ */
 import { useEffect, useMemo, useState } from "react";
 import {
-  bottomProducts,
   count,
   extraTotal,
   hourDay,
@@ -129,8 +128,6 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           </ul>
         </section>
 
-        {/* 맨 밑: 바리스타 = 적게 팔린 상품 5개 · 베이커리 · 키친 · 키즈 = 없음 */}
-        {box === "바리스타" && <BottomCard board={board} box={box} date={date} />}
       </main>
     </>
   );
@@ -226,51 +223,6 @@ function TrendCard({ trend }: { trend: ReturnType<typeof weeksTrend> }) {
         <p className="empty">같은 요일 시간대 자료가 2번 이상 쌓이면 나옵니다.</p>
       )}
     </ChartCard>
-  );
-}
-
-function BottomCard({ board, box, date }: { board: Board; box: BoxKey; date: string }) {
-  const [span, setSpan] = useState<"day" | "month">("day");
-  const rows = useMemo(() => bottomProducts(board, date, box, span, 5), [board, date, box, span]);
-  return (
-    <section className="card">
-      <h2>적게 팔린 상품 5개</h2>
-      <p className="sub">{span === "day" ? "마감일에 팔린 상품 중 수량이 적은 순" : "이달(1일~마감일) 수량이 적은 순 · 최근 90일 안에 팔린 적 있는 상품은 0개도"}</p>
-      <div className="card-tools top-gap">
-        <Seg
-          value={span}
-          options={[
-            ["day", "마감일"],
-            ["month", "이달"],
-          ]}
-          onChange={setSpan}
-        />
-      </div>
-      {rows.length ? (
-        <table>
-          <thead>
-            <tr>
-              <th>상품</th>
-              <th className="num">수량</th>
-              <th className="num">실매출</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.store + p.name}>
-                <td>
-                  {p.name}
-                </td>
-                <td className="num">{count(p.qty)}</td>
-                <td className="num">{won(p.net)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p className="empty">판매 자료가 없습니다.</p>
-      )}
-    </section>
   );
 }
 
