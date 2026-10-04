@@ -7,7 +7,7 @@
    - 인생네컷은 두 대 합 — 한 대라도 못 받으면 그 기간 네컷 칸은 올리지 않음
    공개 저장소라 기록(로그)에는 건수 · 일치 여부만 남김 (매출 숫자 · 가맹점 이름 없음)
    ============================================================ */
-import { addDays, applyExtra, autoExtraKinds, dayRange, EXTRA_AUTO_BY, EXTRA_LABEL, EXTRA_TERMINALS, extraUpdates, NICE_FROM, parseNiceSheet, type ExtraKind, type ExtraPart, type NiceSheet } from "@report/core";
+import { addDays, applyExtra, autoExtraKinds, dayRange, EXTRA_AUTO_BY, EXTRA_LABEL, EXTRA_TERMINALS, extraUpdates, NICE_FROM, niceRange, parseNiceSheet, type ExtraKind, type ExtraPart, type NiceSheet } from "@report/core";
 // 비밀번호 걸린 엑셀 풀기 — 입력 화면(A)과 같은 것을 씀
 import { decryptXlsx, isEncrypted } from "../../entry/src/officeCrypto";
 import { fbLogin, readExtraPiece, writeExtraPieces } from "./firebase";
@@ -44,8 +44,22 @@ function chunks(from: string, to: string): [string, string][] {
 
 async function main() {
   const today = todayKst();
-  let from = env("COLLECT_FROM") || env("COLLECT_DATE") || addDays(today, -1);
-  const to = env("COLLECT_TO") || (env("COLLECT_FROM") || env("COLLECT_DATE") ? from : today);
+  // 받을 기간 — 날짜를 정해 주면 그대로, 아니면 실행 종류(저녁 21:50 · 아침 09:30 · 손으로)에 따라 (packages/core/src/extra.ts niceRange)
+  const mode = (["evening", "morning"].includes(env("NICE_MODE")) ? env("NICE_MODE") : "manual") as "evening" | "morning" | "manual";
+  const hour = new Date(Date.now() + 9 * 3600e3).getUTCHours();
+  let from: string;
+  let to: string;
+  if (env("COLLECT_FROM") || env("COLLECT_DATE")) {
+    from = env("COLLECT_FROM") || env("COLLECT_DATE");
+    to = env("COLLECT_TO") || from;
+  } else {
+    const r = niceRange(today, hour, mode);
+    if ("skip" in r) {
+      say(`저녁 예약이 늦게(${hour}시) 돌아 건너뜀 — PC가 꺼져 있었던 날은 아침 09:30 실행이 지난 7일을 받음`);
+      return;
+    }
+    ({ from, to } = r);
+  }
   const dry = env("COLLECT_DRY") === "1";
   const probe = env("NICE_PROBE") === "1";
   if (![from, to].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) || from > to) throw new Error(`날짜 모양이 이상함: ${from} ~ ${to}`);

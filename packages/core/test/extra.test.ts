@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyExtra, autoExtraKinds, Board, EXTRA_AUTO_BY, extraTotal, extraUpdates, mergeExtra, parseNiceSheet } from "../src";
+import { applyExtra, autoExtraKinds, Board, niceRange, EXTRA_AUTO_BY, extraTotal, extraUpdates, mergeExtra, parseNiceSheet } from "../src";
 
 /** 나이스 '통합거래조회' 모양 (위 카드사별 합계 · 아래 건별) */
 function sheet(lines: (string | number)[][], summary: number): unknown[][] {
@@ -94,5 +94,25 @@ describe("자동 수집 — 사람이 올린 칸은 덮지 않음", () => {
     const human = applyExtra(auto, { date: base.date, part: { ...base, parking: 999 }, kinds: ["parking"] }, { by: "송", at });
     expect(autoExtraKinds(human, [...all])).toEqual(["vending", "photo"]);
     expect(human.parking).toBe(999);
+  });
+});
+
+describe("나이스 자동 수집 — 받을 기간 (저녁 21:50 · 아침 09:30)", () => {
+  it("저녁: 어제 ~ 오늘", () => {
+    expect(niceRange("2026-10-05", 21, "evening")).toEqual({ from: "2026-10-04", to: "2026-10-05" });
+    expect(niceRange("2026-10-05", 22, "evening")).toEqual({ from: "2026-10-04", to: "2026-10-05" }); // GitHub 예약이 늦게 시작
+  });
+  it("저녁 예약이 PC가 꺼져 있어 다음 날 켜질 때 돌면 → 건너뜀 (아침 09:30 이 받음)", () => {
+    expect(niceRange("2026-10-06", 8, "evening")).toEqual({ skip: true });
+    expect(niceRange("2026-10-06", 20, "evening")).toEqual({ skip: true });
+  });
+  it("아침: 지난 7일 ~ 어제 (꺼져 있던 날 · 밤늦은 결제까지 채움, 사람이 올린 칸은 그대로)", () => {
+    expect(niceRange("2026-10-06", 9, "morning")).toEqual({ from: "2026-09-29", to: "2026-10-05" });
+  });
+  it("손으로 돌릴 때(그 밖): 어제 ~ 오늘", () => {
+    expect(niceRange("2026-10-06", 15, "manual")).toEqual({ from: "2026-10-05", to: "2026-10-06" });
+  });
+  it("나이스로 바뀌기 전(2026-07-01 전)은 받지 않음", () => {
+    expect(niceRange("2026-07-03", 9, "morning")).toEqual({ from: "2026-07-01", to: "2026-07-02" });
   });
 });
