@@ -142,7 +142,8 @@ export class NaverBook {
       const heads = els.filter((el) => { const b = box(el); const t = txt(el); return leaf(el) && t.length > 1 && b.bottom <= gridTop + 2 && b.top >= gridTop - 90 && b.left >= gridLeft - 2 && !/^(전체|신청|확정|예약가능|완료\\/노쇼|잔여예약|이용완료|일간|주간|월간)$/.test(t) && !/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/.test(t) && !/^\\d+$/.test(t); })
         .map((el) => ({ el, b: box(el), t: (el.getAttribute("title") || txt(el)).replace(/\\s+/g, " ") }));
       const times = timeEls.map((el) => ({ b: box(el), t: txt(el) }));
-      const dones = els.filter((el) => leaf(el) && txt(el) === "이용완료");
+      // '이용완료' 를 품은 가장 작은 칸 ('이용완료' 만 · '이용완료 7' · '이용완료7' 모두)
+      const dones = els.filter((el) => /^이용완료\\s*\\d*$/.test(txt(el)) && ![...el.children].some((c) => /이용완료/.test(txt(c))));
       const cells = [];
       dones.forEach((el, i) => {
         const b = box(el); const cx = b.left + b.width / 2;
@@ -151,6 +152,8 @@ export class NaverBook {
         const tm = times.filter((x) => x.b.top < b.top && x.b.left >= col.left - 40 && x.b.left <= col.right + 2).sort((a, z) => z.b.top - a.b.top)[0];
         // 숫자 = 이용완료 글을 품은 줄(부모)의 숫자
         let p = el.parentElement, n = null;
+        const own = txt(el).match(/\\d+/);
+        if (own) n = Number(own[0]);
         for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace("이용완료", "").match(/\\d+/); if (m) n = Number(m[0]); }
         el.setAttribute("data-nv", String(i));
         cells.push({ key: i, product: h ? h.t : "", time: tm ? tm.t : "", done: n == null ? 0 : n });
@@ -222,8 +225,17 @@ export class NaverBook {
       const txt = (el) => (el.innerText || "").trim();
       const leafs = [...document.querySelectorAll("body *")].filter((el) => !el.children.length && el.getBoundingClientRect().width > 0);
       const c = (re) => leafs.filter((el) => re.test(txt(el))).length;
+      // '이용완료' · '잔여예약' 을 품은 가장 작은 칸의 글 모양 (숫자는 9 로, 앞 3가지만)
+      const shape = (w) => [...new Set([...document.querySelectorAll("body *")].filter((el) => el.getBoundingClientRect().width > 0 && txt(el).includes(w) && ![...el.children].some((ch) => txt(ch).includes(w))).map((el) => txt(el).replace(/\\d/g, "9").replace(/\\s+/g, " ").slice(0, 30)))].slice(0, 3).join(" | ");
+      // 숫자가 든 짧은 글의 모양 많은 순 10가지 (숫자는 9 로) — 칸 안 글이 어떻게 생겼는지
+      const freq = {};
+      for (const el of leafs) { const t = txt(el); if (t.length <= 12 && /\\d/.test(t)) { const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " "); freq[k] = (freq[k] || 0) + 1; } }
+      window.__cells = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + "×" + n).join(" | ");
+      window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음");
       return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^이용완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+$/), buttons: document.querySelectorAll("button").length };
     })()`)) as Record<string, number>;
+    say(`  글 모양 — ${mask(String(await p.evaluate("window.__shape").catch(() => "")))}`);
+    say(`  숫자 든 글 — ${mask(String(await p.evaluate("window.__cells").catch(() => "")))}`);
     say(`  회차 ${info.rows} · 시각 ${info.times} · 이용완료 ${info.done} · 잔여예약 ${info.remain} · 날짜 글 ${info.date} · '전체' ${info.all} · '완료 N' ${info.panelDone} · 단추 ${info.buttons}`);
   }
 }
