@@ -11,6 +11,7 @@ import {
   DEFAULT_LEARNED,
   displayDays,
   finalDay,
+  floorCopy,
   HOURS,
   madeTotal,
   makeFinal,
@@ -204,5 +205,17 @@ describe("생산 단위 — 몽블랑은 5개 단위", () => {
     expect(mon.week.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
     const f = makeFinal(b, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", { v: 2, date: mon.date, week: mon.week }, null, { 몽블랑: 1.07 })!;
     expect(f.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
+  });
+});
+
+describe("현장 태블릿 복사본 — 수량 · 상태만", () => {
+  it("예상 손님 · 날씨 · 보정 값은 빼고, 태블릿에서 같은 목록이 나옴", () => {
+    const step = { madeOn: "2026-10-08", asOf: "2026-10-07", kind: "평일" as const, visitors: 321, weather: "쾌적", total: 50, items: [{ name: "소금빵", qty: 50, base: 47, adj: 1.06 }] };
+    const plan: PlanDoc = { v: 2, date: "2026-10-12", week: step, final: { ...step, madeOn: "2026-10-09", items: [{ name: "소금빵", qty: 52, base: 49, lo: 45, hi: 55 }] }, outlook: [] };
+    const order: OrderDoc = { v: 2, date: "2026-10-12", provisional: { 소금빵: L(50) }, final: {} };
+    const f = floorCopy(plan, order);
+    expect(JSON.stringify(f)).not.toMatch(/321|쾌적|base|adj|outlook|매니저/);
+    const now = T("2026-10-12", "07:00");
+    expect(orderRows(f.plan, f.order, now)).toEqual(orderRows(plan, order, now));
   });
 });

@@ -30,13 +30,13 @@ import {
   type OrderRow,
   type PlanDoc,
 } from "@report/core";
-import { cloudApi, CloudError, demoApi, login, logout, session, tabletKey, tabletUrl, type Api, type Kind } from "./data";
+import { cloudApi, CloudError, demoApi, floorApi, login, logout, session, tabletKey, tabletUrl, type Api, type Kind } from "./data";
 import { finalImage, shareImage, weekImage, type ImgRow } from "./image";
 
 export function App() {
   if (__DEMO__) return <Demo />;
   const key = tabletKey();
-  if (key) return <Floor api={cloudApi(key, false)} />;
+  if (key) return <Floor api={floorApi(key)} />;
   return <ManagerGate />;
 }
 
@@ -531,8 +531,18 @@ function OrderView({ api, board }: { api: Api; board: string }) {
         <button className="primary big" disabled={!ra.length && !rb.length} onClick={async () => setMsg(await share(text, "생산 명령서"))}>
           카톡으로 보내기
         </button>
-        {api.kind === "cloud" && (
-          <button className="ghost" onClick={async () => setMsg(await share(`현장 태블릿 생산 명령서 주소 (크롬으로 열고 홈 화면에 추가)\n${tabletUrl(board)}`, "현장 태블릿 주소"))}>
+        {api.kind === "cloud" && api.floorKey && (
+          <button
+            className="ghost"
+            onClick={async () => {
+              try {
+                const fk = await api.floorKey!();
+                setMsg(await share(`현장 태블릿 생산 명령서 주소 (크롬으로 열고 홈 화면에 추가 · 로그인 없음)\n${tabletUrl(fk)}`, "현장 태블릿 주소"));
+              } catch (e) {
+                setMsg((e as Error).message);
+              }
+            }}
+          >
             현장 태블릿 주소 보내기
           </button>
         )}

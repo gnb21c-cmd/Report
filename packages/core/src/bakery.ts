@@ -188,6 +188,22 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
   return { ...now, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 
+/* ---------- 현장 태블릿 복사본 ---------- */
+
+/**
+ * 현장 태블릿(D-1)에 주는 복사본 — 빵 이름 · 수량 · 정한 날만 (예상 손님 · 날씨 · 보정 · 누가 확정했는지는 뺌)
+ * 태블릿 주소에는 매장 열쇠 대신 태블릿 열쇠를 써서, 직원이 매출 보고(B)를 열 수 없게 함
+ */
+export function floorCopy(plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): { plan: PlanDoc | null; order: OrderDoc | null } {
+  const lite = (st?: PlanStep): PlanStep | undefined =>
+    st && { madeOn: st.madeOn, asOf: st.asOf, kind: st.kind, visitors: 0, weather: "", total: st.total, items: st.items.map((i) => ({ name: i.name, qty: i.qty })) };
+  const lines = (m: Record<string, OrderLine>) => Object.fromEntries(Object.entries(m).map(([k, l]) => [k, { qty: l.qty, by: "", at: "" }]));
+  return {
+    plan: plan ? { v: 2, date: plan.date, ...(plan.week ? { week: lite(plan.week) } : {}), ...(plan.final ? { final: lite(plan.final) } : {}) } : null,
+    order: order ? { v: 2, date: order.date, provisional: lines(order.provisional), final: lines(order.final) } : null,
+  };
+}
+
 /* ---------- 만들 목록 ---------- */
 
 export type OrderState = "확정" | "자동" | "잠정" | "확정 전";

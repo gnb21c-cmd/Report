@@ -136,3 +136,22 @@ export async function readOrder(fb: Fb, date: string): Promise<string | undefine
     return undefined;
   }
 }
+
+/** 현장 태블릿 열쇠 (매니저 앱이 처음 만들 때까지는 없음) */
+export async function readFloorKey(fb: Fb): Promise<string | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/config/floor`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return doc.fields?.key?.stringValue || null;
+  } catch {
+    return null;
+  }
+}
+
+/** 현장 태블릿 복사본 쓰기 — floor/{열쇠}/days/{날짜} */
+export async function writeFloor(fb: Fb, floor: string, days: { date: string; json: string }[]): Promise<void> {
+  if (!days.length) return;
+  const root = `projects/${fb.projectId}/databases/(default)/documents/floor/${floor}/days`;
+  const now = new Date().toISOString();
+  const writes = days.map((d) => ({ update: { name: `${root}/${d.date}`, fields: { date: str(d.date), at: { timestampValue: now }, json: str(d.json) } } }));
+  await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
+}

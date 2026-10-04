@@ -6,8 +6,8 @@
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
-import { fbLogin, readOrder, readPlan, writePlans } from "./firebase";
+import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, floorCopy, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
+import { fbLogin, readFloorKey, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
@@ -62,6 +62,14 @@ async function main() {
   }
   await writePlans(fb, [...out.values()].map((p) => ({ date: p.date, json: JSON.stringify(p) })));
   console.log(`계획 씀: ${out.size}일`);
+  // 현장 태블릿 복사본 (수량 · 상태만, 태블릿 열쇠가 있을 때)
+  const floor = await readFloorKey(fb);
+  if (floor) {
+    const days: { date: string; json: string }[] = [];
+    for (const p of out.values()) days.push({ date: p.date, json: JSON.stringify(floorCopy(p, asOrder(parse(await readOrder(fb, p.date))))) });
+    await writeFloor(fb, floor, days);
+    console.log(`현장 태블릿 복사: ${days.length}일`);
+  } else console.log("현장 태블릿 열쇠가 아직 없음 (매니저 앱에서 '현장 태블릿 주소 보내기'를 누르면 만들어짐)");
 }
 
 main().catch((e) => {
