@@ -11,6 +11,8 @@ import { chromium, type Browser, type BrowserContext, type Download, type Frame,
 import { mask, say } from "./okpos";
 
 export const NIBS = "https://nibs.nicevan.co.kr/";
+/** 로그인 화면 — 첫 화면(websquare.html)에서 들어가면 연결이 끊기는 때가 많고, login.jsp 에서는 잘 들어가짐 */
+export const NIBS_LOGIN = "https://nibs.nicevan.co.kr/websquare/login.jsp";
 
 /** 화면 구조를 알아볼 때 글자를 보여도 되는 낱말 (가맹점 · 회사 이름이 나오지 않게 정해 둔 것만) */
 const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "신용카드", "통합거래조회", "조회", "엑셀", "다운로드", "전체", "All", "선택", "정산 통계용", "가맹점", "합계", "비밀번호", "사유", "거래상세내역", "엑셀비밀번호", "다운로드사유선택", "주요업무", "로그아웃"];
@@ -154,7 +156,7 @@ export class Nibs {
     const p = this.page;
     let res: Awaited<ReturnType<Page["goto"]>> = null;
     for (let i = 0; i < 3; i++) {
-      res = await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 }).catch((e) => {
+      res = await p.goto(NIBS_LOGIN, { waitUntil: "domcontentloaded", timeout: 40000 }).catch((e) => {
         say(`로그인 화면 열기 실패 (${i + 1}번째): ${mask(String(e.message).split("\n")[0])}`);
         return null;
       });
@@ -165,7 +167,7 @@ export class Nibs {
     let pwBox = await this.visible((f) => f.locator("input[type=password]"), 20000);
     if (!pwBox) {
       say("로그인 화면이 덜 열려 새로고침");
-      await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 });
+      await p.goto(NIBS_LOGIN, { waitUntil: "domcontentloaded", timeout: 40000 });
       pwBox = await this.visible((f) => f.locator("input[type=password]"), 25000);
     }
     if (!pwBox) throw new Error("로그인 칸(비밀번호)을 못 찾음");
