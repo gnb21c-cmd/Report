@@ -1279,3 +1279,17 @@ ul.plain li {
   --s-low-bg: #12243f;
   --s-low-ink: #90caf9;
 }
+/* 홈 화면에 설치 줄 */
+.install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--track);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.install-banner .primary {
+  flex: 1;
+}

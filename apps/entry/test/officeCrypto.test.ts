@@ -7,7 +7,8 @@ import { NICE_SAMPLE_PW1 } from "./fixtures/niceSample";
 // 가짜 숫자로 만든 나이스 모양 엑셀 (비밀번호 1)
 const buf = Uint8Array.from(atob(NICE_SAMPLE_PW1), (c) => c.charCodeAt(0)).buffer;
 
-describe("비밀번호 걸린 나이스 엑셀", () => {
+// 시험 파일은 SHA-512 (해시 10만 번) 라 느림 — 실제 나이스 파일은 SHA-1 빠른 길
+describe("비밀번호 걸린 나이스 엑셀", { timeout: 60000 }, () => {
   it("비밀번호로 풀어 읽음", async () => {
     expect(isEncrypted(buf)).toBe(true);
     const s = parseNiceSheet(readRows(await decryptXlsx(buf, "1")))!;

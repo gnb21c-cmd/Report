@@ -9,6 +9,7 @@ import { SectorDetail } from "./screens/SectorDetail";
 import { MonthDetail, YearDetail } from "./screens/CumDetail";
 import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { LogScreen } from "./screens/LogScreen";
+import { InstallBanner } from "./ui/InstallBanner";
 import { CashDetail } from "./screens/CashDetail";
 import { SettleDetail } from "./screens/SettleDetail";
 import { VisitorsDetail } from "./screens/VisitorsDetail";
@@ -106,6 +107,7 @@ export function App() {
 
   return (
     <div className="app">
+      <InstallBanner />
       <header className="top">
         <CalendarStrip from={from} to={to} selected={date} present={present} latest={latest} onSelect={setDate} onSettings={() => open({ name: "settings" })} />
         {d.source === "demo" && <div className="demo-tag">체험판 · 가짜 자료</div>}

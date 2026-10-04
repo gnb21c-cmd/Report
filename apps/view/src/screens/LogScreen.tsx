@@ -1,5 +1,7 @@
 /* LOG 기록 — 마감일마다 마감 자료를 올린 사람 이름만 (설정할 것은 모두 A 에서) */
+import { useState } from "react";
 import { addDays, shortLabel, type Board, type DayReport } from "@report/core";
+import { boardKey } from "../data/firebase";
 
 const PART_LABEL = { cafe: "카페", kids: "키즈", naver: "네이버", cash: "자금", extra: "자판기 · 네컷 · 주차" } as const;
 type Part = keyof typeof PART_LABEL;
@@ -65,7 +67,42 @@ export function LogScreen({ board, latest, onBack }: { board: Board; latest: str
             </tbody>
           </table>
         </section>
+        <ShareCard />
       </main>
     </>
+  );
+}
+
+/** 다른 폰(대표님 등)에 설치 주소 보내기 — 카톡 등 공유 창, 안 되면 주소 복사 */
+function ShareCard() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const key = boardKey();
+  if (!key || __DEMO__) return null;
+  const url = `${location.origin}/b/${key}/`;
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "매출 보고", text: "매출 보고 앱 — 링크를 Chrome(아이폰은 Safari)으로 열고 '홈 화면에 설치'를 누르세요", url });
+        return;
+      }
+    } catch {
+      return; // 보내기 창을 닫음
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setMsg("설치 주소를 복사했습니다. 카톡 대화창에 붙여 넣어 보내 주세요.");
+    } catch {
+      setMsg(url);
+    }
+  };
+  return (
+    <section className="card">
+      <h2>다른 폰에 설치</h2>
+      <p className="sub">이 주소를 아는 폰은 누구나 보고서를 볼 수 있습니다. 볼 사람에게만 보내 주세요.</p>
+      <button className="primary" onClick={() => void share()}>
+        설치 주소 보내기 (카톡 등)
+      </button>
+      {msg && <p className="note">{msg}</p>}
+    </section>
   );
 }
