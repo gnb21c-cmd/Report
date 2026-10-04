@@ -19,13 +19,15 @@ export function isNaverTicketProduct(name: string): boolean {
   return /평일무제한/.test(s) || /야간자유/.test(s);
 }
 
-/** '오전10:00' · '오후6:30' · '오후 12:30' · '18:00' → 'HH:MM' (모르면 null) */
+/** '오전10:00' · '오후6:30' · '오후 12:30' · '18:00' · '1:30'(오후) → 'HH:MM' (모르면 null) */
 export function naverTime(text: string): string | null {
   const m = text.replace(/\s+/g, "").match(/(오전|오후)?(\d{1,2}):(\d{2})/);
   if (!m) return null;
   let h = Number(m[2]);
   if (m[1] === "오후" && h < 12) h += 12;
   if (m[1] === "오전" && h === 12) h = 0;
+  // 오전 · 오후가 없으면 영업시간(10:00 ~ 19:30)으로 — 1:00 ~ 9:59 는 오후
+  if (!m[1] && h >= 1 && h <= 9) h += 12;
   return `${String(h).padStart(2, "0")}:${m[3]}`;
 }
 

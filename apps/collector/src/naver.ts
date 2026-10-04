@@ -119,7 +119,7 @@ async function main() {
         const old = fb ? await readPiece(fb, date, "naver") : null;
         if (old?.p && old.by !== NAVER_AUTO_BY) {
           const d = naverDiff(r.part, old.p as NaverPart);
-          say(`  사람이 넣은 값과 견줌: 판매입장권 ${d.tickets.length ? `다름 (${d.tickets.join(",")})` : "같음"} · 신규방문자 ${(old.p as NaverPart).noNew ? "(손 입력에 없음)" : d.newVisitors.length ? `다름 (${d.newVisitors.join(",")})` : "같음"}`);
+          say(`  사람이 넣은 값과 견줌: 판매입장권 ${d.tickets.length ? `다름 (${d.tickets.join(",")})` : "같음"} · 신규방문자 ${(old.p as NaverPart).noNew ? "(손 입력에 없음)" : r.part.noNew ? "(자동 쪽 모름)" : d.newVisitors.length ? `다름 (${d.newVisitors.join(",")})` : "같음"}`);
         }
         if (!naverAutoWritable(old)) {
           say(`  ${md(date)}: 사람이 A 에서 넣은 칸이라 그대로`);

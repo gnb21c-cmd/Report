@@ -18,6 +18,9 @@ describe("네이버 예약 자동 수집 — 읽은 칸 → A 네이버 칸", ()
     expect(naverTime("오후6:30")).toBe("18:30");
     expect(naverTime("오후 12:30")).toBe("12:30");
     expect(naverTime("19:00")).toBe("19:00");
+    expect(naverTime("1:30")).toBe("13:30"); // 오전 · 오후 없이 보이면 영업시간으로
+    expect(naverTime("10:00")).toBe("10:00");
+    expect(naverTime("12:30")).toBe("12:30");
     expect(naverTime("회차")).toBeNull();
   });
 

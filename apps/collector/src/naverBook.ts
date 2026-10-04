@@ -141,7 +141,8 @@ export class NaverBook {
       // 상품 머리줄 = 첫 회차 바로 위 띠의 글
       const heads = els.filter((el) => { const b = box(el); const t = txt(el); return leaf(el) && t.length > 1 && b.bottom <= gridTop + 2 && b.top >= gridTop - 90 && b.left >= gridLeft - 2 && !/^(전체|신청|확정|예약가능|완료\\/노쇼|잔여예약|잔여|이용완료|완료|일간|주간|월간)$/.test(t) && !/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/.test(t) && !/^\\d+$/.test(t); })
         .map((el) => ({ el, b: box(el), t: (el.getAttribute("title") || txt(el)).replace(/\\s+/g, " ") }));
-      const times = timeEls.map((el) => ({ b: box(el), t: txt(el) }));
+      // '오전' · '오후' 가 옆 글로 따로 있으면 붙여서
+      const times = timeEls.map((el) => { const pt = el.parentElement ? txt(el.parentElement) : ""; return { b: box(el), t: /(오전|오후)/.test(txt(el)) || !/(오전|오후)/.test(pt) || pt.length > 15 ? txt(el) : pt }; });
       // '이용완료' 를 품은 가장 작은 칸 ('이용완료' 만 · '이용완료 7' · '이용완료7' 모두)
       // 칸이 좁으면 '완료', 넓으면 '이용완료' 로 보임 — 표 안(첫 회차 아래 · 회차 이름 오른쪽)에서만 (칸 줄은 단추일 수 있음)
       const doneRe = /^(이용)?완료\\s*\\d*$/;
@@ -169,10 +170,15 @@ export class NaverBook {
    *  손님 표시는 이름 · 전화 뒷자리를 이번 실행에서만 쓰는 무작위 값과 섞어 바꾼 것 (원래 글은 바로 버림) */
   async readList(key: number): Promise<{ who: string; n: number; id: string }[]> {
     const p = this.page;
+    await this.closePanel();
     const cell = p.locator(`[data-nv="${key}"]`).first();
     await cell.scrollIntoViewIfNeeded().catch(() => {});
-    await cell.click({ timeout: 5000 });
-    await p.waitForTimeout(1500);
+    // 보통 누르기 → 안 되면(무언가 가림) 화면 안에서 직접 누름
+    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click()));
+    // 오른쪽에 '완료 N' 이 나올 때까지
+    for (let t = 0; t < 16 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+    if (!(await this.panelCount())) throw new Error("완료자 목록이 안 열림");
+    await p.waitForTimeout(800);
     const seen = new Map<string, { who: string; n: number; id: string }>();
     for (let round = 0; round < 30; round++) {
       // 완료자 카드: '완료 N' 줄 (탭 · 단추 안은 뺌) → 카드(예약번호를 품은 곳) 안에서 바로 위 글 = 이름, 전화번호 뒷 4자리
@@ -210,13 +216,32 @@ export class NaverBook {
       if (!got.more) break;
       await p.waitForTimeout(500);
     }
-    // 닫기
-    await p.keyboard.press("Escape").catch(() => {});
-    await p.waitForTimeout(400);
-    const closeBtn = p.locator('[aria-label*="닫기"], button:has-text("닫기")').last();
-    if (await closeBtn.isVisible().catch(() => false)) await closeBtn.click({ timeout: 3000 }).catch(() => {});
-    await p.waitForTimeout(500);
+    await this.closePanel();
     return [...seen.values()];
+  }
+
+  /** 오른쪽에 보이는 '완료 N' 글 수 (목록이 열려 있나) */
+  private panelCount(): Promise<number> {
+    return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^완료\\s*\\d+$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().left > window.innerWidth * 0.45 && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
+  }
+
+  /** 완료자 목록 닫기 — Esc · 닫기 단추 · 목록 오른쪽 위의 작은 단추 차례로, 닫힐 때까지 */
+  private async closePanel() {
+    const p = this.page;
+    for (let t = 0; t < 4 && (await this.panelCount()); t++) {
+      if (t === 0) await p.keyboard.press("Escape").catch(() => {});
+      else if (t === 1) {
+        const b = p.locator('[aria-label*="닫기"], [title*="닫기"], button:has-text("닫기")').last();
+        if (await b.isVisible().catch(() => false)) await b.click({ timeout: 2000 }).catch(() => {});
+      } else
+        await p.evaluate(`(() => {
+          // 오른쪽 목록 맨 위쪽 가장 오른쪽의 단추 (X)
+          const bs = [...document.querySelectorAll("button, [role=button]")].map((b) => [b, b.getBoundingClientRect()]).filter(([, r]) => r.width > 0 && r.width < 60 && r.left > window.innerWidth * 0.45 && r.top < 200);
+          bs.sort((a, z) => z[1].right - a[1].right || a[1].top - z[1].top);
+          if (bs[0]) bs[0][0].click();
+        })()`);
+      await p.waitForTimeout(700);
+    }
   }
 
   /** 화면 구조 기록 — 개수 · 정해 둔 낱말만 (이름 · 숫자 없음) */
