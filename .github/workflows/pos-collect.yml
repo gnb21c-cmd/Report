@@ -9,7 +9,7 @@ on:
     - cron: "10 13 * * *" # 13:10 UTC = 22:10 한국
   # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
   push:
-    branches: ["feature/pos-auto", "feature/pos-backfill"]
+    branches: ["feature/pos-auto", "feature/pos-backfill", "feature/bakery-feedback"]
     paths: ["apps/collector/**", ".github/workflows/pos-collect.yml"]
   workflow_dispatch:
     inputs:
@@ -19,6 +19,10 @@ on:
       to:
         description: "끝 날짜 (여러 날 채울 때만, YYYY-MM-DD)"
         required: false
+      half_only:
+        description: "50% 할인 개수만 채우기 (매출 값은 그대로)"
+        type: boolean
+        default: false
       dry:
         description: "확인만 (올리지 않음)"
         type: boolean
@@ -50,6 +54,7 @@ jobs:
           COLLECT_DATE: ${{ steps.when.outputs.date }}
           COLLECT_TO: ${{ steps.when.outputs.to }}
           COLLECT_DRY: ${{ steps.when.outputs.dry }}
+          COLLECT_HALF_ONLY: ${{ inputs.half_only == true && '1' || '' }}
           OKPOS_ID: ${{ secrets.OKPOS_ID }}
           OKPOS_PW: ${{ secrets.OKPOS_PW }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

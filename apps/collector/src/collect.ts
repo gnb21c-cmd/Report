@@ -8,7 +8,7 @@
    공개 저장소라 기록(로그)에는 줄 수 · 일치 여부만 남김 (매출 숫자 · 매장 이름 없음)
    ============================================================ */
 import { buildStorePart, dayRange, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
-import { fbLogin, readProducts, readStores, writeStores } from "./firebase";
+import { fbLogin, readCafePiece, readProducts, readStores, writeCafePiece, writeLines, writeStores } from "./firebase";
 import type { Frame } from "playwright";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
 
@@ -31,6 +31,7 @@ async function main() {
   const from = env("COLLECT_FROM") || env("COLLECT_DATE") || todayKst();
   const to = env("COLLECT_TO") || from;
   const dry = env("COLLECT_DRY") === "1";
+  const halfOnly = env("COLLECT_HALF_ONLY") === "1";
   if (![from, to].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) || from > to) throw new Error(`날짜 모양이 이상함: ${from} ~ ${to}`);
   if (!env("OKPOS_ID") || !env("OKPOS_PW")) throw new Error("OKPOS_ID · OKPOS_PW 가 없습니다 (GitHub Secrets)");
   const dates = dayRange(from, to);
@@ -68,6 +69,32 @@ async function main() {
   try {
     await start();
     for (const date of dates) {
+      // 50% 할인 개수만 채우기 — 카페 엑셀을 다시 받아 이미 올린 칸에 bakeryHalf · bakeryHalfBy 만 더함 (매출 값은 그대로)
+      if (halfOnly && fb) {
+        try {
+          const piece = await readCafePiece(fb, date);
+          if (!piece?.p) {
+            say(`${date}: 카페 칸이 없어 건너뜀`);
+            continue;
+          }
+          const d = await fetchDay("cafe", date).catch(async () => {
+            await restart();
+            return fetchDay("cafe", date);
+          });
+          const sheet = parseReceiptSheet(readRows(d.buf));
+          if (sheet.from && sheet.from !== date) throw new Error(`엑셀 조회일자가 ${sheet.from}`);
+          const r = buildStorePart({ store: "cafe", date, file: "half.xls", sheet, sectorOf: sectorLookup(table) });
+          // 같은 엑셀인지 — 사람이 올린 값과 POS 합계가 같을 때만
+          if (Math.round(r.part.posNet) !== Math.round(piece.p.posNet)) throw new Error("올린 값과 POS 합계가 달라 건너뜀");
+          await writeCafePiece(fb, date, { ...piece, p: { ...piece.p, bakeryHalf: r.part.bakeryHalf, bakeryHalfBy: r.part.bakeryHalfBy } });
+          await writeLines(fb, date, "cafe", r.lines);
+          sent++;
+          say(`${date}: 50% 할인 채움`);
+        } catch (e) {
+          problems.push(`${date}: ${mask((e as Error).message)}`);
+        }
+        continue;
+      }
       const have = fb ? await readStores(fb, date) : {};
       const out: Parameters<typeof writeStores>[3] = [];
       for (const store of STORES) {

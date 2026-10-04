@@ -116,3 +116,13 @@ export async function writeCafePiece(fb: Fb, date: string, piece: unknown): Prom
     body: JSON.stringify({ fields: { date: str(date), at: { timestampValue: now }, cafe: str(JSON.stringify(piece)) } }),
   });
 }
+
+/** 정리한 영수증 줄만 쓰기 */
+export async function writeLines(fb: Fb, date: string, store: "cafe" | "kids", lines: unknown[]): Promise<void> {
+  const now = new Date().toISOString();
+  await http(`${base(fb)}/boards/${fb.board}/lines/${date}_${store}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields: { date: str(date), store: str(store), lines: str(JSON.stringify(lines)), at: { timestampValue: now } } }),
+  });
+}
