@@ -8,6 +8,21 @@ PC가 나이스에서 어제 ~ 오늘 자료를 받아 클라우드에 올립니
 - PC가 꺼져 있었으면 다음에 켜질 때(24시간 안) 돌고, 어제 몫도 같이 받으니 빠지는 날이 없습니다.
 - GitHub 예약은 몇 분 늦게 시작할 수 있습니다.
 
+## 0. 시험은 사장님 PC에서 먼저 (서비스로 설치하지 않음)
+
+시험해서 접속 · 다운로드가 문제없고 main 에 올리기까지 끝나면, 그때 POS 메인 PC에 서비스로 설치합니다.
+시험할 때는 아래 2번과 같게 하되 이것만 다르게:
+
+| 질문 | 시험(사장님 PC) |
+|---|---|
+| name of runner | `my-pc` |
+| additional labels | `nice-pos` (같게 — 같은 일을 받음) |
+| run as service? | **N** |
+
+등록이 끝나면 같은 PowerShell 창에서 `./run.cmd` → **Listening for Jobs** 가 나오면 기다리던 시험이 바로 돕니다.
+창을 닫으면 멈춥니다. 시험이 끝나면 POS PC로 옮기기 전에 `./config.cmd remove --token ...` 으로 지웁니다
+(토큰은 Runners 화면 → my-pc → Remove 에서 받음). 두 PC가 같은 라벨로 동시에 있으면 어느 쪽이 받을지 모르기 때문.
+
 ## 1. 먼저 — 공개 저장소 안전 설정 (꼭)
 
 GitHub → Report 저장소 → **Settings → Actions → General**
