@@ -69,6 +69,8 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           {box === "키즈입장료" && <span className="note">{kidsFormula(m, date)}</span>}
         </HeroBox>
 
+        {box === "베이커리" && <BreadCount board={board} date={date} />}
+
         <ChartCard
           title="마감일 시간대별 매출"
           sub={kids ? "10시~22시 · 막대 위 숫자 = 그 시간 입장권 수(장) — 네이버 예약 시간 + 현장 결제" : "10시~22시 · 막대 위 숫자 = 그 시간 추정 인원(명) — 음료 잔 × 0.96"}
@@ -365,6 +367,30 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
       <span className="note">
         {per} 누적 {label} 매출 {won(ytd)}
       </span>
+    </div>
+  );
+}
+
+/** 베이커리 이날 개수 — 생산(작업지시 확정 수량) · 판매 · 50% 할인(저녁 8시 30분 뒤) · 폐기(생산 − 판매) */
+function BreadCount({ board, date }: { board: Board; date: string }) {
+  const sold = board.products(date, date, "베이커리").reduce((a, p) => a + p.qty, 0);
+  const half = board.report(date)?.cafe?.bakeryHalf;
+  // 생산 = 작업지시 앱에서 매니저가 확정한 수량 (작업지시를 쓰기 전 날은 모름)
+  const made: number | null = null;
+  const cells: [string, number | null | undefined][] = [
+    ["생산", made],
+    ["판매", board.report(date)?.cafe ? sold : null],
+    ["50% 할인", half],
+    ["폐기", made == null ? null : Math.max(0, made - sold)],
+  ];
+  return (
+    <div className="quad" aria-label="베이커리 개수">
+      {cells.map(([k, v]) => (
+        <div key={k} className="quad-box">
+          <div className="quad-label">{k}</div>
+          <div className="quad-value">{v == null ? "—" : count(v, "개")}</div>
+        </div>
+      ))}
     </div>
   );
 }

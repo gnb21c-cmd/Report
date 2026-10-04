@@ -1293,3 +1293,29 @@ ul.plain li {
 .install-banner .primary {
   flex: 1;
 }
+
+/* 베이커리 이날 개수 — 생산 · 판매 · 50% 할인 · 폐기 (카드와 좌우 끝 맞춤) */
+.quad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.quad-box {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 6px;
+  text-align: center;
+  min-width: 0;
+}
+.quad-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.quad-value {
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

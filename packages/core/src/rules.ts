@@ -32,6 +32,13 @@ export function isOffDay(date: string): boolean {
   return w === 0 || w === 6 || !!holidayName(date);
 }
 
+/** 베이커리 마감 할인 — 저녁 8시 30분부터 남은 빵 50% (이 시각 뒤에 팔린 빵 = 인기가 낮거나 많이 만든 빵) */
+export const HALF_OFF_FROM = "20:30";
+/** 반값 줄 — 8시 30분 뒤 · 할인이 정가의 40% 이상 (회원할인 10% 등은 아님) */
+export function isHalfOff(l: { time: string; gross: number; discount: number; refund?: boolean }): boolean {
+  return !l.refund && !!l.time && l.time.slice(0, 5) >= HALF_OFF_FROM && l.gross > 0 && l.discount / l.gross >= 0.4;
+}
+
 /** 이날부터 키즈 매출(입장료 · 키즈 POS 기타)을 잡음 — 그 전은 교환권 방식이라 인원만 */
 export const KIDS_SALES_FROM = "2026-04-01";
 

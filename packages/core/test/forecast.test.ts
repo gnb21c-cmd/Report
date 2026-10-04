@@ -1,0 +1,135 @@
+import { describe, expect, it } from "vitest";
+import { addDays, backtest, Board, breadPlan, dayKind, dayRange, forecastVisitors, HOURS, lyDays, weatherClass, withinBand, yoyRatio, type DayReport, type DayWeather, type ProductTuple, type StorePart } from "../src";
+
+const H = () => HOURS.map(() => 0);
+/** 카페 하루 — 잔 수(→ 방문객 = 잔 × 0.96)와 빵 판매 */
+function day(date: string, cups: number, bread: [string, number][] = []): DayReport {
+  const products: ProductTuple[] = bread.map(([n, q]) => [n, "베이커리", q, q * 4000]);
+  const net = bread.reduce((a, [, q]) => a + q * 4000, 0);
+  const cafe: StorePart = {
+    v: 1,
+    store: "cafe",
+    date,
+    basis: "receipt",
+    file: "t.xls",
+    sheetNet: net,
+    posNet: net,
+    voucher: 0,
+    sectors: { 바리스타: 0, 베이커리: net, 키친: 0, 기타: 0 },
+    cups,
+    teams: 0,
+    teamSizes: [0, 0, 0, 0, 0, 0],
+    hourly: { sectors: { 바리스타: H(), 베이커리: H(), 키친: H(), 기타: H() }, cups: H(), teams: H() },
+    products,
+    refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
+    kids: null,
+  };
+  return { date, cafe };
+}
+const W = (date: string, o: Partial<DayWeather>): DayWeather => ({ date, key: "sunny", label: "", icon: "", tempMax: 20, tempMin: 10, rainMm: 0, source: "observed", ...o });
+
+/** 작년 · 올해 같은 모양 — 평일 100잔, 금 120잔, 휴일 200잔 (올해는 × k) */
+function make(from: string, to: string, k: (d: string) => number, bread = true): DayReport[] {
+  return dayRange(from, to).map((d) => {
+    const kind = dayKind(d);
+    const cups = Math.round((kind === "휴일" ? 200 : kind === "금요일" ? 120 : 100) * k(d));
+    return day(d, cups, bread ? [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)]] : []);
+  });
+}
+
+describe("날 유형 · 날씨 칸", () => {
+  it("토 · 일 · 공휴일은 휴일, 금요일은 따로", () => {
+    expect(dayKind("2026-10-03")).toBe("휴일"); // 토 · 개천절
+    expect(dayKind("2026-10-09")).toBe("휴일"); // 금 · 한글날
+    expect(dayKind("2026-10-16")).toBe("금요일");
+    expect(dayKind("2026-10-14")).toBe("평일");
+  });
+  it("사장님 규칙 칸 — 약 · 중간 비, 폭우, 눈, 더움 · 추움, 쾌적", () => {
+    expect(weatherClass(W("x", { key: "rain", rainMm: 4 }))).toBe("약한비");
+    expect(weatherClass(W("x", { key: "rain", rainMm: 15 }))).toBe("중간비");
+    expect(weatherClass(W("x", { key: "heavyrain", rainMm: 45 }))).toBe("폭우");
+    expect(weatherClass(W("x", { key: "snow" }))).toBe("눈");
+    expect(weatherClass(W("x", { tempMax: 33 }))).toBe("더움");
+    expect(weatherClass(W("x", { tempMax: 1 }))).toBe("추움");
+    expect(weatherClass(W("x", { tempMax: 21 }))).toBe("쾌적");
+    expect(weatherClass(W("x", { tempMax: 10 }))).toBe("보통");
+    expect(weatherClass(null)).toBe("모름");
+  });
+});
+
+describe("방문객 예측", () => {
+  // 2025 · 2026 모두 같은 모양, 올해는 작년의 0.9배
+  const reports = [...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 0.9)];
+  const board = new Board(reports);
+
+  it("작년 기준일 — 364일 전 근처 같은 날 유형", () => {
+    const ly = lyDays(board, "2026-10-14"); // 수
+    expect(ly.length).toBe(3);
+    for (const d of ly) expect(dayKind(d)).toBe("평일");
+  });
+
+  it("올해 ÷ 작년 비율", () => {
+    expect(yoyRatio(board, "2026-10-03", 14)).toBeCloseTo(0.9, 1);
+  });
+
+  it("작년 × 올해 수준 — 평일 100잔 × 0.96 × 0.9 ≈ 86명", () => {
+    const f = forecastVisitors(board, {}, "2026-10-03", "2026-10-06"); // 화
+    expect(f.baseFrom).toBe("작년");
+    expect(f.value).toBeGreaterThan(80);
+    expect(f.value).toBeLessThan(92);
+  });
+
+  it("되돌림 — 최근 2주만 뜻밖에 많으면 절반만 믿음", () => {
+    const hot = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", (d) => (d >= "2026-09-20" ? 1.3 : 1))]);
+    const f = forecastVisitors(hot, {}, "2026-10-03", "2026-10-06");
+    expect(f.trend.r14!).toBeGreaterThan(1.25);
+    expect(f.trend.used).toBeLessThan(f.trend.r14!);
+    expect(f.trend.used).toBeGreaterThan(f.trend.r56!);
+  });
+
+  it("날씨 — 폭우는 줄이고, 약한 비는 늘림 (작년 기준일 날씨와 견줌)", () => {
+    const base = forecastVisitors(board, {}, "2026-10-03", "2026-10-06").value;
+    const heavy = forecastVisitors(board, { "2026-10-06": W("2026-10-06", { key: "heavyrain", rainMm: 50 }) }, "2026-10-03", "2026-10-06").value;
+    const light = forecastVisitors(board, { "2026-10-06": W("2026-10-06", { key: "rain", rainMm: 3 }) }, "2026-10-03", "2026-10-06").value;
+    expect(heavy).toBeLessThan(base);
+    expect(light).toBeGreaterThan(base);
+  });
+
+  it("작년 자료가 없으면 최근 4주 같은 날 유형 평균", () => {
+    const only = new Board(make("2026-08-01", "2026-10-03", () => 1));
+    const f = forecastVisitors(only, {}, "2026-10-03", "2026-10-10"); // 토
+    expect(f.baseFrom).toBe("최근");
+    expect(f.value).toBe(192);
+  });
+});
+
+describe("빵별 수량", () => {
+  const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 1)]);
+  it("방문객 × 1명당 개수 — 소금빵이 크루아상의 약 3배", () => {
+    const p = breadPlan(board, {}, "2026-10-03", "2026-10-06");
+    const salt = p.items.find((x) => x.name === "소금빵")!;
+    const cro = p.items.find((x) => x.name === "크루아상")!;
+    expect(salt.qty / cro.qty).toBeCloseTo(3, 0);
+    expect(p.total).toBe(salt.qty + cro.qty);
+  });
+  it("최근 2주에 안 팔린 빵은 빠짐", () => {
+    const b = new Board([...make("2026-08-01", "2026-10-03", () => 1), day("2026-08-05", 100, [["단종빵", 10]])]);
+    expect(breadPlan(b, {}, "2026-10-03", "2026-10-06").items.some((x) => x.name === "단종빵")).toBe(false);
+  });
+});
+
+describe("잠정 수량 묶기 · 시험", () => {
+  it("D+2 는 처음 수량 ±5%, D+3 은 ±10%", () => {
+    expect(withinBand(100, 120, 0.05)).toBe(105);
+    expect(withinBand(100, 80, 0.1)).toBe(90);
+    expect(withinBand(100, 103, 0.05)).toBe(103);
+  });
+  it("모양이 같으면 오차가 작음", () => {
+    const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 1)]);
+    const r = backtest(board, {}, "2026-09-01", "2026-10-03");
+    expect(r.all.days).toBeGreaterThan(20);
+    expect(r.all.visitors!).toBeLessThan(5);
+    expect(r.all.bread!).toBeLessThan(6);
+    expect(addDays("2026-10-03", 1)).toBe("2026-10-04");
+  });
+});

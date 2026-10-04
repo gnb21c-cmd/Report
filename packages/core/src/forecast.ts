@@ -1,0 +1,285 @@
+/* ============================================================
+   베이커리 작업지시 — 손님 수를 먼저 맞히고(①), 빵별 '손님 1명당 몇 개'를 곱해(②) 빵마다 몇 개 만들지 정함
+   ① 예상 방문객 = 작년 기준 × 올해 수준(최근 2주 · 8주, 되돌림) × 날씨 × 기간 스티커
+      - 작년 추종: 특별한 이벤트 · 홍보가 없으면 작년을 따라감 → 364일 전 앞뒤 같은 날 유형(평일 · 금요일 · 휴일)
+      - 최근 동향 + 되돌림: 사람들은 1주 단위로 계획 · 월초에 많이 쓰면 월말엔 덜 씀
+        → 올해 수준 = 8주 비율 + λ × (2주 비율 − 8주 비율). λ < 1 이면 최근 2주의 '뜻밖'이 일부 되돌아감
+      - 날씨: 약한 · 중간 비, 아주 덥거나 추우면 실내로(손님 ↑) · 폭우 · 눈, 봄가을 쾌적한 날은 밖으로(손님 ↓)
+        방향은 사장님 규칙, 크기는 지난 자료에서 배움(learnWeather). 작년 기준일 날씨와 견줘 비율로 곱함
+      - 기간: 설정의 기간 스티커(성수기 · 평상시 · 비수기). 작년 기준일과 스티커가 다르면 그만큼 곱함
+   ② 빵별 수량 = 예상 방문객 × 최근 4주 같은 날 유형의 '방문객 1명당 그 빵 판매 개수' (1개 단위)
+   계산은 여기 한 곳 — 작업지시 앱 · GitHub 예약 작업이 같은 식을 씀
+   ============================================================ */
+import { addDays, dayRange, weekday } from "./dates";
+import type { Board } from "./metrics";
+import { holidayName } from "./rules";
+import { seasonOf, type DayWeather, type WeatherMap } from "./weather";
+
+export type DayKind = "평일" | "금요일" | "휴일";
+export type WeatherClass = "쾌적" | "보통" | "더움" | "추움" | "약한비" | "중간비" | "폭우" | "눈" | "모름";
+
+/** 날씨 칸별 손님 배수 — 자료가 없을 때 쓰는 사장님 규칙 (방향) */
+export const WEATHER_PRIOR: Record<WeatherClass, number> = {
+  쾌적: 0.95,
+  보통: 1,
+  더움: 1.05,
+  추움: 1.05,
+  약한비: 1.05,
+  중간비: 1.05,
+  폭우: 0.85,
+  눈: 0.85,
+  모름: 1,
+};
+export const WEATHER_CLASSES = Object.keys(WEATHER_PRIOR) as WeatherClass[];
+
+/** 되돌림 세기 λ — 최근 2주의 '뜻밖'을 얼마나 믿나 (1 = 그대로, 0 = 8주 수준으로 완전히 되돌림) */
+export const TREND_LAMBDA = 0.5;
+/** 빵 선호도를 보는 기간 (같은 날 유형만) */
+export const RATE_DAYS = 28;
+
+export function dayKind(date: string): DayKind {
+  const w = weekday(date);
+  if (w === 0 || w === 6 || holidayName(date)) return "휴일";
+  return w === 5 ? "금요일" : "평일";
+}
+
+export function weatherClass(w?: DayWeather | null): WeatherClass {
+  if (!w) return "모름";
+  const rain = w.rainMm ?? 0;
+  if (w.key === "snow") return "눈";
+  if (w.key === "heavyrain" || rain >= 30) return "폭우";
+  if (w.key === "rain" || rain >= 1) return rain >= 10 ? "중간비" : "약한비";
+  if (w.tempMax != null && w.tempMax >= 30) return "더움";
+  if (w.tempMax != null && w.tempMax <= 3) return "추움";
+  if (w.tempMax != null && w.tempMax >= 15 && w.tempMax <= 27) return "쾌적";
+  return w.tempMax == null ? "모름" : "보통";
+}
+
+/** 카페 방문객 (카페 자료가 없는 날은 null) */
+function visitorsOn(board: Board, d: string): number | null {
+  const r = board.report(d);
+  if (!r?.cafe) return null;
+  const v = board.day(d).visitors;
+  return v > 0 ? v : null;
+}
+
+/** 작년 기준일 — 364일 전 앞뒤 2주 안에서 같은 날 유형, 가까운 3일 */
+export function lyDays(board: Board, date: string): string[] {
+  const kind = dayKind(date);
+  const center = addDays(date, -364);
+  const cands: { d: string; gap: number }[] = [];
+  for (let k = -14; k <= 14; k++) {
+    const d = addDays(center, k);
+    if (dayKind(d) === kind && visitorsOn(board, d) != null) cands.push({ d, gap: Math.abs(k) });
+  }
+  return cands
+    .sort((a, b) => a.gap - b.gap || (a.d < b.d ? -1 : 1))
+    .slice(0, 3)
+    .map((c) => c.d)
+    .sort();
+}
+
+/** 올해 ÷ 작년 (asOf 까지 n 일, 둘 다 자료 있는 날만) */
+export function yoyRatio(board: Board, asOf: string, n: number): number | null {
+  let cur = 0;
+  let ly = 0;
+  let days = 0;
+  for (const d of dayRange(addDays(asOf, -(n - 1)), asOf)) {
+    const a = visitorsOn(board, d);
+    const b = visitorsOn(board, addDays(d, -364));
+    if (a == null || b == null) continue;
+    cur += a;
+    ly += b;
+    days++;
+  }
+  return days >= Math.min(5, n) && ly > 0 ? cur / ly : null;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+export interface Learned {
+  /** 날씨 칸별 손님 배수 (지난 자료로 배운 값, 자료 적으면 사장님 규칙 쪽) */
+  weather: Record<WeatherClass, number>;
+  /** 칸마다 배운 날 수 */
+  weatherDays: Record<WeatherClass, number>;
+  /** 기간 스티커별 배수 */
+  season: Record<string, number>;
+}
+
+export const DEFAULT_LEARNED: Learned = {
+  weather: { ...WEATHER_PRIOR },
+  weatherDays: Object.fromEntries(WEATHER_CLASSES.map((c) => [c, 0])) as Record<WeatherClass, number>,
+  season: { 성수기: 1, 평상시: 1, 비수기: 1 },
+};
+
+export interface VisitorForecast {
+  date: string;
+  kind: DayKind;
+  value: number;
+  /** 작년 기준 (기준일 평균) */
+  base: number;
+  baseDays: string[];
+  /** 기준이 작년이 아니라 최근 4주일 때 */
+  baseFrom: "작년" | "최근";
+  trend: { r14: number | null; r56: number | null; used: number };
+  weather: { cls: WeatherClass; lyCls: WeatherClass[]; factor: number };
+  season: { kind: string; lyKind: string; factor: number };
+}
+
+/** 그날 방문객 예측 — asOf 까지의 실적만 씀 */
+export function forecastVisitors(board: Board, weather: WeatherMap, asOf: string, date: string, learned: Learned = DEFAULT_LEARNED): VisitorForecast {
+  const kind = dayKind(date);
+  const ly = lyDays(board, date);
+  const r14 = yoyRatio(board, asOf, 14);
+  const r56 = yoyRatio(board, asOf, 56);
+  let base: number;
+  let baseFrom: VisitorForecast["baseFrom"] = "작년";
+  let used = 1;
+  if (ly.length && (r14 != null || r56 != null)) {
+    base = avg(ly.map((d) => visitorsOn(board, d)!));
+    const long = r56 ?? r14!;
+    const short = r14 ?? long;
+    used = clamp(long + TREND_LAMBDA * (short - long), 0.5, 2);
+  } else {
+    // 작년 자료가 없으면 최근 4주 같은 날 유형 평균
+    const recent = dayRange(addDays(asOf, -27), asOf)
+      .filter((d) => dayKind(d) === kind)
+      .map((d) => visitorsOn(board, d))
+      .filter((v): v is number => v != null);
+    base = avg(recent);
+    baseFrom = "최근";
+  }
+  const cls = weatherClass(weather[date]);
+  const lyCls = baseFrom === "작년" ? ly.map((d) => weatherClass(weather[d])) : [];
+  const lyW = lyCls.length ? avg(lyCls.map((c) => learned.weather[c])) : 1;
+  const wf = clamp(learned.weather[cls] / (lyW || 1), 0.6, 1.5);
+  const sk = seasonOf(date).kind;
+  const lyK = baseFrom === "작년" && ly.length ? seasonOf(ly[Math.floor(ly.length / 2)]).kind : sk;
+  const sf = clamp((learned.season[sk] ?? 1) / (learned.season[lyK] ?? 1), 0.6, 1.6);
+  const value = Math.max(0, Math.round(base * used * wf * sf));
+  return { date, kind, value, base: Math.round(base), baseDays: ly, baseFrom, trend: { r14, r56, used }, weather: { cls, lyCls, factor: wf }, season: { kind: sk, lyKind: lyK, factor: sf } };
+}
+
+/** 지난 자료로 날씨 · 기간 배수 배우기 — until 까지, 작년 기준이 있는 날만 (예측과 실제의 비) */
+export function learnWeather(board: Board, weather: WeatherMap, from: string, until: string): Learned {
+  const logs: Record<string, number[]> = {};
+  const slogs: Record<string, number[]> = {};
+  for (const d of dayRange(from, until)) {
+    const actual = visitorsOn(board, d);
+    if (actual == null) continue;
+    const f = forecastVisitors(board, weather, addDays(d, -2), d, { ...DEFAULT_LEARNED, weather: Object.fromEntries(WEATHER_CLASSES.map((c) => [c, 1])) as Record<WeatherClass, number> });
+    if (f.baseFrom !== "작년" || !f.value) continue;
+    const r = Math.log(actual / f.value);
+    (logs[f.weather.cls] ||= []).push(r);
+    (slogs[f.season.kind] ||= []).push(r);
+  }
+  const out: Learned = { weather: { ...WEATHER_PRIOR }, weatherDays: { ...DEFAULT_LEARNED.weatherDays }, season: { ...DEFAULT_LEARNED.season } };
+  // 전체 평균을 빼서 칸 사이 차이만 봄 (작년보다 많이 온 해 전체 효과는 '올해 수준'이 이미 잡음)
+  const all = Object.values(logs).flat();
+  const mid = avg(all);
+  for (const c of WEATHER_CLASSES) {
+    const xs = logs[c] || [];
+    out.weatherDays[c] = xs.length;
+    if (!xs.length || c === "모름") continue;
+    // 자료가 적으면 사장님 규칙 쪽으로 (8일이면 반반)
+    const w = xs.length / (xs.length + 8);
+    out.weather[c] = Math.exp(w * (avg(xs) - mid) + (1 - w) * Math.log(WEATHER_PRIOR[c]));
+  }
+  for (const k of Object.keys(out.season)) {
+    const xs = slogs[k] || [];
+    if (!xs.length) continue;
+    const w = xs.length / (xs.length + 15);
+    out.season[k] = Math.exp(w * (avg(xs) - mid));
+  }
+  return out;
+}
+
+export interface BreadLine {
+  name: string;
+  qty: number;
+  /** 방문객 1명당 개수 */
+  rate: number;
+  /** 최근 같은 날 유형에 팔린 개수 (오래된 것 → 최근) */
+  recent: number[];
+}
+
+export interface BreadPlan {
+  date: string;
+  visitors: VisitorForecast;
+  items: BreadLine[];
+  total: number;
+}
+
+/** 빵별 수량 — 최근 4주 같은 날 유형(없으면 모든 날)의 방문객 1명당 판매 개수 × 예상 방문객 */
+export function breadPlan(board: Board, weather: WeatherMap, asOf: string, date: string, learned: Learned = DEFAULT_LEARNED): BreadPlan {
+  const v = forecastVisitors(board, weather, asOf, date, learned);
+  const days = dayRange(addDays(asOf, -(RATE_DAYS - 1)), asOf).filter((d) => visitorsOn(board, d) != null);
+  let same = days.filter((d) => dayKind(d) === v.kind);
+  if (same.length < 2) same = days;
+  const active = new Set(board.products(addDays(asOf, -13), asOf, "베이커리").map((p) => p.name));
+  let vis = 0;
+  const qty = new Map<string, number[]>();
+  for (const d of same) {
+    vis += visitorsOn(board, d)!;
+    const sold = new Map(board.products(d, d, "베이커리").map((p) => [p.name, p.qty]));
+    for (const name of active) {
+      const xs = qty.get(name) || [];
+      xs.push(sold.get(name) || 0);
+      qty.set(name, xs);
+    }
+  }
+  const items: BreadLine[] = [...qty.entries()]
+    .map(([name, xs]) => {
+      const rate = vis > 0 ? xs.reduce((a, b) => a + b, 0) / vis : 0;
+      return { name, rate, qty: Math.round(rate * v.value), recent: xs };
+    })
+    .filter((x) => x.qty > 0)
+    .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
+  return { date, visitors: v, items, total: items.reduce((a, b) => a + b.qty, 0) };
+}
+
+/** 앞으로 1 ~ 4주차 — 평일 · 휴일 하루 평균 생산 개수 (날씨는 모름으로) */
+export function weeklyOutlook(board: Board, asOf: string, start: string, learned: Learned = DEFAULT_LEARNED): { week: number; from: string; to: string; weekday: number | null; holiday: number | null }[] {
+  const out: { week: number; from: string; to: string; weekday: number | null; holiday: number | null }[] = [];
+  for (let w = 0; w < 4; w++) {
+    const from = addDays(start, w * 7);
+    const to = addDays(from, 6);
+    const wd: number[] = [];
+    const hd: number[] = [];
+    for (const d of dayRange(from, to)) {
+      const p = breadPlan(board, {}, asOf, d, learned);
+      (p.visitors.kind === "휴일" ? hd : wd).push(p.total);
+    }
+    out.push({ week: w + 1, from, to, weekday: wd.length ? Math.round(avg(wd)) : null, holiday: hd.length ? Math.round(avg(hd)) : null });
+  }
+  return out;
+}
+
+/** 잠정 수량 묶기 — 처음 알려 준 수량에서 ±band 안으로만 (D+2 는 5%, D+3 은 10%) */
+export function withinBand(first: number, now: number, band: number): number {
+  const lo = Math.floor(first * (1 - band));
+  const hi = Math.ceil(first * (1 + band));
+  return clamp(now, lo, hi);
+}
+
+/** 시험 — 그날 lead 일 전에 예측했다면 얼마나 틀렸을까 (방문객 · 빵 총 개수, 절대 % 오차) */
+export function backtest(board: Board, weather: WeatherMap, from: string, to: string, lead = 2, learned: Learned = DEFAULT_LEARNED) {
+  const rows: { date: string; kind: DayKind; visitors: number; predicted: number; bread: number; breadPredicted: number }[] = [];
+  for (const d of dayRange(from, to)) {
+    const actual = visitorsOn(board, d);
+    if (actual == null) continue;
+    const p = breadPlan(board, weather, addDays(d, -lead), d, learned);
+    const bread = board.products(d, d, "베이커리").reduce((a, x) => a + x.qty, 0);
+    rows.push({ date: d, kind: p.visitors.kind, visitors: actual, predicted: p.visitors.value, bread, breadPredicted: p.total });
+  }
+  const mape = (xs: typeof rows, a: "visitors" | "bread", b: "predicted" | "breadPredicted") => {
+    const ok = xs.filter((r) => r[a] > 0);
+    return ok.length ? Math.round((avg(ok.map((r) => Math.abs(r[b] - r[a]) / r[a])) * 1000)) / 10 : null;
+  };
+  const by = (k?: DayKind) => {
+    const xs = k ? rows.filter((r) => r.kind === k) : rows;
+    return { days: xs.length, visitors: mape(xs, "visitors", "predicted"), bread: mape(xs, "bread", "breadPredicted") };
+  };
+  return { rows, all: by(), 평일: by("평일"), 금요일: by("금요일"), 휴일: by("휴일") };
+}
