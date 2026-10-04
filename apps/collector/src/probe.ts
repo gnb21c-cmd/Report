@@ -7,7 +7,7 @@
    ============================================================ */
 import { chromium, type Frame, type Page } from "playwright";
 
-const LOGIN = "https://nice.okpos.co.kr/login/login_form.jsp";
+const LOGIN = process.env.OKPOS_URL || "https://nice.okpos.co.kr/login/login_form.jsp";
 const MENU = ["매출관리", "매출현황", "영수증별매출상세현황"];
 
 /** 공개 기록에 남겨도 되는 모양으로 — 숫자 4자리 이상 · 물음표 뒤 값 가림 */
@@ -90,12 +90,17 @@ async function main() {
   const pw = process.env.OKPOS_PW || "";
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ locale: "ko-KR", timezoneId: "Asia/Seoul", acceptDownloads: true });
+  // tsx(esbuild)가 함수 이름 도우미 __name 을 끼워 넣음 → 화면 안에서도 있게
+  await ctx.addInitScript("globalThis.__name = (f) => f");
   const page = await ctx.newPage();
   page.on("dialog", async (d) => {
     say(`[알림창] ${mask(d.message())}`);
     await d.accept().catch(() => {});
   });
-  page.on("popup", (p) => say(`[새 창] ${mask(p.url())}`));
+  page.on("popup", async (p) => {
+    await p.waitForLoadState("domcontentloaded").catch(() => {});
+    say(`[새 창] ${mask(p.url())} — ${mask(await p.title().catch(() => ""))}`);
+  });
   // 오가는 주소 모양 (문서 · 데이터 요청만)
   const seen = new Set<string>();
   page.on("request", (r) => {
