@@ -7,6 +7,8 @@ name: POS 자동 수집
 on:
   schedule:
     - cron: "10 13 * * *" # 13:10 UTC = 22:10 한국
+    # GitHub 예약 실행은 가끔 건너뜀 → 한 번 더 (자동으로 올린 칸은 다시 받아 덮고, 사람이 올린 칸은 그대로)
+    - cron: "45 13 * * *" # 13:45 UTC = 22:45 한국
   # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
   push:
     branches: ["feature/pos-auto", "feature/pos-backfill", "feature/bakery-feedback"]

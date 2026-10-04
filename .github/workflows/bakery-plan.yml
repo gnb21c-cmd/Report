@@ -1,11 +1,13 @@
 # 베이커리 작업지시 계획 — 매일 15시(한국 시간) apps/collector/src/plan.ts (규칙은 packages/core/src/bakery.ts)
 #   목요일: 다음 주 월 ~ 일 주간 잠정안 · 매일: 3일 뒤 최종안 (전날 밤 22:10 수집 실적의 오차를 보정)
 # 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD
-# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작할 수 있어 14:35 에 걸어 둠
+# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작하거나 건너뛸 수 있어 14:35 · 15:20 두 번 걸어 둠
 name: 베이커리 계획
 on:
   schedule:
     - cron: "35 5 * * *" # 05:35 UTC = 14:35 한국
+    # GitHub 예약 실행은 가끔 늦거나 건너뜀 → 한 번 더. 같은 자료로 다시 세면 같은 결과라 두 번 돌아도 숫자는 그대로
+    - cron: "20 6 * * *" # 06:20 UTC = 15:20 한국
   # 작업 브랜치에 올리면 다가오는 목요일로 확인만 (쓰지 않음)
   push:
     branches: ["feature/bakery-weekly"]
