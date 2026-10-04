@@ -139,11 +139,13 @@ export class NaverBook {
       const gridTop = Math.min(...rowLabels.map((el) => box(el).top), ...timeEls.map((el) => box(el).top));
       const gridLeft = Math.max(...rowLabels.map((el) => box(el).right));
       // 상품 머리줄 = 첫 회차 바로 위 띠의 글
-      const heads = els.filter((el) => { const b = box(el); const t = txt(el); return leaf(el) && t.length > 1 && b.bottom <= gridTop + 2 && b.top >= gridTop - 90 && b.left >= gridLeft - 2 && !/^(전체|신청|확정|예약가능|완료\\/노쇼|잔여예약|이용완료|일간|주간|월간)$/.test(t) && !/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/.test(t) && !/^\\d+$/.test(t); })
+      const heads = els.filter((el) => { const b = box(el); const t = txt(el); return leaf(el) && t.length > 1 && b.bottom <= gridTop + 2 && b.top >= gridTop - 90 && b.left >= gridLeft - 2 && !/^(전체|신청|확정|예약가능|완료\\/노쇼|잔여예약|잔여|이용완료|완료|일간|주간|월간)$/.test(t) && !/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/.test(t) && !/^\\d+$/.test(t); })
         .map((el) => ({ el, b: box(el), t: (el.getAttribute("title") || txt(el)).replace(/\\s+/g, " ") }));
       const times = timeEls.map((el) => ({ b: box(el), t: txt(el) }));
       // '이용완료' 를 품은 가장 작은 칸 ('이용완료' 만 · '이용완료 7' · '이용완료7' 모두)
-      const dones = els.filter((el) => /^이용완료\\s*\\d*$/.test(txt(el)) && ![...el.children].some((c) => /이용완료/.test(txt(c))));
+      // 칸이 좁으면 '완료', 넓으면 '이용완료' 로 보임 — 표 안(첫 회차 아래 · 회차 이름 오른쪽)에서만
+      const doneRe = /^(이용)?완료\\s*\\d*$/;
+      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => /완료/.test(txt(c))) && !el.closest("button, [role=tab], [role=tablist]"); });
       const cells = [];
       dones.forEach((el, i) => {
         const b = box(el); const cx = b.left + b.width / 2;
@@ -154,7 +156,7 @@ export class NaverBook {
         let p = el.parentElement, n = null;
         const own = txt(el).match(/\\d+/);
         if (own) n = Number(own[0]);
-        for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace("이용완료", "").match(/\\d+/); if (m) n = Number(m[0]); }
+        for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace(/(이용)?완료/, "").match(/\\d+/); if (m) n = Number(m[0]); }
         el.setAttribute("data-nv", String(i));
         cells.push({ key: i, product: h ? h.t : "", time: tm ? tm.t : "", done: n == null ? 0 : n });
       });
@@ -232,7 +234,7 @@ export class NaverBook {
       for (const el of leafs) { const t = txt(el); if (t.length <= 12 && /\\d/.test(t)) { const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " "); freq[k] = (freq[k] || 0) + 1; } }
       window.__cells = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + "×" + n).join(" | ");
       window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음");
-      return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^이용완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+$/), buttons: document.querySelectorAll("button").length };
+      return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+$/), buttons: document.querySelectorAll("button").length };
     })()`)) as Record<string, number>;
     say(`  글 모양 — ${mask(String(await p.evaluate("window.__shape").catch(() => "")))}`);
     say(`  숫자 든 글 — ${mask(String(await p.evaluate("window.__cells").catch(() => "")))}`);
