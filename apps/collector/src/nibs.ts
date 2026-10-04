@@ -27,6 +27,7 @@ const pause = (min = 1500, max = 3000) => new Promise((r) => setTimeout(r, min +
 
 export class Nibs {
   private downloads: Download[] = [];
+  failLogs = 0;
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -52,7 +53,10 @@ export class Nibs {
       });
       p.on("download", (d) => n.downloads.push(d));
       p.on("requestfailed", (r) => {
-        if (r.isNavigationRequest()) say(`[연결 실패] ${mask(r.url().replace(/[?;].*$/, ""))} — ${r.failure()?.errorText || ""}`);
+        if (n.failLogs++ < 15) say(`[연결 실패] ${mask(r.url().replace(/[?;].*$/, "").replace(/^https:\/\/nibs\.nicevan\.co\.kr/, ""))} — ${r.failure()?.errorText || ""}`);
+      });
+      p.on("response", (r) => {
+        if (r.status() >= 400 && n.failLogs++ < 15) say(`[응답 ${r.status()}] ${mask(r.url().replace(/[?;].*$/, "").replace(/^https:\/\/nibs\.nicevan\.co\.kr/, ""))}`);
       });
     };
     watch(page);
@@ -254,9 +258,16 @@ export class Nibs {
     await this.closeAlerts(4000);
     // 새로고침 뒤에는 왼쪽 메뉴가 늦게 채워짐 → 메뉴가 보일 때까지 기다림 (30초)
     const menuItem = (f: Frame) => f.locator('[id^="mf_side_gen_topMenu_"][id$="_btn_menu"]').filter({ hasText: loose("거래조회") });
-    if (!(await this.visible(menuItem, 30000))) {
-      const n = await this.page.evaluate("document.querySelectorAll('#mf_side_gen_topMenu li').length").catch(() => -1);
-      throw new Error(`왼쪽 메뉴가 30초 안에 안 채워짐 (메뉴 칸 ${n}개)`);
+    if (!(await this.visible(menuItem, 15000))) {
+      // 메뉴 자료를 못 받은 것 → 메인 화면만 새로고침 (로그인은 유지됨)
+      say("왼쪽 메뉴가 비어 있음 → 메인 화면 새로고침");
+      await this.page.reload({ waitUntil: "domcontentloaded", timeout: 40000 }).catch(() => {});
+      await this.page.waitForTimeout(3000);
+      await this.closeAlerts(3000);
+      if (!(await this.visible(menuItem, 30000))) {
+        const n = await this.page.evaluate("document.querySelectorAll('#mf_side_gen_topMenu li').length").catch(() => -1);
+        throw new Error(`왼쪽 메뉴가 안 채워짐 (새로고침 뒤에도, 메뉴 칸 ${n}개)`);
+      }
     }
     // 알림창이 몇 초 뒤에 떠서 메뉴를 가리기도 함 → 짧게 눌러 보고, 막히면 알림창 닫고 다시
     let clicked = false;
