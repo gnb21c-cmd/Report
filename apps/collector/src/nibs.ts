@@ -335,57 +335,61 @@ export class Nibs {
     return nums ? Number(nums[0].replace(/,/g, "")) : null;
   }
 
+  /** 따로 뜬 엑셀 다운로드 창 — 오류 화면이면 닫고 단추를 한 번 더 누름 */
+  private async popupWindow(): Promise<Page | null> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      for (let t = 0; t < 20000; t += 500) {
+        const w = this.ctx.pages().find((p) => p !== this.page && !p.isClosed() && /popup\.html|chrome-error/.test(p.url()));
+        if (w && w.url().startsWith("chrome-error")) {
+          say("다운로드 창이 오류 화면 → 닫고 한 번 더");
+          await w.close().catch(() => {});
+          break;
+        }
+        if (w && (await w.locator("#mf_ibx_password").isVisible().catch(() => false))) return w;
+        await this.page.waitForTimeout(500);
+      }
+      if (attempt === 0) {
+        await pause();
+        await (await this.el("btnPexl2")).click({ timeout: 5000 });
+      }
+    }
+    return null;
+  }
+
   /** 전체 엑셀(All) → 비밀번호 · 사유 '정산 통계용' → 받은 파일과 그 비밀번호 */
   async excelAll(): Promise<{ buf: Uint8Array; password: string }> {
     const password = randomBytes(6).toString("hex"); // 영문 · 숫자 12자
     const before = this.downloads.length;
+    for (const p of this.ctx.pages()) if (p !== this.page && !p.isClosed()) await p.close().catch(() => {});
     await pause();
     await (await this.el("btnPexl2")).click({ timeout: 5000 });
-    // 전체 엑셀 다운로드 창 (따로 뜨는 창 또는 화면 안 창) — 그 틀 안에서만 찾음
-    let win: Frame | null = null;
-    for (let t = 0; t < 20000 && !win; t += 500) {
-      for (const fr of this.frames().reverse())
-        if (await fr.getByText(/엑셀\s*비밀번호/).first().isVisible().catch(() => false)) {
-          win = fr;
-          break;
-        }
-      if (!win) await this.page.waitForTimeout(500);
-    }
+    // 전체 엑셀 다운로드 창 = 따로 뜨는 창 popup.html (#mf_ibx_password · #mf_sbx_reasonS · #mf_btn_selectData)
+    const win = await this.popupWindow();
     if (!win) throw new Error("엑셀 다운로드 창이 안 뜸");
-    const first = async (l: Locator) => {
-      const n = await l.count().catch(() => 0);
-      for (let i = 0; i < n; i++) if (await l.nth(i).isVisible().catch(() => false)) return l.nth(i);
-      return null;
-    };
-    // 비밀번호 칸 — 창 안의 보이는 글 칸 중 마지막 (화면 안 창이면 뒤쪽 화면의 칸도 같은 틀에 있음)
-    const pwAll = win.locator("input[type=password]");
-    let pw = await first(pwAll);
-    if (!pw) {
-      const all = win.locator("input:not([type=hidden]):not([type=checkbox]):not([type=radio])");
-      for (let i = (await all.count()) - 1; i >= 0 && !pw; i--) if (await all.nth(i).isVisible().catch(() => false)) pw = all.nth(i);
-    }
-    if (!pw) throw new Error("엑셀 비밀번호 칸을 못 찾음");
-    await pw.fill(password);
+    await pause(800, 1500);
+    const pw = win.locator("#mf_ibx_password");
+    await pw.click({ timeout: 5000 });
+    await pw.pressSequentially(password, { delay: 80 });
+    await pause(600, 1200);
     // 다운로드 사유 — 정산 통계용
-    const reason = await first(win.locator("select").filter({ has: win.locator("option", { hasText: "정산 통계용" }) }));
-    if (reason) await reason.selectOption({ label: "정산 통계용" });
-    else {
-      const all = win.getByText("선택", { exact: true });
-      let box: Locator | null = null;
-      for (let i = (await all.count()) - 1; i >= 0 && !box; i--) if (await all.nth(i).isVisible().catch(() => false)) box = all.nth(i);
-      if (!box) throw new Error("다운로드 사유 칸을 못 찾음");
-      await box.click({ timeout: 5000 });
-      await this.page.waitForTimeout(500);
-      const item = await first(win.getByText("정산 통계용", { exact: true }));
-      if (!item) throw new Error("사유 '정산 통계용' 을 못 고름");
-      await item.click({ timeout: 5000 });
+    const reason = win.locator("#mf_sbx_reasonS");
+    await reason.click({ timeout: 5000 });
+    await win.waitForTimeout(700);
+    const item = win.getByText("정산 통계용", { exact: true });
+    let picked = false;
+    for (let i = (await item.count()) - 1; i >= 0 && !picked; i--)
+      if (await item.nth(i).isVisible().catch(() => false)) {
+        await item.nth(i).click({ timeout: 5000 });
+        picked = true;
+      }
+    if (!picked) {
+      await reason.press("ArrowDown").catch(() => {});
+      await reason.press("Enter").catch(() => {});
     }
-    // 확인 — 다운로드 창의 [확인] (마지막에 보이는 것)
-    const oks = byName(win, "확인");
-    let ok: Locator | null = null;
-    for (let i = (await oks.count()) - 1; i >= 0 && !ok; i--) if (await oks.nth(i).isVisible().catch(() => false)) ok = oks.nth(i);
-    if (!ok) throw new Error("다운로드 창 [확인] 을 못 찾음");
-    await ok.click({ timeout: 5000 });
+    await win.waitForTimeout(500);
+    if (!/정산/.test(await win.locator("#mf_sbx_reasonS_label").innerText().catch(() => ""))) throw new Error("사유 '정산 통계용' 이 골라지지 않음");
+    await pause(600, 1200);
+    await win.locator("#mf_btn_selectData").click({ timeout: 5000 });
     for (let t = 0; t < 90000 && this.downloads.length === before; t += 500) await this.page.waitForTimeout(500);
     const d = this.downloads[this.downloads.length - 1];
     if (this.downloads.length === before || !d) throw new Error("엑셀 파일이 90초 안에 안 옴");
