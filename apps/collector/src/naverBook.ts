@@ -57,8 +57,13 @@ export class NaverBook {
     await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
     if (/nid\.naver\.com/.test(p.url())) throw new Error("네이버 로그인이 풀렸습니다 — POS 메인 PC의 naver-login.cmd 를 더블클릭해 다시 로그인해 주세요");
     if (!biz) {
-      for (let t = 0; t < 20 && !/\/bizes\/\d+/.test(p.url()); t++) await p.waitForTimeout(1000);
-      const m = p.url().match(/\/bizes\/(\d+)/);
+      // 주소에 없으면 (스마트플레이스 첫 화면으로 가는 경우) 화면 안 링크에서 예약 관리 사업장 번호를 찾음
+      const find = async () =>
+        (p.url().match(/\/bizes\/(\d+)/) || [])[1] ||
+        ((await p.evaluate(`(() => { const s = [...document.querySelectorAll("a[href]")].map((a) => a.href).join(" ") + " " + document.documentElement.innerHTML; const m = s.match(/booking\\.naver\\.com\\/bizes\\/(\\d+)/) || s.match(/\\/bizes\\/(\\d+)/); return m ? m[1] : ""; })()`).catch(() => "")) as string);
+      let found = "";
+      for (let t = 0; t < 20 && !(found = await find()); t++) await p.waitForTimeout(1000);
+      const m = found ? [found, found] : null;
       if (!m) throw new Error("사업장 번호를 못 찾음 — GitHub Secrets 에 NAVER_BIZ_ID 를 넣어 주세요");
       biz = m[1];
       await p.goto(`${NAVER_PARTNER}bizes/${biz}/booking-calendar-view`, { waitUntil: "domcontentloaded", timeout: 45000 });
