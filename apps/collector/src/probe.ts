@@ -129,23 +129,17 @@ async function main() {
     return browser.close();
   }
 
-  // 로그인 — 비밀번호 칸이 있는 틀에서, 그 앞의 글자 칸을 아이디로
-  let done = false;
-  for (const f of page.frames()) {
-    const pwBox = f.locator("input[type=password]").first();
-    if (!(await pwBox.count())) continue;
-    const idBox = f.locator("input[type=text], input:not([type])").first();
-    await idBox.fill(id);
-    await pwBox.fill(pw);
-    say("→ 아이디 · 비밀번호 넣고 Enter");
-    await pwBox.press("Enter");
-    done = true;
-    break;
-  }
-  if (!done) {
-    say("비밀번호 칸을 못 찾음");
+  // 로그인 — 아이디 칸 user_id · 비밀번호 칸 user_pwd, 로그인 그림(doSubmit) 누름
+  if (!(await page.locator("#user_pwd").count())) {
+    say("비밀번호 칸(user_pwd)을 못 찾음");
     return browser.close();
   }
+  await page.fill("#user_id", id);
+  await page.fill("#user_pwd", pw);
+  say("→ 아이디 · 비밀번호 넣고 로그인 누름");
+  const go = page.locator("img[onclick*='doSubmit']").first();
+  if (await go.count()) await go.click();
+  else await page.press("#user_pwd", "Enter");
   await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(3000);
   await dump(page, "2. 로그인 뒤");
