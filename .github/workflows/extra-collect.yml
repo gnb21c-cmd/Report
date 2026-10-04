@@ -36,12 +36,16 @@ jobs:
     # POS 메인 PC (Windows) — 실행기를 설치할 때 라벨 nice-pos 를 붙임
     runs-on: [self-hosted, Windows, nice-pos]
     timeout-minutes: 40
+    # cmd — PowerShell 은 PC 설정(스크립트 실행 막음)에 따라 안 돌 수 있음
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
+      # 실행기 도구 폴더에 설치 — 기본값(사용자 폴더)이면 공개 기록에 PC 사용자 이름이 찍힘
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.tool_cache }}\setup-pnpm
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -55,6 +59,9 @@ jobs:
         run: pnpm --filter @report/collector extra
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+          # 임시 파일도 실행기 폴더에 (오류 글에 사용자 폴더 이름이 찍히지 않게)
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
           COLLECT_FROM: ${{ inputs.date }}
           COLLECT_TO: ${{ inputs.to }}
           # 작업 브랜치에 올린 시험은 확인만 · 화면 구조 기록
