@@ -60,9 +60,9 @@ async function dumpFrame(f: Frame, depth: number) {
   for (const c of f.childFrames()) await dumpFrame(c, depth + 1);
 }
 
-async function dump(page: Page, title: string) {
+async function dump(page: Page, title: string, showTitle = false) {
   say(`\n===== ${title} =====`);
-  say(`창 제목: ${mask(await page.title())}`);
+  if (showTitle) say(`창 제목: ${mask(await page.title())}`);
   await dumpFrame(page.mainFrame(), 0);
 }
 
@@ -119,7 +119,7 @@ async function main() {
   if (!res) return browser.close();
   say(`로그인 화면 응답 ${res.status()}`);
   await page.waitForTimeout(2000);
-  await dump(page, "1. 로그인 화면");
+  await dump(page, "1. 로그인 화면", true);
   const html = await page.content();
   if (/captcha|자동입력|보안문자|recaptcha/i.test(html)) say("※ 자동입력방지(보안문자) 흔적 있음");
   if (/인증번호|OTP|휴대폰\s*인증/i.test(html)) say("※ 휴대폰 · OTP 인증 흔적 있음");
@@ -150,19 +150,35 @@ async function main() {
     if (i === MENU.length - 1) await dump(page, `3. ${m} 화면`);
   }
 
-  // 매장선택 — 누르면 뜨는 창 · 층의 구조 (매장 이름 개수만)
-  const before = page.frames().length;
-  const pop = page.waitForEvent("popup", { timeout: 6000 }).catch(() => null);
-  const clicked = (await clickText(page, "매장선택")) || false;
-  const p2 = await pop;
-  if (p2) {
-    await p2.waitForLoadState("domcontentloaded").catch(() => {});
-    await p2.waitForTimeout(1500);
-    await dump(p2, "4. 매장선택 새 창");
-  } else if (clicked) {
-    say(`틀 수 ${before} → ${page.frames().length}`);
-    await dump(page, "4. 매장선택 누른 뒤");
+  const mf = page.frame({ name: "MainFrm" });
+  if (!mf) {
+    say("MainFrm 틀을 못 찾음");
+    return browser.close();
   }
+  // 화면 함수 원문 (프로그램 글자만 — 매출 숫자 없음)
+  for (const fn of ["fnCommSearchPopup4", "fnSearch", "doAction", "fnShowCal1"]) {
+    const src = String(await mf.evaluate(`typeof ${fn} === "function" ? String(${fn}) : ""`).catch(() => ""));
+    if (src) say(`\n[함수 ${fn}]\n${src.replace(/\d{6,}/g, "#").slice(0, 2500)}`);
+    else say(`[함수 ${fn}] 없음`);
+  }
+  say(`조회일자 칸 모양: ${mask(String(await mf.inputValue("#date1").catch(() => "")))}`);
+
+  // 매장선택 — 누르면 뜨는 창 · 층
+  const urls = new Map(page.frames().map((f) => [f, f.url()]));
+  const pop = page.waitForEvent("popup", { timeout: 6000 }).catch(() => null);
+  await mf.click("#ss_SHOP_NM").catch((e) => say(`매장 칸 누르기 실패: ${mask(e.message)}`));
+  const p2 = await pop;
+  await page.waitForTimeout(3000);
+  const targets: Frame[] = p2 ? p2.frames() : page.frames().filter((f) => urls.get(f) !== f.url());
+  if (p2) say(`[매장선택] 새 창 ${mask(p2.url())}`);
+  for (const f of targets) {
+    say(`\n===== 4. 매장선택 (${f.name() || "이름 없음"}) =====`);
+    await dumpFrame(f, 0);
+    // 표는 머리줄 글과 줄 수만 (매장 이름은 공개 기록에 남기지 않음)
+    const rows = (await f.evaluate(`[...document.querySelectorAll("tr")].map(r => r.innerText.replace(/\\s+/g, " ").trim()).filter(Boolean)`).catch(() => [])) as string[];
+    if (rows.length) say(`  표 머리줄: ${mask(rows[0])} · 줄 ${rows.length}개`);
+  }
+  if (!targets.length) say("매장선택을 눌러도 바뀐 틀 · 새 창이 없음");
   await browser.close();
 }
 
