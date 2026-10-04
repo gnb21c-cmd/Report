@@ -9,12 +9,15 @@ on:
     - cron: "10 13 * * *" # 13:10 UTC = 22:10 한국
   # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
   push:
-    branches: ["feature/pos-auto"]
+    branches: ["feature/pos-auto", "feature/pos-backfill"]
     paths: ["apps/collector/**", ".github/workflows/pos-collect.yml"]
   workflow_dispatch:
     inputs:
       date:
-        description: "날짜 (YYYY-MM-DD, 비우면 오늘)"
+        description: "날짜 (YYYY-MM-DD, 비우면 오늘) — 여러 날이면 시작 날짜"
+        required: false
+      to:
+        description: "끝 날짜 (여러 날 채울 때만, YYYY-MM-DD)"
         required: false
       dry:
         description: "확인만 (올리지 않음)"
@@ -23,7 +26,7 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -39,12 +42,13 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "date=$(TZ=Asia/Seoul date -d yesterday +%F)" >> "$GITHUB_OUTPUT"; echo "dry=1" >> "$GITHUB_OUTPUT"
           else
-            echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"; echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
+            echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"; echo "to=${{ inputs.to }}" >> "$GITHUB_OUTPUT"; echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
           fi
       - name: OKPOS → 클라우드
         run: pnpm --filter @report/collector collect
         env:
           COLLECT_DATE: ${{ steps.when.outputs.date }}
+          COLLECT_TO: ${{ steps.when.outputs.to }}
           COLLECT_DRY: ${{ steps.when.outputs.dry }}
           OKPOS_ID: ${{ secrets.OKPOS_ID }}
           OKPOS_PW: ${{ secrets.OKPOS_PW }}
