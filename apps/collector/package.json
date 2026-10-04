@@ -5,7 +5,7 @@
   "type": "module",
   "description": "POS 자동 수집 — OKPOS 점주 웹(nice.okpos.co.kr)에서 영수증별 매출 엑셀을 받아 클라우드에 올림 (GitHub Actions 에서 돎)",
   "scripts": {
-    "probe": "tsx src/probe.ts",
+    "collect": "tsx src/collect.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },

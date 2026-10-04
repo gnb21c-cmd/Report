@@ -1,0 +1,55 @@
+# POS 자동 수집 — 매일 밤 10시 10분(한국 시간) OKPOS 점주 웹에서 카페 · 키즈 영수증별 매출 엑셀을 받아 클라우드에 올림
+# 직원 PC 가 켜져 있을 필요 없음 (GitHub 가 대신). apps/collector/src/collect.ts
+# 필요한 값: Secrets OKPOS_ID · OKPOS_PW · REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD, Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID
+# 공개 저장소라 기록에는 줄 수 · 일치 여부만 남김 (매출 숫자 · 매장 이름 없음)
+# GitHub 예약 실행은 바쁜 때 10~20분 늦게 시작할 수 있음
+name: POS 자동 수집
+on:
+  schedule:
+    - cron: "10 13 * * *" # 13:10 UTC = 22:10 한국
+  # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
+  push:
+    branches: ["feature/pos-auto"]
+    paths: ["apps/collector/**", ".github/workflows/pos-collect.yml"]
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "날짜 (YYYY-MM-DD, 비우면 오늘)"
+        required: false
+      dry:
+        description: "확인만 (올리지 않음)"
+        type: boolean
+        default: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector exec playwright install --with-deps chromium
+      - name: 날짜 정하기
+        id: when
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "date=$(TZ=Asia/Seoul date -d yesterday +%F)" >> "$GITHUB_OUTPUT"; echo "dry=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"; echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: OKPOS → 클라우드
+        run: pnpm --filter @report/collector collect
+        env:
+          COLLECT_DATE: ${{ steps.when.outputs.date }}
+          COLLECT_DRY: ${{ steps.when.outputs.dry }}
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
