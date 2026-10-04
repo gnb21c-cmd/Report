@@ -2,12 +2,12 @@
    폰 한 손 보기: 위 달력 띠 → 총 매출 → 팀별 한 줄 상자 → 누계 2×2 → 방문·키즈 */
 :root {
   color-scheme: light;
-  /* 바탕은 밝은 회색 — 흰 상자가 또렷이 떠 보이게. 흐린 글씨는 바탕 위에서도 읽히게 조금 진하게 */
-  --page: #ebecee;
+  /* 바탕은 연브라운 · 버튼은 커피 브라운 — 흰 상자가 또렷이 떠 보이게. 흐린 글씨는 바탕 위에서도 읽히게 조금 진하게 */
+  --page: #efe8de;
   --surface-1: #fdfdfc;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --muted: #6f6d67;
+  --muted: #6f6a62;
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
@@ -15,8 +15,8 @@
   --series-2: #eb6834;
   --ref: #b4b3ab;
   --spark: #c3c2b7;
-  --track: #e8f0fb;
-  --accent: #2a78d6;
+  --track: #f2e5d8;
+  --accent: #7a4e33;
   --on-accent: #ffffff;
   --good: #006300;
   --bad: #c23b3b;
@@ -1018,7 +1018,7 @@ tr.sum td {
   color: var(--cur);
 }
 .cash-detail .in {
-  color: var(--accent);
+  color: var(--series-1);
 }
 .cash-detail h2 {
   margin-bottom: 8px;
@@ -1153,7 +1153,7 @@ tr.sum td {
   border-radius: 999px;
 }
 .cb-fill.in {
-  background: var(--accent);
+  background: var(--series-1);
 }
 .cb-fill.out {
   background: var(--cur);
@@ -1164,7 +1164,7 @@ tr.sum td {
   text-align: right;
 }
 .cb-num.in {
-  color: var(--accent);
+  color: var(--series-1);
 }
 .cb-num.out {
   color: var(--cur);
