@@ -1,0 +1,69 @@
+# 자판기 · 인생네컷 · 주차 자동 수집 — 매일 밤 10시 15분(한국 시간) 나이스 NIBS 통합거래조회에서 단말기 4대 엑셀을 받아 클라우드에 올림
+# 어제 ~ 오늘을 받음 (밤 10시 넘어 생긴 어제 결제도 다음 날 고침). apps/collector/src/extra.ts
+# 필요한 값: Secrets NICE_ID · NICE_PW · REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD, Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID
+# 엑셀 비밀번호는 실행마다 새로 만들어 쓰고 버림 · 공개 저장소라 기록에는 건수 · 일치 여부만 남김 (매출 숫자 · 가맹점 이름 없음)
+name: 자판기 · 네컷 · 주차 자동 수집
+on:
+  schedule:
+    - cron: "15 13 * * *" # 13:15 UTC = 22:15 한국
+    # GitHub 예약 실행은 가끔 건너뜀 → 한 번 더 (자동으로 올린 칸은 다시 받아 덮고, 사람이 올린 칸은 그대로)
+    - cron: "50 13 * * *" # 13:50 UTC = 22:50 한국
+  # 작업 브랜치에 올리면 어제 ~ 오늘을 확인만 (올리지 않음) · 화면 구조도 기록
+  push:
+    branches: ["feature/nice-collect"]
+    paths: ["apps/collector/**", "packages/core/src/extra.ts", ".github/workflows/extra-collect.yml"]
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "시작 날짜 (YYYY-MM-DD, 비우면 어제 ~ 오늘)"
+        required: false
+      to:
+        description: "끝 날짜 (YYYY-MM-DD, 비우면 시작 날짜 하루)"
+        required: false
+      dry:
+        description: "확인만 (올리지 않음)"
+        type: boolean
+        default: false
+      probe:
+        description: "막히면 화면 구조 기록 (아이디 · 단추 모양만)"
+        type: boolean
+        default: false
+concurrency:
+  group: extra-collect
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector exec playwright install --with-deps chromium
+      - name: 날짜 정하기
+        id: when
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "dry=1" >> "$GITHUB_OUTPUT"; echo "probe=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"; echo "to=${{ inputs.to }}" >> "$GITHUB_OUTPUT"
+            echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"; echo "probe=${{ inputs.probe == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 나이스 → 클라우드
+        run: pnpm --filter @report/collector extra
+        env:
+          COLLECT_FROM: ${{ steps.when.outputs.date }}
+          COLLECT_TO: ${{ steps.when.outputs.to }}
+          COLLECT_DRY: ${{ steps.when.outputs.dry }}
+          NICE_PROBE: ${{ steps.when.outputs.probe }}
+          NICE_ID: ${{ secrets.NICE_ID }}
+          NICE_PW: ${{ secrets.NICE_PW }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}

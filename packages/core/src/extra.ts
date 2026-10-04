@@ -174,3 +174,16 @@ export function applyExtra(old: ExtraPart | undefined | null, u: ExtraUpdate, me
   }
   return out;
 }
+
+/* ---------- 자동 수집 (나이스 NIBS → GitHub, apps/collector/src/extra.ts) ---------- */
+export const EXTRA_AUTO_BY = "자동 수집 (나이스)";
+/** 나이스로 바뀐 날 — 그 전은 KIS 라 나이스에 자료가 없음 */
+export const NICE_FROM = "2026-07-01";
+
+/** 자동 수집이 바꿔도 되는 종류 — 사람이 엑셀로 올린 칸은 그대로 (사람이 나중에 올리면 사람 것이 이김)
+    칸마다 올린 기록(files)이 없던 옛 문서는 사람이 다 올린 것으로 봄 */
+export function autoExtraKinds(old: ExtraPart | undefined | null, kinds: ExtraKind[]): ExtraKind[] {
+  if (!old) return kinds;
+  if (!old.files) return [];
+  return kinds.filter((k) => !old.files![k] || old.files![k]!.by === EXTRA_AUTO_BY);
+}

@@ -155,3 +155,29 @@ export async function writeFloor(fb: Fb, floor: string, days: { date: string; js
   const writes = days.map((d) => ({ update: { name: `${root}/${d.date}`, fields: { date: str(d.date), at: { timestampValue: now }, json: str(d.json) } } }));
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
 }
+
+/** 그날 자판기 · 네컷 · 주차 칸 원문 조각 { p, by, at, file } — 없으면 null */
+export async function readExtraPiece(fb: Fb, date: string): Promise<any | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/reports/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    const v = doc.fields?.extra?.stringValue;
+    return v ? JSON.parse(v) : null;
+  } catch (e) {
+    // 문서가 없는 날은 null, 그 밖의 오류(로그인 · 권한)는 멈춤 — 사람이 올린 칸을 모르고 덮지 않게
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
+/** 자판기 · 네컷 · 주차 칸만 바꿔 씀 (입력 화면과 같은 모양 { p, by, at, file }) */
+export async function writeExtraPieces(fb: Fb, by: string, items: { date: string; part: unknown }[]): Promise<void> {
+  if (!items.length) return;
+  const root = `projects/${fb.projectId}/databases/(default)/documents/boards/${fb.board}`;
+  const now = new Date().toISOString();
+  const writes = items.map((x) => {
+    const fields = { date: str(x.date), at: { timestampValue: now }, extra: str(JSON.stringify({ p: x.part, by, at: now, file: "나이스 자동 수집" })) };
+    return { update: { name: `${root}/reports/${x.date}`, fields }, updateMask: { fieldPaths: Object.keys(fields) } };
+  });
+  for (let i = 0; i < writes.length; i += 400)
+    await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes: writes.slice(i, i + 400) }) });
+}
