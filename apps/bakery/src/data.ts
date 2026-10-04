@@ -14,8 +14,10 @@ export interface Api {
   order(date: string): Promise<OrderDoc | null>;
   /** 현장 태블릿 키 번호 (매니저만 — 아직 안 정했으면 "") */
   floorKey?(): Promise<string>;
-  /** 태블릿 키 번호 정하기 · 바꾸기 (바꾸면 예전 주소는 막힘) */
+  /** 태블릿 키 번호 정하기 · 바꾸기 (바꾸면 예전 주소는 막힘) — 운영자(senders 문서에 admin: true)만 */
   setFloorKey?(k: string): Promise<string>;
+  /** 운영자인지 (키 번호를 바꿀 수 있는지) */
+  isAdmin?(): Promise<boolean>;
   /** 그날 카페 실적 (빵 판매 · 50% 할인) — 매출 금액은 화면에 쓰지 않음 */
   report(date: string): Promise<DayReport | null>;
   /** 빵 몇 개를 잠정(provisional) 또는 최종(final) 확정 — 있던 확정에 더해 씀 */
@@ -167,6 +169,16 @@ export function cloudApi(board: string, auth: boolean): Api {
       }
       return doc;
     },
+    async isAdmin() {
+      const s = session();
+      if (!s) return false;
+      try {
+        const doc = await http(`${docs()}/senders/${encodeURIComponent(s.email)}`, { headers: { Authorization: `Bearer ${await idToken()}` } });
+        return doc.fields?.admin?.booleanValue === true;
+      } catch {
+        return false;
+      }
+    },
     async floorKey() {
       if (floorCache) return floorCache;
       try {
@@ -179,6 +191,7 @@ export function cloudApi(board: string, auth: boolean): Api {
     },
     async setFloorKey(k) {
       if (!validFloorKey(k)) throw new CloudError("키 번호는 숫자 4 ~ 12자리로 적어 주세요.");
+      if (!(await this.isAdmin!())) throw new CloudError("키 번호는 운영자 계정만 바꿀 수 있습니다.", 403);
       const old = await this.floorKey!();
       if (old === k) return k;
       const auth = { Authorization: `Bearer ${await idToken()}` };
@@ -192,7 +205,7 @@ export function cloudApi(board: string, auth: boolean): Api {
         try {
           await http(`${docs()}/floor/${k}`, { method: "PATCH", headers: { "Content-Type": "application/json", ...auth }, body: JSON.stringify({ fields }) });
         } catch {
-          throw new CloudError("이미 다른 곳에서 쓰는 번호입니다. 다른 번호로 해 주세요.");
+          throw new CloudError("이미 다른 곳에서 쓰는 번호이거나, 운영자 권한이 아직 규칙에 없습니다. 다른 번호로 해 보거나 운영자 설정을 확인해 주세요.");
         }
       }
       // 이미 있는 계획 · 확정을 새 주소로 옮겨 둠 (어제 ~ 열흘 뒤)
@@ -298,6 +311,7 @@ export function demoApi(): Api {
     order: async (date) => orders.get(date) || null,
     report: async (date) => board.report(date) || null,
     floorKey: async () => demoFloor,
+    isAdmin: async () => true,
     async setFloorKey(k) {
       if (!validFloorKey(k)) throw new CloudError("키 번호는 숫자 4 ~ 12자리로 적어 주세요.");
       return (demoFloor = k);

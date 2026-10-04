@@ -16,6 +16,10 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/senders/$(email()))
         && get(/databases/$(database)/documents/senders/$(email())).data.board == board;
     }
+    // 운영자 — senders/{이메일} 문서에 admin: true (Firebase 콘솔에서만 넣음). 태블릿 키 번호를 바꿀 수 있음
+    function isAdmin(board) {
+      return isSender(board) && get(/databases/$(database)/documents/senders/$(email())).data.get("admin", false) == true;
+    }
     function piece(name) {
       return !(name in request.resource.data) || (request.resource.data[name] is string && request.resource.data[name].size() < 900000);
     }
@@ -64,8 +68,10 @@ service cloud.firestore {
       }
 
       // 상품 분류표 · 정리한 영수증 줄 — 입력 계정만 (폰은 안 읽음)
+      // 상품 분류표 등 — 입력 계정. 단 태블릿 키 번호(config/floor)는 운영자만 씀
       match /config/{doc} {
-        allow read, write: if isSender(board);
+        allow read: if isSender(board);
+        allow write: if isSender(board) && (doc != "floor" || isAdmin(board));
       }
       match /lines/{id} {
         allow read, write: if isSender(board);
@@ -75,9 +81,9 @@ service cloud.firestore {
     // 현장 태블릿 (D-1) — 매장 열쇠 대신 키 번호. floor/{키 번호} = { board, active } 는 매니저 앱 [태블릿 주소]에서 만들고 바꿈
     //   days/{날짜} = 빵 이름 · 수량 · 상태 복사본만 (매출 · 예상 손님 없음) → 태블릿 주소를 받은 직원은 이것만 봄
     match /floor/{fk} {
-      allow create: if isSender(request.resource.data.board) && request.resource.data.keys().hasOnly(["board", "at", "active"]);
-      // 키 번호를 바꾸면 예전 번호는 active = false (같은 매장 매니저만)
-      allow update: if isSender(resource.data.board)
+      allow create: if isAdmin(request.resource.data.board) && request.resource.data.keys().hasOnly(["board", "at", "active"]);
+      // 키 번호를 바꾸면 예전 번호는 active = false (같은 매장 운영자만)
+      allow update: if isAdmin(resource.data.board)
         && request.resource.data.board == resource.data.board
         && request.resource.data.keys().hasOnly(["board", "at", "active"]);
       match /days/{date} {

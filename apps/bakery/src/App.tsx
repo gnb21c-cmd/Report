@@ -683,12 +683,14 @@ function Result({ api, today }: { api: Api; today: string }) {
 /** 태블릿 주소 — 주소 뒤 키 번호를 정하고 바꿈. 바꾸면 예전 주소는 바로 막힘 (직원이 바뀌었을 때) */
 function TabletKeyView({ api }: { api: Api }) {
   const [key, setKey] = useState<string | null>(null);
+  const [admin, setAdmin] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   useEffect(() => {
     if (!api.floorKey) return setKey("");
     api.floorKey().then((k) => setKey(k), (e) => setMsg((e as Error).message));
+    api.isAdmin?.().then(setAdmin, () => setAdmin(false));
   }, [api]);
   const url = key ? tabletUrl(key) : "";
   const save = async () => {
@@ -712,7 +714,7 @@ function TabletKeyView({ api }: { api: Api }) {
     <main className="content">
       <section className="card">
         <h2>현장 태블릿 주소</h2>
-        <p className="muted">로그인 없이 이 주소를 아는 태블릿 · 폰에서 오늘 생산 · 내일 준비를 봅니다 (빵 수량만, 매출 없음). 직원이 바뀌면 키 번호를 바꾸세요 — 예전 주소는 바로 막힙니다.</p>
+        <p className="muted">로그인 없이 이 주소를 아는 태블릿 · 폰에서 오늘 생산 · 내일 준비를 봅니다 (빵 수량만, 매출 없음). 직원이 바뀌면 운영자가 키 번호를 바꿉니다 — 예전 주소는 바로 막힙니다.</p>
         {key == null ? (
           <p className="muted">불러오는 중…</p>
         ) : key ? (
@@ -738,10 +740,10 @@ function TabletKeyView({ api }: { api: Api }) {
             </div>
           </>
         ) : (
-          <p className="warn">아직 키 번호가 없습니다 — 아래에 숫자를 정해 저장하면 태블릿 주소가 생깁니다.</p>
+          <p className="warn">{admin ? "아직 키 번호가 없습니다 — 아래에 숫자를 정해 저장하면 태블릿 주소가 생깁니다." : "아직 키 번호가 없습니다 — 운영자가 정하면 태블릿 주소가 생깁니다."}</p>
         )}
       </section>
-      {api.setFloorKey && (
+      {api.setFloorKey && admin && (
         <section className="card">
           <h2>{key ? "키 번호 바꾸기" : "키 번호 정하기"}</h2>
           <div className="key-row">
