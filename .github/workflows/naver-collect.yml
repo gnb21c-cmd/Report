@@ -1,5 +1,5 @@
 # 네이버 예약 자동 수집 — 매일 아침 9시 40분(한국 시간) POS 메인 PC(실행기 nice-pos)에서 어제 예약현황을 읽어 A 네이버 칸을 채움
-# 판매입장권 = 이용완료 (평일 무제한 · 야간자유 입장), 신규방문자 = 완료자 목록의 '완료 1'. apps/collector/src/naver.ts · packages/core/src/naverAuto.ts
+# 판매입장권 = 이용완료 (평일 무제한 · 야간자유 입장), 신규방문자 = 어제 목록에 나온 줄 수 = '완료 N' 인 손님. apps/collector/src/naver.ts · packages/core/src/naverAuto.ts
 # 어제 + 지난 7일 중 네이버 칸이 빈 날 · 사람이 A 에서 넣은 칸은 그대로
 # 로그인은 POS 메인 PC에서 사람이 한 번 해 둔 상태(실행기 도구 폴더의 naver-login\state.json) — 풀리면 C:\actions-runner\naver-login.cmd 로 다시
 # 공개 저장소라 기록에는 칸 수 · 같음/다름만 남김 (인원 숫자 · 이름 · 사업장 번호 없음)

@@ -1,11 +1,12 @@
 /* ============================================================
    네이버 스마트플레이스 예약 관리(partner.booking.naver.com) — 사람이 하는 순서 그대로
    예약 → 예약현황 → 일간 · 전체 → 날짜를 어제로 → 회차 칸마다 '이용완료 N' 읽기
-   → 그 칸을 누르면 오른쪽에 나오는 완료자 목록에서 '완료 1'(처음 온 손님) 세기 → 닫기
+   → 그 칸을 누르면 오른쪽에 나오는 완료자 목록(1줄 = 예약 1건)에서 줄마다 '완료 N' · 손님 표시 읽기 → 닫기
    로그인은 POS 메인 PC에서 사람이 한 번 해 둔 상태(state.json)를 씀 (naver-login/login.mjs)
-   이름 · 전화번호는 읽지 않음 — '완료 N' 숫자와 (같은 사람 두 번 세지 않으려고) 예약번호만 메모리에서 씀
+   같은 손님인지 맞춰 보려고 이름 · 전화 뒷자리를 읽지만 바로 알아볼 수 없는 값으로 바꾸고 원래 글은 버림 — 저장 · 기록하지 않음
    공개 저장소라 기록에는 칸 수 · 같음/다름만 남김 (인원 숫자 · 상품 이름 · 사업장 번호 없음)
    ============================================================ */
+import { createHash, randomBytes } from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { NaverCellRead } from "@report/core";
 import { mask, say } from "./okpos";
@@ -15,6 +16,8 @@ const pause = (min = 800, max = 1600) => new Promise((r) => setTimeout(r, min + 
 const DATE_RE = "(\\d{4})\\.\\s*(\\d{1,2})\\.\\s*(\\d{1,2})\\.";
 
 export class NaverBook {
+  /** 손님 표시를 만들 때 섞는 값 — 실행마다 새로, 어디에도 남기지 않음 */
+  private salt = randomBytes(16).toString("hex");
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -152,28 +155,39 @@ export class NaverBook {
     return r;
   }
 
-  /** 이용완료 칸을 눌러 오른쪽 완료자 목록에서 '완료 1' 수를 셈 — 목록 건수도 돌려줌 (이용완료 수와 견주려고) */
-  async countFirst(key: number): Promise<{ first: number; listed: number }> {
+  /** 이용완료 칸을 눌러 오른쪽 완료자 목록을 읽음 — 줄(예약 1건)마다 손님 표시 · '완료 N' · 예약번호
+   *  손님 표시는 이름 · 전화 뒷자리를 이번 실행에서만 쓰는 무작위 값과 섞어 바꾼 것 (원래 글은 바로 버림) */
+  async readList(key: number): Promise<{ who: string; n: number; id: string }[]> {
     const p = this.page;
     const cell = p.locator(`[data-nv="${key}"]`).first();
     await cell.scrollIntoViewIfNeeded().catch(() => {});
     await cell.click({ timeout: 5000 });
     await p.waitForTimeout(1500);
-    const seen = new Map<string, number>();
+    const seen = new Map<string, { who: string; n: number; id: string }>();
     for (let round = 0; round < 30; round++) {
-      // 완료자 카드: '완료 N' 줄 (탭 · 단추 안은 뺌) → 카드 안의 예약번호를 같은 사람 표시로만 씀
+      // 완료자 카드: '완료 N' 줄 (탭 · 단추 안은 뺌) → 카드(예약번호를 품은 곳) 안에서 바로 위 글 = 이름, 전화번호 뒷 4자리
       const got = (await p.evaluate(`(() => {
         const txt = (el) => (el.innerText || "").trim();
+        const leaf = (el) => !el.children.length;
         const out = [];
         for (const el of document.querySelectorAll("body *")) {
-          if (el.children.length) continue;
+          if (!leaf(el)) continue;
           const m = txt(el).match(/^완료\\s*(\\d+)$/);
           if (!m || el.closest("button, a, [role=tab], [role=tablist]")) continue;
           const r = el.getBoundingClientRect();
           if (!r.width || r.left < window.innerWidth * 0.45) continue;
-          let card = el.parentElement, key = "";
-          for (let k = 0; k < 6 && card; k++, card = card.parentElement) { const n = txt(card).match(/예약번호\\s*(\\d{6,})/); if (n) { key = n[1]; break; } }
-          out.push([key || "y" + Math.round(r.top + window.scrollY), Number(m[1])]);
+          let card = el.parentElement, id = "";
+          for (let k = 0; k < 6 && card; k++, card = card.parentElement) { const n = txt(card).match(/예약번호\\s*(\\d{6,})/); if (n) { id = n[1]; break; } }
+          if (!card) card = el.parentElement && el.parentElement.parentElement;
+          let name = "", tel = "";
+          if (card) {
+            const leaves = [...card.querySelectorAll("*")].filter((x) => leaf(x) && txt(x));
+            const at = leaves.indexOf(el);
+            for (let i = at - 1; i >= 0; i--) { const t = txt(leaves[i]); if (t.length <= 20 && !/\\d/.test(t) && !/^(완료|노쇼|확정|취소|신청|이용완료|예약번호)/.test(t)) { name = t; break; } }
+            const ph = txt(card).match(/01\\d[-\\s.]?[\\d*]{3,4}[-\\s.]?(\\d{4})/);
+            if (ph) tel = ph[1];
+          }
+          out.push({ id: id || "y" + Math.round(r.top + window.scrollY), n: Number(m[1]), raw: name || tel ? name + "|" + tel : "" });
         }
         // 목록을 아래로 (스크롤 되는 칸)
         let sc = null;
@@ -181,8 +195,8 @@ export class NaverBook {
         let more = false;
         if (sc) { const before = sc.scrollTop; sc.scrollTop = before + sc.clientHeight * 0.8; more = sc.scrollTop > before; }
         return { out, more };
-      })()`)) as { out: [string, number][]; more: boolean };
-      for (const [k, n] of got.out) seen.set(k, n);
+      })()`)) as { out: { id: string; n: number; raw: string }[]; more: boolean };
+      for (const x of got.out) seen.set(x.id, { id: x.id, n: x.n, who: x.raw ? createHash("sha256").update(this.salt + x.raw).digest("hex").slice(0, 16) : "" });
       if (!got.more) break;
       await p.waitForTimeout(500);
     }
@@ -192,8 +206,7 @@ export class NaverBook {
     const closeBtn = p.locator('[aria-label*="닫기"], button:has-text("닫기")').last();
     if (await closeBtn.isVisible().catch(() => false)) await closeBtn.click({ timeout: 3000 }).catch(() => {});
     await p.waitForTimeout(500);
-    const vals = [...seen.values()];
-    return { first: vals.filter((n) => n === 1).length, listed: vals.length };
+    return [...seen.values()];
   }
 
   /** 화면 구조 기록 — 개수 · 정해 둔 낱말만 (이름 · 숫자 없음) */

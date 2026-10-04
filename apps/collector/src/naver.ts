@@ -1,7 +1,7 @@
 /* ============================================================
    네이버 예약 자동 수집 — 매일 아침 09:40 POS 메인 PC(실행기 nice-pos)에서 어제 예약현황을 읽어 A 네이버 칸(30분마다)을 채움
-   - 판매입장권 = 이용완료, 신규방문자 = 완료자 목록의 '완료 1' (packages/core/src/naverAuto.ts)
-     '완료 N' 은 손님 아이디를 따라가는 누적 방문 수라, 다음 날 아침에 본 어제만 신규방문자가 맞음 — 더 지난 날은 신규방문자 '모름'(판매입장권만)
+   - 판매입장권 = 이용완료, 신규방문자 = 어제 완료자 목록에 나온 줄 수가 그 손님의 '완료 N' 과 같은 손님 (packages/core/src/naverAuto.ts)
+     '완료 N' 은 손님 아이디를 따라가는 누적 이용완료 예약 건수라, 다음 날 아침에 본 어제만 신규방문자가 맞음 — 더 지난 날은 신규방문자 '모름'(판매입장권만)
    - 어제 + 지난 7일 중 네이버 칸이 빈 날 (PC가 꺼져 있던 날) · 사람이 A 에서 넣은 칸은 그대로
    - 로그인은 사람이 POS 메인 PC에서 한 번 해 둔 상태(state.json) — 없거나 풀렸으면 실패로 끝나고 다시 로그인하라고 알림
      로그인 창(naver-login.cmd)은 이 수집이 실행기 폴더에 깔아 둠
@@ -12,7 +12,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addDays, dayRange, isNaverTicketProduct, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverPartFrom, type NaverCellRead, type NaverPart } from "@report/core";
+import { addDays, dayRange, isNaverTicketProduct, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
 import { fbLogin, readPiece, writePiecesOf } from "./firebase";
 import { NaverBook } from "./naverBook";
 import { mask, say } from "./okpos";
@@ -89,29 +89,32 @@ async function main() {
         if (probe) await nb.probe(md(date));
         if (!rows) throw new Error("회차 표를 못 찾음");
         const reads: NaverCellRead[] = [];
-        let firstOk = 0;
-        let listMismatch = 0;
+        const visits: NaverVisit[] = [];
+        let listOk = 0;
+        let listFail = 0;
         for (const c of cells) {
           let first: number | null = 0;
-          // '완료 N' 은 그 손님의 지금까지 누적 방문 수 — 다음 날 아침(다시 오기 전)에 본 어제만 신규방문자가 맞음
-          // 그 전 날짜는 그 뒤에 다시 온 손님이 '완료 2' 이상으로 바뀌어 있으니 신규방문자는 '모름'(noNew)
+          // '완료 N' 은 그 손님의 지금까지 누적 이용완료 예약 건수 — 다음 날 아침(다시 오기 전)에 본 어제만 신규방문자가 맞음
+          // 그 전 날짜는 그 뒤에 다시 온 손님이 바뀌어 있으니 신규방문자는 '모름'(noNew)
+          // 어제는 이용완료가 있는 칸을 상품 가리지 않고 모두 열어 봄 (다른 상품 예약도 그 손님의 '완료 N' 에 들어가니까)
           if (date !== yesterday) first = null;
-          else if (c.done > 0 && isNaverTicketProduct(c.product)) {
+          else if (c.done > 0) {
             try {
-              const r = await nb.countFirst(c.key);
-              first = r.first;
-              firstOk++;
-              if (r.listed !== c.done) listMismatch++;
+              for (const x of await nb.readList(c.key)) visits.push({ ...x, time: c.time, product: c.product });
+              listOk++;
             } catch (e) {
+              listFail++;
+              if (isNaverTicketProduct(c.product)) first = null;
               say(`  ${md(date)} 완료자 목록을 못 읽은 칸 하나 (${mask((e as Error).message).split("\n")[0].slice(0, 60)})`);
             }
           }
           reads.push({ product: c.product, time: c.time, done: c.done, first });
         }
-        const r = naverPartFrom(date, reads);
+        const r = naverPartFrom(date, reads, date === yesterday ? visits : undefined);
+        const nv = date === yesterday ? naverNewVisitors(visits) : null;
         const ticketCells = reads.filter((x) => x.done > 0 && isNaverTicketProduct(x.product)).length;
         say(
-          `${md(date)}: 회차 ${rows}줄 · 상품 열 ${headers.length}개 · 이용완료 칸 ${cells.length}개(판매입장권 ${ticketCells}칸) · 완료자 목록 ${firstOk}칸 읽음${listMismatch ? ` (목록 건수와 이용완료가 다른 칸 ${listMismatch})` : ""}${r.skipped.length ? ` · 19:30 넘는 회차 ${r.skipped.length}개 뺌` : ""}${r.overlap.length ? ` · 겹침 ${r.overlap.join(",")}` : ""}${r.part.noNew ? " · 신규방문자 모름" : ""}`,
+          `${md(date)}: 회차 ${rows}줄 · 상품 열 ${headers.length}개 · 이용완료 칸 ${cells.length}개(판매입장권 ${ticketCells}칸)${date === yesterday ? ` · 완료자 목록 ${listOk}칸 읽음${listFail ? ` · 못 읽음 ${listFail}칸` : ""}${nv ? (nv.unknown ? ` · 손님을 못 알아본 줄 ${nv.unknown}개('완료 1' 로만 셈)` : " · 손님 모두 알아봄") : ""}` : ""}${r.skipped.length ? ` · 19:30 넘는 회차 ${r.skipped.length}개 뺌` : ""}${r.overlap.length ? ` · 겹침 ${r.overlap.join(",")}` : ""}${r.part.noNew ? " · 신규방문자 모름" : ""}`,
         );
         const old = fb ? await readPiece(fb, date, "naver") : null;
         if (old?.p && old.by !== NAVER_AUTO_BY) {
