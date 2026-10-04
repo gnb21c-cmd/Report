@@ -12,6 +12,7 @@ import {
   displayDays,
   finalDay,
   floorCopy,
+  validFloorKey,
   HOURS,
   madeTotal,
   makeFinal,
@@ -217,5 +218,16 @@ describe("현장 태블릿 복사본 — 수량 · 상태만", () => {
     expect(JSON.stringify(f)).not.toMatch(/321|쾌적|base|adj|outlook|매니저/);
     const now = T("2026-10-12", "07:00");
     expect(orderRows(f.plan, f.order, now)).toEqual(orderRows(plan, order, now));
+  });
+});
+
+describe("태블릿 키 번호", () => {
+  it("숫자 4 ~ 12자리만", () => {
+    expect(validFloorKey("910278")).toBe(true);
+    expect(validFloorKey("0123")).toBe(true);
+    expect(validFloorKey("123")).toBe(false);
+    expect(validFloorKey("1234567890123")).toBe(false);
+    expect(validFloorKey("91a278")).toBe(false);
+    expect(validFloorKey(" 910278")).toBe(false);
   });
 });

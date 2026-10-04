@@ -190,6 +190,9 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
 
 /* ---------- 현장 태블릿 복사본 ---------- */
 
+/** 태블릿 주소 뒤 키 번호 — 숫자 4 ~ 12자리 (매니저 앱에서 정하고 바꿈, 바꾸면 예전 주소는 막힘) */
+export const validFloorKey = (k: string) => /^[0-9]{4,12}$/.test(k);
+
 /**
  * 현장 태블릿(D-1)에 주는 복사본 — 빵 이름 · 수량 · 정한 날만 (예상 손님 · 날씨 · 보정 · 누가 확정했는지는 뺌)
  * 태블릿 주소에는 매장 열쇠 대신 태블릿 열쇠를 써서, 직원이 매출 보고(B)를 열 수 없게 함

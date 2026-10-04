@@ -550,3 +550,37 @@ tr.sum td {
   font-weight: 600;
   font-size: 12px;
 }
+
+/* 태블릿 주소 */
+.url-box {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 15px;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  word-break: break-all;
+  margin: 8px 0;
+}
+.btn-row,
+.key-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.key-row {
+  grid-template-columns: minmax(0, 1fr) 96px;
+  margin: 8px 0;
+}
+.key-row input {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--page);
+  color: var(--text);
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+.card .btn-row .ghost {
+  margin-top: 0;
+}

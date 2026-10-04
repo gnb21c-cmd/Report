@@ -13,6 +13,7 @@ import {
   CONFIRM_DEADLINE,
   count,
   dayResult,
+  validFloorKey,
   displayDays,
   FINAL_LEAD,
   nowKst,
@@ -119,7 +120,7 @@ function Login({ onDone }: { onDone: () => void }) {
 }
 
 /* ---------- D 매니저 ---------- */
-type Tab = "week" | "final" | "order" | "result" | "outlook";
+type Tab = "week" | "final" | "order" | "result" | "outlook" | "tablet";
 /** 큰 화면 둘 — 다음 주 잠정 확정 · 3일 뒤 최종 확정 */
 const TABS: [Tab, string][] = [
   ["week", "다음 주 잠정 확정"],
@@ -130,6 +131,7 @@ const MORE: [Tab, string][] = [
   ["order", "오늘·내일 명령서"],
   ["result", "결과"],
   ["outlook", "1~4주 전망"],
+  ["tablet", "태블릿 주소"],
 ];
 
 function useDay(api: Api, date: string) {
@@ -196,9 +198,10 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
       </nav>
       {tab === "week" && <WeekView api={api} today={today} who={who} />}
       {tab === "final" && <Confirm api={api} date={addDays(today, FINAL_LEAD)} kind="final" who={who} />}
-      {tab === "order" && <OrderView api={api} board={board} />}
+      {tab === "order" && <OrderView api={api} />}
       {tab === "result" && <Result api={api} today={today} />}
       {tab === "outlook" && <OutlookView api={api} monday={comingMonday(today)} />}
+      {tab === "tablet" && <TabletKeyView api={api} />}
     </div>
   );
 }
@@ -502,7 +505,7 @@ async function share(text: string, title: string): Promise<string> {
 }
 
 /** 명령서 — 오늘 생산 · 내일 준비 (현장 태블릿과 같은 두 날, 아침 6시 기준) */
-function OrderView({ api, board }: { api: Api; board: string }) {
+function OrderView({ api }: { api: Api }) {
   const [d0, d1] = displayDays(nowKst());
   const a = useDay(api, d0);
   const b = useDay(api, d1);
@@ -531,21 +534,6 @@ function OrderView({ api, board }: { api: Api; board: string }) {
         <button className="primary big" disabled={!ra.length && !rb.length} onClick={async () => setMsg(await share(text, "생산 명령서"))}>
           카톡으로 보내기
         </button>
-        {api.kind === "cloud" && api.floorKey && (
-          <button
-            className="ghost"
-            onClick={async () => {
-              try {
-                const fk = await api.floorKey!();
-                setMsg(await share(`현장 태블릿 생산 명령서 주소 (크롬으로 열고 홈 화면에 추가 · 로그인 없음)\n${tabletUrl(fk)}`, "현장 태블릿 주소"));
-              } catch (e) {
-                setMsg((e as Error).message);
-              }
-            }}
-          >
-            현장 태블릿 주소 보내기
-          </button>
-        )}
         {msg && <p className="msg">{msg}</p>}
       </section>
     </main>
@@ -688,6 +676,84 @@ function Result({ api, today }: { api: Api; today: string }) {
         )}
         {rows && rows.length > 0 && !known && <p className="muted">이날은 작업지시 전이라 생산 · 폐기를 모릅니다.</p>}
       </section>
+    </main>
+  );
+}
+
+/** 태블릿 주소 — 주소 뒤 키 번호를 정하고 바꿈. 바꾸면 예전 주소는 바로 막힘 (직원이 바뀌었을 때) */
+function TabletKeyView({ api }: { api: Api }) {
+  const [key, setKey] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (!api.floorKey) return setKey("");
+    api.floorKey().then((k) => setKey(k), (e) => setMsg((e as Error).message));
+  }, [api]);
+  const url = key ? tabletUrl(key) : "";
+  const save = async () => {
+    if (!api.setFloorKey) return;
+    if (!validFloorKey(input)) return setMsg("키 번호는 숫자 4 ~ 12자리로 적어 주세요.");
+    if (key && !confirm(`키 번호를 ${input} 로 바꿀까요?\n지금 주소(…/d1/${key}/)는 바로 막히고, 태블릿마다 새 주소로 다시 열어야 합니다.`)) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const k = await api.setFloorKey(input);
+      setKey(k);
+      setInput("");
+      setMsg("저장했습니다. 태블릿에서 새 주소로 열어 주세요.");
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <main className="content">
+      <section className="card">
+        <h2>현장 태블릿 주소</h2>
+        <p className="muted">로그인 없이 이 주소를 아는 태블릿 · 폰에서 오늘 생산 · 내일 준비를 봅니다 (빵 수량만, 매출 없음). 직원이 바뀌면 키 번호를 바꾸세요 — 예전 주소는 바로 막힙니다.</p>
+        {key == null ? (
+          <p className="muted">불러오는 중…</p>
+        ) : key ? (
+          <>
+            <div className="url-box">{url}</div>
+            <div className="btn-row">
+              <button
+                className="ghost"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    setMsg("주소를 복사했습니다.");
+                  } catch {
+                    setMsg("복사가 안 되면 주소를 길게 눌러 복사해 주세요.");
+                  }
+                }}
+              >
+                주소 복사
+              </button>
+              <button className="primary" onClick={async () => setMsg(await share(`현장 태블릿 생산 명령서 (크롬으로 열고 홈 화면에 추가 · 로그인 없음)\n${url}`, "현장 태블릿 주소"))}>
+                카톡으로 보내기
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="warn">아직 키 번호가 없습니다 — 아래에 숫자를 정해 저장하면 태블릿 주소가 생깁니다.</p>
+        )}
+      </section>
+      {api.setFloorKey && (
+        <section className="card">
+          <h2>{key ? "키 번호 바꾸기" : "키 번호 정하기"}</h2>
+          <div className="key-row">
+            <input inputMode="numeric" value={input} placeholder="숫자 4 ~ 12자리" onChange={(e) => setInput(e.target.value.replace(/[^0-9]/g, "").slice(0, 12))} aria-label="새 키 번호" />
+            <button className="primary" disabled={busy || !input} onClick={save}>
+              {busy ? "저장 중…" : key ? "바꾸기" : "저장"}
+            </button>
+          </div>
+          <p className="muted">짧은 번호는 남이 짐작하기 쉬우니, 외부에 알려졌다 싶으면 바로 바꿔 주세요.</p>
+        </section>
+      )}
+      {msg && <p className="msg center">{msg}</p>}
     </main>
   );
 }

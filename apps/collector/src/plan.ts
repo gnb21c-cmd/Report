@@ -69,7 +69,7 @@ async function main() {
     for (const p of out.values()) days.push({ date: p.date, json: JSON.stringify(floorCopy(p, asOrder(parse(await readOrder(fb, p.date))))) });
     await writeFloor(fb, floor, days);
     console.log(`현장 태블릿 복사: ${days.length}일`);
-  } else console.log("현장 태블릿 열쇠가 아직 없음 (매니저 앱에서 '현장 태블릿 주소 보내기'를 누르면 만들어짐)");
+  } else console.log("현장 태블릿 키 번호가 아직 없음 (매니저 앱 [태블릿 주소]에서 정함)");
 }
 
 main().catch((e) => {
