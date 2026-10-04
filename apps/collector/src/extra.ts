@@ -67,6 +67,7 @@ async function main() {
   };
   const restart = async () => {
     await nb.close().catch(() => {});
+    await new Promise((r) => setTimeout(r, 10000)); // 바로 다시 들어가면 나이스가 빈 응답을 줄 때가 있음
     nb = await Nibs.open();
     await start();
   };

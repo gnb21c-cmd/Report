@@ -131,7 +131,15 @@ export class Nibs {
 
   async login(id: string, pw: string) {
     const p = this.page;
-    const res = await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 });
+    let res: Awaited<ReturnType<Page["goto"]>> = null;
+    for (let i = 0; i < 3; i++) {
+      res = await p.goto(NIBS, { waitUntil: "domcontentloaded", timeout: 40000 }).catch((e) => {
+        say(`로그인 화면 열기 실패 (${i + 1}번째): ${mask(String(e.message).split("\n")[0])}`);
+        return null;
+      });
+      if (res && res.status() < 400) break;
+      await p.waitForTimeout(5000 * (i + 1));
+    }
     if (!res || res.status() >= 400) throw new Error(`로그인 화면을 못 엶 (${res?.status()})`);
     let pwBox = await this.visible((f) => f.locator("input[type=password]"), 20000);
     if (!pwBox) {
@@ -178,7 +186,8 @@ export class Nibs {
   /** 화면 안 알림창(로그인 시각 등)의 [확인] — 떠 있는 동안 다 누름 */
   private async closeAlerts(ms: number) {
     for (let t = 0; t <= ms; t += 500) {
-      const ok = await this.visible((f) => f.locator('[id*="alert_"][id$="btn_Confirm"], [id*="alert_"][id$="btn_confirm"]'));
+      let ok = await this.visible((f) => f.locator('[id*="alert_"][id$="btn_Confirm"], [id*="alert_"][id$="btn_confirm"]'));
+      if (!ok) ok = await this.visible((f) => f.locator('[id*="alert_"] input[type=button]').filter({ hasText: /./ }).or(f.locator('[id*="alert_"] input[type=button][value="확인"]')));
       if (ok) {
         await ok.click({ timeout: 5000 }).catch(() => {});
         say("알림창 확인");
@@ -193,9 +202,18 @@ export class Nibs {
   async openSearch() {
     // 로그인 시각 알림이 늦게 떠서 메뉴를 가림
     await this.closeAlerts(4000);
-    const menu = await this.visible((f) => f.locator('[id^="mf_side_gen_topMenu_"][id$="_btn_menu"]').filter({ hasText: loose("거래조회") }), 10000);
-    if (menu) await menu.click({ timeout: 10000 });
-    else if (!(await this.clickText("거래조회", 5000))) throw new Error("메뉴 '거래조회' 를 못 찾음");
+    // 알림창이 몇 초 뒤에 떠서 메뉴를 가리기도 함 → 짧게 눌러 보고, 막히면 알림창 닫고 다시
+    let clicked = false;
+    for (let t = 0; t < 40000 && !clicked; t += 3000) {
+      const menu = (await this.visible((f) => f.locator('[id^="mf_side_gen_topMenu_"][id$="_btn_menu"]').filter({ hasText: loose("거래조회") }), 3000)) || (await this.visible((f) => byName(f, "거래조회")));
+      if (!menu) throw new Error("메뉴 '거래조회' 를 못 찾음");
+      clicked = await menu.click({ timeout: 2000 }).then(
+        () => true,
+        () => false,
+      );
+      if (!clicked) await this.closeAlerts(1000);
+    }
+    if (!clicked) throw new Error("메뉴 '거래조회' 가 눌리지 않음 (알림창에 가림)");
     say("거래조회 누름");
     await this.page.waitForTimeout(800);
     if (!(await this.visible((f) => byName(f, "통합거래조회"), 2000))) {
