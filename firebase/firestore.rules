@@ -45,7 +45,7 @@ service cloud.firestore {
         allow write: if isSender(board) && piece("json");
       }
 
-      // 베이커리 작업지시 — 계획(plans: 매일 16시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
+      // 베이커리 작업지시 — 계획(plans: 매일 14시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
       match /plans/{date} {
         allow read: if true;
         allow write: if isSender(board)

@@ -1,4 +1,4 @@
-/* 작업지시 예측 시험 — 클라우드의 지난 자료로 "그날 이틀 전(전날 16시, 자료는 이틀 전까지)에 예측했다면 몇 % 틀렸을까"
+/* 작업지시 예측 시험 — 클라우드의 지난 자료로 "그날 이틀 전(전날 14시, 자료는 이틀 전까지)에 예측했다면 몇 % 틀렸을까"
    공개 저장소라 기록에는 오차 % · 날씨 배수만 남김 (방문객 수 · 매출 · 빵 개수 없음)
    BT_FROM ~ BT_TO (없으면 2026-04-01 ~ 마지막 자료일) · 날씨 배수는 그 전 자료로 배움 */
 import { addDays, applySettings, backtest, Board, dayKind, dayRange, DEFAULT_LEARNED, learnWeather, WEATHER_CLASSES, type Learned } from "@report/core";

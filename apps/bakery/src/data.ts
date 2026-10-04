@@ -1,15 +1,17 @@
 /* ============================================================
-   작업지시 자료 — 클라우드(Firebase) 의 plans/{날짜} (16시 계획) · orders/{날짜} (매니저 확정)
+   작업지시 자료 — 클라우드(Firebase) 의 plans/{날짜} (14시 계획) · orders/{날짜} (매니저 확정)
    - D(매니저): 이메일 · 비밀번호 로그인 → senders 명단의 매장 열쇠로 읽고 씀
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, Board, DEFAULT_LEARNED, makePlans, nowKst, sampleUntilYesterday, type OrderDoc, type OrderLine, type PlanDoc } from "@report/core";
+import { addDays, Board, DEFAULT_LEARNED, makePlans, nowKst, sampleUntilYesterday, type DayReport, type OrderDoc, type OrderLine, type PlanDoc } from "@report/core";
 
 export interface Api {
   kind: "cloud" | "demo";
   plan(date: string): Promise<PlanDoc | null>;
   order(date: string): Promise<OrderDoc | null>;
+  /** 그날 카페 실적 (빵 판매 · 50% 할인) — 매출 금액은 화면에 쓰지 않음 */
+  report(date: string): Promise<DayReport | null>;
   /** 빵 몇 개를 확정 (있던 확정에 더해 씀) */
   confirm(date: string, lines: Record<string, number>, by: string): Promise<OrderDoc>;
 }
@@ -134,6 +136,18 @@ export function cloudApi(board: string, auth: boolean): Api {
     kind: "cloud",
     plan: (date) => readJson<PlanDoc>(board, "plans", date, auth),
     order: (date) => readJson<OrderDoc>(board, "orders", date, auth),
+    async report(date) {
+      try {
+        const headers: Record<string, string> = auth ? { Authorization: `Bearer ${await idToken()}` } : {};
+        const doc = await http(`${docs()}/boards/${board}/reports/${date}${auth ? "" : `?key=${env.apiKey}`}`, { headers });
+        const v = doc.fields?.cafe?.stringValue;
+        const cafe = v ? JSON.parse(v).p : null;
+        return cafe ? { date, cafe } : null;
+      } catch (e) {
+        if ((e as CloudError).status === 404) return null;
+        throw e;
+      }
+    },
     async confirm(date, lines, by) {
       const old = (await readJson<OrderDoc>(board, "orders", date, true)) || { v: 1 as const, date, items: {} };
       const at = new Date().toISOString();
@@ -155,7 +169,7 @@ export function demoApi(): Api {
   const today = nowKst().date;
   const board = new Board(sampleUntilYesterday(today));
   const plans = new Map<string, PlanDoc>();
-  // 어제 16시에 센 계획(오늘 = 확정안) + 오늘 16시 계획
+  // 어제 14시에 센 계획(오늘 = 확정안) + 오늘 14시 계획
   for (const p of makePlans(board, {}, DEFAULT_LEARNED, addDays(today, -1), addDays(today, -2), () => undefined)) plans.set(p.date, p);
   for (const p of makePlans(board, {}, DEFAULT_LEARNED, today, addDays(today, -1), (d) => plans.get(d))) plans.set(p.date, p);
   const KEY = "bakery.demo.orders";
@@ -169,6 +183,7 @@ export function demoApi(): Api {
   return {
     kind: "demo",
     plan: async (date) => plans.get(date) || null,
+    report: async (date) => board.report(date) || null,
     order: async (date) => load()[date] || null,
     async confirm(date, lines, by) {
       const all = load();

@@ -116,8 +116,8 @@ input {
   background: var(--surface);
   color: var(--text-2);
   border-radius: 999px;
-  padding: 7px 4px;
-  font-size: 14px;
+  padding: 7px 2px;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -433,4 +433,34 @@ th {
 .hint {
   color: var(--muted);
   margin: 0;
+}
+
+/* 결과 */
+.day-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.day-nav h2 {
+  margin: 0;
+  white-space: nowrap;
+}
+.card .day-nav .ghost {
+  width: auto;
+  margin: 0;
+  padding: 6px 14px;
+}
+.sold-out {
+  font-size: 11px;
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+tr.sum td {
+  font-weight: 800;
+  border-top: 2px solid var(--text);
 }

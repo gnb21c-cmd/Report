@@ -1,14 +1,14 @@
-# 베이커리 작업지시 계획 — 매일 16시(한국 시간) 내일 · 모레 · 글피 빵별 수량을 세어 클라우드 plans/{날짜} 에 씀
+# 베이커리 작업지시 계획 — 매일 14시(한국 시간), 전날 밤 22:10 수집 실적의 오차를 보정해 내일 · 모레 · 글피 빵별 수량을 세어 클라우드 plans/{날짜} 에 씀
 # apps/collector/src/plan.ts (계산은 packages/core/src/bakery.ts) · 매니저 앱(D)이 18시 전에 내일 수량을 확정
 # 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD
-# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작할 수 있어 15:40 에 걸어 둠
+# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작할 수 있어 13:40 에 걸어 둠
 name: 베이커리 계획
 on:
   schedule:
-    - cron: "40 6 * * *" # 06:40 UTC = 15:40 한국
+    - cron: "40 4 * * *" # 04:40 UTC = 13:40 한국
   # 작업 브랜치에 올리면 확인만 (쓰지 않음)
   push:
-    branches: ["feature/bakery-order"]
+    branches: ["feature/bakery-order", "feature/bakery-feedback"]
     paths: ["apps/collector/src/plan.ts", "packages/core/src/bakery.ts", "packages/core/src/forecast.ts", ".github/workflows/bakery-plan.yml"]
   workflow_dispatch:
     inputs:

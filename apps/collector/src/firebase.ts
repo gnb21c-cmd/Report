@@ -126,3 +126,13 @@ export async function writeLines(fb: Fb, date: string, store: "cafe" | "kids", l
     body: JSON.stringify({ fields: { date: str(date), store: str(store), lines: str(JSON.stringify(lines)), at: { timestampValue: now } } }),
   });
 }
+
+/** 매니저 확정 읽기 (없으면 undefined) */
+export async function readOrder(fb: Fb, date: string): Promise<string | undefined> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/orders/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return doc.fields?.json?.stringValue;
+  } catch {
+    return undefined;
+  }
+}

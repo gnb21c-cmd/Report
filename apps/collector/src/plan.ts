@@ -1,11 +1,12 @@
 /* ============================================================
-   작업지시 계획 — 매일 16시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로
+   작업지시 계획 — 매일 14시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로
    내일(확정안) · 모레(잠정 ±5%) · 글피(잠정 ±10%) 빵별 수량을 세어 plans/{날짜} 에 씀 (packages/core/src/bakery.ts makePlans)
+   전날 밤 22:10 자동 수집된 실적으로 지난 2주의 빵별 생산 대비 정가 판매 · 50% 할인 · 폐기를 셈 → 오차를 보정 배수로 다시 넣음 (corrections)
    매니저(D)는 내일 계획을 보고 18시 전에 확정 → orders/{날짜}, 현장 태블릿(D-1)이 확정 수량을 보여 줌
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    ============================================================ */
-import { addDays, applySettings, Board, learnWeather, makePlans, nowKst, type PlanDoc } from "@report/core";
-import { fbLogin, readPlan, writePlans } from "./firebase";
+import { addDays, applySettings, Board, corrections, dayRange, dayResult, learnWeather, makePlans, nowKst, type OrderDoc, type PlanDoc } from "@report/core";
+import { fbLogin, readOrder, readPlan, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
@@ -26,13 +27,24 @@ async function main() {
     const j = await readPlan(fb, d);
     if (j) prev.set(d, JSON.parse(j));
   }
-  const plans = makePlans(board, weather, learned, today, asOf, (d) => prev.get(d));
+  // 지난 2주 결과 — 계획(앱 수량)이 있던 날만 (작업지시를 쓰기 전 날은 없음)
+  const past: { date: string; rows: ReturnType<typeof dayResult> }[] = [];
+  for (const d of dayRange(addDays(asOf, -13), asOf)) {
+    if (!board.report(d)?.cafe) continue;
+    const pj = await readPlan(fb, d);
+    if (!pj) continue;
+    const oj = await readOrder(fb, d);
+    past.push({ date: d, rows: dayResult(board, d, JSON.parse(pj) as PlanDoc, oj ? (JSON.parse(oj) as OrderDoc) : null) });
+  }
+  const corr = corrections(past, asOf);
+  const plans = makePlans(board, weather, learned, today, asOf, (d) => prev.get(d), corr);
   if (env("PLAN_DRY") === "1") {
     for (const p of plans) console.log(`${p.date} (${p.stage}일 앞) · 빵 ${p.items.length}종 — 확인만`);
     return;
   }
   await writePlans(fb, plans.map((p) => ({ date: p.date, json: JSON.stringify(p) })));
-  console.log(`계획 씀 (${today} 16시 · 실적 ${asOf} 까지): ${plans.map((p) => `${p.date} 빵 ${p.items.length}종`).join(" · ")}`);
+  console.log(`지난 결과 ${past.length}일 · 보정한 빵 ${Object.values(corr).filter((c) => Math.abs(c - 1) >= 0.005).length}종`);
+  console.log(`계획 씀 (${today} 14시 · 실적 ${asOf} 까지): ${plans.map((p) => `${p.date} 빵 ${p.items.length}종`).join(" · ")}`);
 }
 
 main().catch((e) => {

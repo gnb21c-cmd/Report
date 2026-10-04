@@ -4,7 +4,7 @@
    매출 금액은 어디에도 보이지 않음 (수량 · 예상 손님 수만)
    ============================================================ */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDays, CONFIRM_DEADLINE, count, nowKst, orderRows, orderText, shortLabel, STAGE_LABEL, type OrderDoc, type OrderRow, type PlanDoc } from "@report/core";
+import { addDays, Board, CONFIRM_DEADLINE, count, dayResult, nowKst, orderRows, orderText, shortLabel, STAGE_LABEL, type BreadResult, type OrderDoc, type OrderRow, type PlanDoc } from "@report/core";
 import { cloudApi, CloudError, demoApi, login, logout, session, tabletKey, tabletUrl, type Api } from "./data";
 
 export function App() {
@@ -94,12 +94,13 @@ function Login({ onDone }: { onDone: () => void }) {
 }
 
 /* ---------- D 매니저 ---------- */
-type Tab = "tomorrow" | "ahead" | "outlook" | "today";
+type Tab = "tomorrow" | "ahead" | "outlook" | "today" | "result";
 const TABS: [Tab, string][] = [
   ["tomorrow", "내일 확정"],
-  ["ahead", "모레 · 글피"],
+  ["ahead", "모레·글피"],
   ["outlook", "1~4주"],
-  ["today", "오늘 명령서"],
+  ["today", "명령서"],
+  ["result", "결과"],
 ];
 
 function useDay(api: Api, date: string) {
@@ -154,13 +155,14 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
       {tab === "ahead" && <Ahead api={api} today={today} />}
       {tab === "outlook" && <OutlookView api={api} date={addDays(today, 1)} />}
       {tab === "today" && <TodayOrder api={api} date={today} board={board} />}
+      {tab === "result" && <Result api={api} today={today} />}
     </div>
   );
 }
 
 function Notice({ err, plan, loaded }: { err: string; plan: PlanDoc | null; loaded: boolean }) {
   if (err) return <p className="error box">{err}</p>;
-  if (loaded && !plan) return <p className="empty box">아직 계획이 없습니다 — 매일 16시에 새로 셉니다.</p>;
+  if (loaded && !plan) return <p className="empty box">아직 계획이 없습니다 — 매일 14시에 새로 셉니다.</p>;
   return null;
 }
 
@@ -362,7 +364,7 @@ function TodayOrder({ api, date, board }: { api: Api; date: string; board: strin
     <main className="content">
       <section className="card">
         <h2>{shortLabel(date)} 생산 명령서</h2>
-        {err ? <p className="error box">{err}</p> : loaded && !plan && !order ? <p className="empty box">아직 계획이 없습니다 — 매일 16시에 새로 셉니다.</p> : null}
+        {err ? <p className="error box">{err}</p> : loaded && !plan && !order ? <p className="empty box">아직 계획이 없습니다 — 매일 14시에 새로 셉니다.</p> : null}
         <OrderList rows={rows} big={false} />
         <pre className="share-text">{text}</pre>
         <button className="primary big" disabled={!rows.length} onClick={async () => setMsg(await share(text, "생산 명령서"))}>
@@ -440,6 +442,82 @@ function FloorDay({ api, date }: { api: Api; date: string }) {
       {loaded && !rows.length && !err && <p className="empty box">아직 생산 지시가 없습니다.</p>}
       {waiting ? <p className="empty box">매니저 확정 전입니다 ({CONFIRM_DEADLINE} 마감).</p> : <OrderList rows={rows} big />}
       <p className="muted center">5분마다 새로 고침 · 확정 = 매니저가 정한 수량 · 자동 = 마감까지 확정이 없어 계획 수량 그대로</p>
+    </main>
+  );
+}
+
+/** 지난 날 결과 — 빵별 생산(확정 · 자동) · 판매 · 50% 할인 · 폐기 (매일 밤 22:10 수집 뒤 채워짐, 다음 14시 계획의 보정에 쓰임) */
+function Result({ api, today }: { api: Api; today: string }) {
+  const [date, setDate] = useState(addDays(today, -1));
+  const [rows, setRows] = useState<BreadResult[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let live = true;
+    setRows(null);
+    setErr("");
+    Promise.all([api.plan(date), api.order(date), api.report(date)])
+      .then(([p, o, r]) => {
+        if (!live) return;
+        setRows(r ? dayResult(new Board([r]), date, p, o) : []);
+      })
+      .catch((e) => live && setErr((e as Error).message));
+    return () => {
+      live = false;
+    };
+  }, [api, date]);
+  const sum = (k: "made" | "sold" | "half" | "waste") => (rows || []).reduce((a, r) => a + (r[k] || 0), 0);
+  const known = (rows || []).some((r) => r.made != null);
+  return (
+    <main className="content">
+      <section className="card">
+        <div className="day-nav">
+          <button className="ghost small" onClick={() => setDate(addDays(date, -1))} aria-label="전날">
+            ‹
+          </button>
+          <h2>{shortLabel(date)} 결과</h2>
+          <button className="ghost small" onClick={() => setDate(addDays(date, 1))} disabled={date >= addDays(today, -1)} aria-label="다음 날">
+            ›
+          </button>
+        </div>
+        <p className="muted">폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 매일 밤 22:10 실적 수집 뒤 채워지고, 다음 14시 계획이 이 차이만큼 빵별 수량을 고칩니다</p>
+        {err && <p className="error">{err}</p>}
+        {rows && !rows.length && <p className="empty">이날 실적이 아직 없습니다.</p>}
+        {rows && rows.length > 0 && (
+          <table>
+            <thead>
+              <tr>
+                <th>제품명</th>
+                <th className="num">생산</th>
+                <th className="num">판매</th>
+                <th className="num">50%</th>
+                <th className="num">폐기</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.name}>
+                  <td>
+                    {r.name}
+                    {r.soldOut && <span className="sold-out">다 팔림</span>}
+                  </td>
+                  <td className="num">{r.made ?? "—"}</td>
+                  <td className="num">{r.sold}</td>
+                  <td className="num">{r.half || ""}</td>
+                  <td className="num">{r.waste == null ? "—" : r.waste || ""}</td>
+                </tr>
+              ))}
+              <tr className="sum">
+                <td>합계</td>
+                <td className="num">{known ? sum("made") : "—"}</td>
+                <td className="num">{sum("sold")}</td>
+                <td className="num">{sum("half")}</td>
+                <td className="num">{known ? sum("waste") : "—"}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+        {rows && rows.length > 0 && !known && <p className="muted">이날은 작업지시 전이라 생산 · 폐기를 모릅니다.</p>}
+      </section>
     </main>
   );
 }

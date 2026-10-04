@@ -17,7 +17,7 @@ const make = (from: string, to: string, k: (d: string) => number) =>
     return day(d, cups, [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)]]);
   });
 
-describe("16시 계획 세 장", () => {
+describe("14시 계획 세 장", () => {
   const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 1)]);
   const plans = makePlans(board, {}, DEFAULT_LEARNED, "2026-10-04", "2026-10-03", () => undefined);
   it("내일 확정안 · 모레 ±5% · 글피 ±10%, 내일 계획에만 1~4주 전망", () => {
