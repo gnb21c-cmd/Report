@@ -190,7 +190,7 @@ export class Nibs {
     }
     // 들어가졌는지 = 로그아웃 단추 또는 왼쪽 메뉴가 보임 · 로그인 시각 알림 → [확인]
     let inside = false;
-    for (let t = 0; t < 25000; t += 1000) {
+    for (let t = 0; t < 45000; t += 1000) {
       const ok = await this.visible((f) => byName(f, "확인"));
       if (ok) {
         await ok.click({ timeout: 5000 }).catch(() => {});
@@ -265,7 +265,13 @@ export class Nibs {
     await pause();
     await this.closeAlerts(500);
     const re = new RegExp(`\\[\\s*${cat}\\s*\\]`);
-    const box = await this.el("sbx_CatIdS_input");
+    // 평소엔 글자('선택')만 보이고, 누르면 입력칸이 나옴
+    let box = await this.visible((f) => f.locator('[id$="_body_sbx_CatIdS_input"]'), 500);
+    if (!box) {
+      await (await this.el("sbx_CatIdS")).click({ timeout: 5000 });
+      await this.page.waitForTimeout(700);
+      box = await this.el("sbx_CatIdS_input");
+    }
     await box.click({ timeout: 5000 });
     await box.press("Control+A");
     await box.pressSequentially(cat, { delay: 60 });
@@ -288,7 +294,8 @@ export class Nibs {
       await box.press("Enter");
     }
     await this.page.waitForTimeout(800);
-    const v = await box.inputValue().catch(() => "");
+    const label = await this.visible((f) => f.locator('[id$="_body_sbx_CatIdS_label"]'));
+    const v = (await box.inputValue().catch(() => "")) + " " + (label ? await label.innerText().catch(() => "") : "");
     if (!v.includes(cat)) throw new Error(`가맹점이 골라지지 않음 (${item ? "목록 누름" : "목록 없음"})`);
   }
 
