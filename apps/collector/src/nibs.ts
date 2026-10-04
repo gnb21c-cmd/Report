@@ -13,6 +13,7 @@ import { mask, say } from "./okpos";
 export const NIBS = "https://nibs.nicevan.co.kr/";
 /** 로그인 화면 — 첫 화면(websquare.html)에서 들어가면 연결이 끊기는 때가 많고, login.jsp 에서는 잘 들어가짐 */
 export const NIBS_LOGIN = "https://nibs.nicevan.co.kr/websquare/login.jsp";
+export const NIBS_MAIN = "https://nibs.nicevan.co.kr/websquare/index.jsp";
 
 /** 화면 구조를 알아볼 때 글자를 보여도 되는 낱말 (가맹점 · 회사 이름이 나오지 않게 정해 둔 것만) */
 const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "신용카드", "통합거래조회", "조회", "엑셀", "다운로드", "전체", "All", "선택", "정산 통계용", "가맹점", "합계", "비밀번호", "사유", "거래상세내역", "엑셀비밀번호", "다운로드사유선택", "주요업무", "로그아웃"];
@@ -50,6 +51,9 @@ export class Nibs {
         await d.accept().catch(() => {});
       });
       p.on("download", (d) => n.downloads.push(d));
+      p.on("requestfailed", (r) => {
+        if (r.isNavigationRequest()) say(`[연결 실패] ${mask(r.url().replace(/[?;].*$/, ""))} — ${r.failure()?.errorText || ""}`);
+      });
     };
     watch(page);
     ctx.on("page", watch);
@@ -192,6 +196,7 @@ export class Nibs {
     }
     // 들어가졌는지 = 로그아웃 단추 또는 왼쪽 메뉴가 보임 · 로그인 시각 알림 → [확인]
     let inside = false;
+    let reopened = false;
     for (let t = 0; t < 45000; t += 1000) {
       const ok = await this.visible((f) => byName(f, "확인"));
       if (ok) {
@@ -200,7 +205,17 @@ export class Nibs {
         await p.waitForTimeout(800);
       }
       inside = !!(await this.visible((f) => f.locator('[id*="LogOut" i], [id*="Logout" i]'))) || !!(await this.visible((f) => byName(f, "거래조회")));
-      if (p.url().startsWith("chrome-error")) throw new Error(`화면을 못 읽음 (${t / 1000}초)`);
+      // 로그인 직후 연결이 끊겨 오류 화면이 되는 때 — 로그인은 서버에 남아 있을 수 있어 메인 화면을 한 번 직접 엶 (다시 로그인 아님)
+      if (p.url().startsWith("chrome-error")) {
+        if (reopened) throw new Error(`화면을 못 읽음 (${t / 1000}초)`);
+        reopened = true;
+        say("로그인 뒤 오류 화면 → 메인 화면을 직접 엶");
+        await p.waitForTimeout(3000);
+        await p.goto(NIBS_MAIN, { waitUntil: "domcontentloaded", timeout: 40000 }).catch(() => {});
+        await p.waitForTimeout(3000);
+        say(`→ ${this.where()}`);
+        continue;
+      }
       if (inside && !ok && t >= 3000) break; // 알림이 늦게 뜰 수 있어 3초는 더 봄
       // 들어가졌는데(index.jsp) 화면이 비어 있으면 — 나이스 화면 파일이 덜 온 것 → 새로고침 (로그인은 유지됨)
       if (!inside && (t === 15000 || t === 30000) && /index\.jsp/.test(p.url())) {
