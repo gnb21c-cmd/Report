@@ -175,20 +175,27 @@ export class Nibs {
     throw new Error("로그인 안 됨 — 아이디 · 비밀번호(NICE_ID · NICE_PW)를 확인해 주세요");
   }
 
+  /** 화면 안 알림창(로그인 시각 등)의 [확인] — 떠 있는 동안 다 누름 */
+  private async closeAlerts(ms: number) {
+    for (let t = 0; t <= ms; t += 500) {
+      const ok = await this.visible((f) => f.locator('[id*="alert_"][id$="btn_Confirm"], [id*="alert_"][id$="btn_confirm"]'));
+      if (ok) {
+        await ok.click({ timeout: 5000 }).catch(() => {});
+        say("알림창 확인");
+        await this.page.waitForTimeout(700);
+        continue;
+      }
+      await this.page.waitForTimeout(500);
+    }
+  }
+
   /** 거래조회 → 신용카드 → 통합거래조회 */
   async openSearch() {
-    // 로그인 알림이 늦게 뜨는 때
-    const late = await this.visible((f) => byName(f, "확인"), 1500);
-    if (late) await late.click({ timeout: 3000 }).catch(() => {});
-    if (!(await this.clickText("거래조회", 10000))) {
-      const side = await this.visible((f) => f.locator('[id$="btn_sideIcon"], [id$="btn_aside"]'));
-      if (side) {
-        await side.click({ timeout: 5000 }).catch(() => {});
-        say("옆 메뉴 펼침");
-        await this.page.waitForTimeout(1500);
-      }
-      if (!(await this.clickText("거래조회", 5000))) throw new Error("메뉴 '거래조회' 를 못 찾음");
-    }
+    // 로그인 시각 알림이 늦게 떠서 메뉴를 가림
+    await this.closeAlerts(4000);
+    const menu = await this.visible((f) => f.locator('[id^="mf_side_gen_topMenu_"][id$="_btn_menu"]').filter({ hasText: loose("거래조회") }), 10000);
+    if (menu) await menu.click({ timeout: 10000 });
+    else if (!(await this.clickText("거래조회", 5000))) throw new Error("메뉴 '거래조회' 를 못 찾음");
     say("거래조회 누름");
     await this.page.waitForTimeout(800);
     if (!(await this.visible((f) => byName(f, "통합거래조회"), 2000))) {
@@ -203,6 +210,7 @@ export class Nibs {
 
   /** 가맹점(단말기 번호) 고르기 */
   async pickTerminal(cat: string) {
+    await this.closeAlerts(500);
     const re = new RegExp(`\\[\\s*${cat}\\s*\\]`);
     // 1) 보통 고르기 칸(select)
     const sel = await this.visible((f) => f.locator("select").filter({ has: f.locator("option", { hasText: re }) }));
@@ -290,6 +298,7 @@ export class Nibs {
     if (!how) throw new Error("조회 단추를 못 찾음");
     await this.page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
     await this.page.waitForTimeout(2500);
+    await this.closeAlerts(1000);
     // 합계 줄 → 첫 숫자 = 총건수
     const sum = await this.visible((f) => f.getByText("합계", { exact: true }));
     if (!sum) return null;
