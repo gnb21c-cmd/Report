@@ -9,6 +9,7 @@
     "backtest": "tsx src/backtest.ts",
     "plan": "tsx src/plan.ts",
     "halfoff": "tsx src/halfoff.ts",
+    "extra": "tsx src/extra.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },

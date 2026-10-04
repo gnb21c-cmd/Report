@@ -1,4 +1,4 @@
-import { dayRange } from "./dates";
+import { addDays, dayRange } from "./dates";
 
 /* ============================================================
    POS 밖 매출 — 자판기 · 인생네컷 · 주차정산기 (카드 단말기 매출, VAN 사 승인 내역)
@@ -173,4 +173,27 @@ export function applyExtra(old: ExtraPart | undefined | null, u: ExtraUpdate, me
     for (const k of u.kinds) out.files[k] = { by: meta.by, at: meta.at, ...(meta.file ? { file: meta.file } : {}) };
   }
   return out;
+}
+
+/* ---------- 자동 수집 (나이스 NIBS → GitHub, apps/collector/src/extra.ts) ---------- */
+export const EXTRA_AUTO_BY = "자동 수집 (나이스)";
+/** 나이스로 바뀐 날 — 그 전은 KIS 라 나이스에 자료가 없음 */
+export const NICE_FROM = "2026-07-01";
+
+/** 자동 수집이 바꿔도 되는 종류 — 사람이 엑셀로 올린 칸은 그대로 (사람이 나중에 올리면 사람 것이 이김)
+    칸마다 올린 기록(files)이 없던 옛 문서는 사람이 다 올린 것으로 봄 */
+export function autoExtraKinds(old: ExtraPart | undefined | null, kinds: ExtraKind[]): ExtraKind[] {
+  if (!old) return kinds;
+  if (!old.files) return [];
+  return kinds.filter((k) => !old.files![k] || old.files![k]!.by === EXTRA_AUTO_BY);
+}
+
+/** 자동 수집이 받을 기간 (한국 날짜 · 시각 기준)
+    - evening (매일 21:50, POS 메인 PC): 어제 ~ 오늘. PC가 꺼져 있어 다음 날 켜질 때 늦게 돌면 건너뜀 (아침 실행이 받음)
+    - morning (매일 09:30): 지난 7일 ~ 어제 — 저녁에 PC가 꺼져 있던 날, 21:50 뒤 밤늦은 결제까지 채움 (사람이 올린 칸은 그대로)
+    - manual (손으로 돌림 · 시험): 어제 ~ 오늘 */
+export function niceRange(today: string, hour: number, mode: "evening" | "morning" | "manual"): { from: string; to: string } | { skip: true } {
+  if (mode === "evening" && hour < 21) return { skip: true };
+  const r = mode === "morning" ? { from: addDays(today, -7), to: addDays(today, -1) } : { from: addDays(today, -1), to: today };
+  return { from: r.from < NICE_FROM ? NICE_FROM : r.from, to: r.to };
 }

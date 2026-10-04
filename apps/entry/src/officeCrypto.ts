@@ -2,6 +2,9 @@
    엑셀 표준 암호(ECMA-376 Agile: AES-CBC + SHA 해시 반복) 를 브라우저 WebCrypto 로 풂. 비밀번호는 저장하지 않음 */
 import * as XLSX from "xlsx";
 
+// Node(자동 수집)에서는 CFB 가 default 쪽에만 있음
+const CFB: typeof XLSX.CFB = (XLSX as any).CFB ?? (XLSX as any).default?.CFB;
+
 const te = new TextEncoder();
 
 const HASH: Record<string, string> = { SHA1: "SHA-1", "SHA-1": "SHA-1", SHA256: "SHA-256", SHA384: "SHA-384", SHA512: "SHA-512" };
@@ -93,8 +96,8 @@ export function isEncrypted(buf: ArrayBuffer): boolean {
   const b = new Uint8Array(buf);
   if (!(b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0)) return false;
   try {
-    const cfb = XLSX.CFB.read(b, { type: "array" });
-    return !!XLSX.CFB.find(cfb, "EncryptedPackage");
+    const cfb = CFB.read(b, { type: "array" });
+    return !!CFB.find(cfb, "EncryptedPackage");
   } catch {
     return false;
   }
@@ -102,9 +105,9 @@ export function isEncrypted(buf: ArrayBuffer): boolean {
 
 /** 풀기 — 비밀번호가 틀리면 오류 */
 export async function decryptXlsx(buf: ArrayBuffer, password: string): Promise<ArrayBuffer> {
-  const cfb = XLSX.CFB.read(new Uint8Array(buf), { type: "array" });
-  const info = XLSX.CFB.find(cfb, "EncryptionInfo");
-  const pkg = XLSX.CFB.find(cfb, "EncryptedPackage");
+  const cfb = CFB.read(new Uint8Array(buf), { type: "array" });
+  const info = CFB.find(cfb, "EncryptionInfo");
+  const pkg = CFB.find(cfb, "EncryptedPackage");
   if (!info || !pkg) throw new Error("비밀번호 걸린 엑셀이 아닙니다.");
   const infoBytes = new Uint8Array(info.content as any);
   const ver = infoBytes[0] | (infoBytes[1] << 8);
