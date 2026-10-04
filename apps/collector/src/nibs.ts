@@ -444,7 +444,17 @@ export class Nibs {
     await win.waitForTimeout(500);
     if (!/정산/.test(await win.locator("#mf_sbx_reasonS_label").innerText().catch(() => ""))) throw new Error("사유 '정산 통계용' 이 골라지지 않음");
     await pause(600, 1200);
-    await win.locator("#mf_btn_selectData").click({ timeout: 5000 });
+    // 사유 목록이 아직 덮고 있으면 닫고, 보통 누르기가 막히면 화면 안에서 직접 누름
+    await win.keyboard.press("Escape").catch(() => {});
+    const ok = win.locator("#mf_btn_selectData");
+    const how = await ok.click({ timeout: 5000 }).then(
+      () => "누름",
+      async (e) => {
+        await ok.evaluate((el: any) => el.click());
+        return `직접 누름 (${mask(String((e as Error).message).split("\n").find((l) => /intercept|visible|stable|viewport|enabled/.test(l)) || "").slice(0, 80)})`;
+      },
+    );
+    say(`  다운로드 창 확인 — ${how}`);
     for (let t = 0; t < 90000 && this.downloads.length === before; t += 500) await this.page.waitForTimeout(500);
     const d = this.downloads[this.downloads.length - 1];
     if (this.downloads.length === before || !d) throw new Error("엑셀 파일이 90초 안에 안 옴");
