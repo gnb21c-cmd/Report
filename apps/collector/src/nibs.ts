@@ -46,6 +46,20 @@ export class Nibs {
     await ctx.addInitScript("globalThis.__name = (f) => f");
     const page = await ctx.newPage();
     const n = new Nibs(browser, ctx, page);
+    // 나이스 서버가 해외(GitHub) 접속을 가끔 끊음 (ERR_CONNECTION_CLOSED · EMPTY_RESPONSE) → 요청마다 조금 쉬고 3번까지 다시 받음
+    // 다시 받기는 그 파일 · 그 요청만 (로그인을 새로 하는 것 아님). 넘겨주기(302)는 브라우저가 따라가게 그대로 돌려줌
+    await ctx.route(/nibs\.nicevan\.co\.kr/, async (route) => {
+      for (let i = 0; i < 4; i++) {
+        try {
+          const res = await route.fetch({ maxRedirects: 0, timeout: 40000 });
+          if (i > 0 && n.failLogs++ < 15) say(`[다시 받음 ${i}번째] ${mask(route.request().url().replace(/[?;].*$/, "").replace(/^https:\/\/nibs\.nicevan\.co\.kr/, ""))}`);
+          return await route.fulfill({ response: res });
+        } catch {
+          await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+        }
+      }
+      await route.abort("connectionclosed").catch(() => {});
+    });
     const watch = (p: Page) => {
       p.on("dialog", async (d) => {
         say(`[알림창] ${mask(d.message())}`);
