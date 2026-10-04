@@ -1,4 +1,4 @@
-/* 작업지시 예측 시험 — 클라우드의 지난 자료로 "그날 이틀 전(전날 14시, 자료는 이틀 전까지)에 예측했다면 몇 % 틀렸을까"
+/* 작업지시 예측 시험 — 클라우드의 지난 자료로 "그날 사흘 전(이틀 전 16시 확정, 자료는 사흘 전까지)에 예측했다면 몇 % 틀렸을까"
    공개 저장소라 기록에는 오차 % · 날씨 배수만 남김 (방문객 수 · 매출 · 빵 개수 없음)
    BT_FROM ~ BT_TO (없으면 2026-04-01 ~ 마지막 자료일) · 날씨 배수는 그 전 자료로 배움 */
 import { addDays, applySettings, backtest, Board, dayKind, dayRange, DEFAULT_LEARNED, learnWeather, WEATHER_CLASSES, type Learned } from "@report/core";
@@ -21,7 +21,7 @@ async function main() {
   console.log(`기간 배수: ${Object.entries(learned.season).map(([k, v]) => `${k} ${v.toFixed(3)}`).join(" · ")}`);
 
   const show = (title: string, l: Learned, w = weather) => {
-    const r = backtest(board, w, from, to, 2, l);
+    const r = backtest(board, w, from, to, 3, l);
     console.log(`${title.padEnd(22)} 방문객 오차 ${r.all.visitors}% (평일 ${r.평일.visitors} · 금 ${r.금요일.visitors} · 휴일 ${r.휴일.visitors}) · 빵 총 개수 오차 ${r.all.bread}% (평일 ${r.평일.bread} · 금 ${r.금요일.bread} · 휴일 ${r.휴일.bread}) · ${r.all.days}일`);
     return r;
   };
@@ -46,7 +46,7 @@ async function main() {
   console.log(`\n견줌: 지난주 같은 요일 그대로 ${naive((d) => [addDays(d, -7)])}% · 최근 4주 같은 날 유형 평균 ${naive((d) => dayRange(addDays(d, -29), addDays(d, -2)).filter((x) => dayKind(x) === dayKind(d)))}%`);
 
   // 달마다 (λ=0.5)
-  const r = backtest(board, weather, from, to, 2, learned);
+  const r = backtest(board, weather, from, to, 3, learned);
   const months = [...new Set(r.rows.map((x) => x.date.slice(0, 7)))];
   console.log("\n달마다 (λ=0.5, 배운 날씨)");
   for (const m of months) {

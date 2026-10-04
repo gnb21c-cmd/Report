@@ -1,5 +1,5 @@
 /* ============================================================
-   작업지시 자료 — 클라우드(Firebase) 의 plans/{날짜} (14시 계획) · orders/{날짜} (매니저 확정)
+   작업지시 자료 — 클라우드(Firebase) 의 plans/{날짜} (16시 계획) · orders/{날짜} (매니저 확정)
    - D(매니저): 이메일 · 비밀번호 로그인 → senders 명단의 매장 열쇠로 읽고 씀
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
@@ -169,9 +169,11 @@ export function demoApi(): Api {
   const today = nowKst().date;
   const board = new Board(sampleUntilYesterday(today));
   const plans = new Map<string, PlanDoc>();
-  // 어제 14시에 센 계획(오늘 = 확정안) + 오늘 14시 계획
-  for (const p of makePlans(board, {}, DEFAULT_LEARNED, addDays(today, -1), addDays(today, -2), () => undefined)) plans.set(p.date, p);
-  for (const p of makePlans(board, {}, DEFAULT_LEARNED, today, addDays(today, -1), (d) => plans.get(d))) plans.set(p.date, p);
+  // 그제 · 어제 · 오늘 16시에 센 계획 (오늘 · 내일은 이미 확정 기준일이 지남)
+  for (const k of [2, 1, 0]) {
+    const day = addDays(today, -k);
+    for (const p of makePlans(board, {}, DEFAULT_LEARNED, day, addDays(day, -1), (d) => plans.get(d))) plans.set(p.date, p);
+  }
   const KEY = "bakery.demo.orders";
   const load = (): Record<string, OrderDoc> => {
     try {

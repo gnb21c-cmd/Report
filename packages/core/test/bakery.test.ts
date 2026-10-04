@@ -17,11 +17,11 @@ const make = (from: string, to: string, k: (d: string) => number) =>
     return day(d, cups, [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)]]);
   });
 
-describe("14시 계획 세 장", () => {
+describe("16시 계획 세 장 — 확정 기준일은 이틀 뒤", () => {
   const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 1)]);
   const plans = makePlans(board, {}, DEFAULT_LEARNED, "2026-10-04", "2026-10-03", () => undefined);
-  it("내일 확정안 · 모레 ±5% · 글피 ±10%, 내일 계획에만 1~4주 전망", () => {
-    expect(plans.map((p) => [p.date, p.stage])).toEqual([["2026-10-05", 1], ["2026-10-06", 2], ["2026-10-07", 3]]);
+  it("이틀 뒤 확정안 · 사흘 뒤 ±5% · 나흘 뒤 ±10%, 확정안에만 1~4주 전망", () => {
+    expect(plans.map((p) => [p.date, p.stage])).toEqual([["2026-10-06", 2], ["2026-10-07", 3], ["2026-10-08", 4]]);
     expect(plans[0].items[0].lo).toBeUndefined();
     const g = plans[2].items[0];
     expect(g.lo).toBe(Math.floor(g.qty * 0.9));
@@ -29,33 +29,33 @@ describe("14시 계획 세 장", () => {
     expect(plans[0].outlook).toHaveLength(4);
     expect(plans[1].outlook).toBeUndefined();
   });
-  it("어제 알려 준 범위 밖으로 안 나감 — 어제 글피였던 날은 ±10%, 어제 모레였던 날은 ±5%", () => {
-    // 어제(10-04) 알려 준 값: 10-06 은 글피(±10%) 로 100개, 10-05 는 모레(±5%) 로 100개 였다고 함
+  it("어제 알려 준 범위 밖으로 안 나감 — 어제 나흘 뒤(±10%)였던 날은 그 범위 안", () => {
+    // 어제(10-04) 알려 준 값: 10-08 은 나흘 뒤(±10%) 로 100개 → 오늘(10-05) 사흘 뒤가 됨
     const prev = (date: string): PlanDoc | undefined => {
-      if (date !== "2026-10-06" && date !== "2026-10-07") return undefined;
+      if (date !== "2026-10-08") return undefined;
       return { v: 1, date, madeOn: "2026-10-04", stage: 3, kind: "평일", visitors: 0, weather: "모름", items: [], total: 0, history: { "2026-10-04": { 소금빵: 100 } } };
     };
     const next = makePlans(board, {}, DEFAULT_LEARNED, "2026-10-05", "2026-10-04", prev);
     const salt = (p: PlanDoc) => p.items.find((i) => i.name === "소금빵")!.qty;
-    expect(salt(next[0])).toBeLessThanOrEqual(110); // 10-06 이 모레 → 어제 글피 범위 ±10%
-    expect(salt(next[0])).toBeGreaterThanOrEqual(90);
-    expect(next[0].date).toBe("2026-10-06");
-    expect(Object.keys(next[0].history)).toEqual(["2026-10-04", "2026-10-05"]);
+    expect(next[1].date).toBe("2026-10-08");
+    expect(salt(next[1])).toBeLessThanOrEqual(110);
+    expect(salt(next[1])).toBeGreaterThanOrEqual(90);
+    expect(Object.keys(next[1].history)).toEqual(["2026-10-04", "2026-10-05"]);
   });
 });
 
 describe("만들 목록 — 확정 · 자동 · 확정 전", () => {
   const plan = { v: 1, date: "2026-10-05", items: [{ name: "소금빵", qty: 60 }, { name: "크루아상", qty: 20 }] } as PlanDoc;
   const order: OrderDoc = { v: 1, date: "2026-10-05", items: { 소금빵: { qty: 55, by: "매니저", at: "" } } };
-  it("전날 18시 전 — 확정 안 한 빵은 '확정 전'", () => {
-    const rows = orderRows(plan, order, { date: "2026-10-04", time: "17:30" });
+  it("이틀 전 18시 전 — 확정 안 한 빵은 '확정 전'", () => {
+    const rows = orderRows(plan, order, { date: "2026-10-03", time: "17:30" });
     expect(rows).toEqual([
       { name: "소금빵", plan: 60, confirmed: 55, qty: 55, state: "확정" },
       { name: "크루아상", plan: 20, confirmed: null, qty: null, state: "확정 전" },
     ]);
   });
-  it("전날 18시가 지나면 계획 수량 그대로 '자동'", () => {
-    const rows = orderRows(plan, order, { date: "2026-10-04", time: "18:00" });
+  it("이틀 전 18시가 지나면 계획 수량 그대로 '자동'", () => {
+    const rows = orderRows(plan, order, { date: "2026-10-03", time: "18:00" });
     expect(rows[1]).toMatchObject({ qty: 20, state: "자동" });
     expect(orderText("2026-10-05", rows)).toBe("[10월 5일 생산 명령서] 총 75개\n· 소금빵 55개\n· 크루아상 20개 (자동)");
   });

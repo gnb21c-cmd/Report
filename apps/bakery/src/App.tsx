@@ -1,10 +1,10 @@
 /* ============================================================
-   D  — 베이커리 매니저 작업지시 (…/d/, 매니저 폰): 내일 확정 · 모레/글피 잠정 · 1~4주 전망 · 오늘 생산 명령서(카톡 보내기)
+   D  — 베이커리 매니저 작업지시 (…/d/, 매니저 폰): 모레(이틀 뒤) 확정 · 사흘/나흘 뒤 잠정 · 1~4주 전망 · 오늘 생산 명령서(카톡 보내기)
    D-1 — 현장 태블릿 생산 명령서 (…/d1/<열쇠>/, 로그인 없음): 매니저가 확정한 수량만 크게
    매출 금액은 어디에도 보이지 않음 (수량 · 예상 손님 수만)
    ============================================================ */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDays, Board, CONFIRM_DEADLINE, count, dayResult, nowKst, orderRows, orderText, shortLabel, STAGE_LABEL, type BreadResult, type OrderDoc, type OrderRow, type PlanDoc } from "@report/core";
+import { addDays, Board, CONFIRM_DEADLINE, CONFIRM_LEAD, count, dayResult, nowKst, orderRows, orderText, shortLabel, STAGE_LABEL, type BreadResult, type OrderDoc, type OrderRow, type PlanDoc } from "@report/core";
 import { cloudApi, CloudError, demoApi, login, logout, session, tabletKey, tabletUrl, type Api } from "./data";
 
 export function App() {
@@ -96,8 +96,8 @@ function Login({ onDone }: { onDone: () => void }) {
 /* ---------- D 매니저 ---------- */
 type Tab = "tomorrow" | "ahead" | "outlook" | "today" | "result";
 const TABS: [Tab, string][] = [
-  ["tomorrow", "내일 확정"],
-  ["ahead", "모레·글피"],
+  ["tomorrow", "모레 확정"],
+  ["ahead", "잠정"],
   ["outlook", "1~4주"],
   ["today", "명령서"],
   ["result", "결과"],
@@ -151,9 +151,9 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
           </button>
         ))}
       </nav>
-      {tab === "tomorrow" && <Tomorrow api={api} date={addDays(today, 1)} who={who} />}
+      {tab === "tomorrow" && <Tomorrow api={api} date={addDays(today, CONFIRM_LEAD)} who={who} />}
       {tab === "ahead" && <Ahead api={api} today={today} />}
-      {tab === "outlook" && <OutlookView api={api} date={addDays(today, 1)} />}
+      {tab === "outlook" && <OutlookView api={api} date={addDays(today, CONFIRM_LEAD)} />}
       {tab === "today" && <TodayOrder api={api} date={today} board={board} />}
       {tab === "result" && <Result api={api} today={today} />}
     </div>
@@ -162,18 +162,19 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
 
 function Notice({ err, plan, loaded }: { err: string; plan: PlanDoc | null; loaded: boolean }) {
   if (err) return <p className="error box">{err}</p>;
-  if (loaded && !plan) return <p className="empty box">아직 계획이 없습니다 — 매일 14시에 새로 셉니다.</p>;
+  if (loaded && !plan) return <p className="empty box">아직 계획이 없습니다 — 매일 16시에 새로 셉니다.</p>;
   return null;
 }
 
-/** 내일 확정 — 빵마다 [제품명 · 지시 수량 · 수정 칸 · 확정], 맨 위 [일괄 확정] */
+/** 모레(이틀 뒤) 확정 — 빵마다 [제품명 · 지시 수량 · 수정 칸 · 확정], 맨 위 [일괄 확정] */
 function Tomorrow({ api, date, who }: { api: Api; date: string; who: string }) {
   const { plan, order, setOrder, err, loaded } = useDay(api, date);
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const now = nowKst();
-  const late = now.date > addDays(date, -1) || now.time >= CONFIRM_DEADLINE;
+  const due = addDays(date, -CONFIRM_LEAD);
+  const late = now.date > due || (now.date === due && now.time >= CONFIRM_DEADLINE);
   const rows = plan?.items || [];
   const valueOf = (name: string, planQty: number) => {
     const v = edit[name];
@@ -200,7 +201,7 @@ function Tomorrow({ api, date, who }: { api: Api; date: string; who: string }) {
     <main className="content">
       <section className="sticky">
         <div className="sticky-head">
-          <b>{shortLabel(date)} 생산</b>
+          <b>{shortLabel(date)} 생산 (모레)</b>
           <span className={late ? "warn" : "muted"}>{late ? "마감 지남 — 확정 안 한 빵은 지시 수량 그대로 나감" : `${CONFIRM_DEADLINE} 전에 확정`}</span>
         </div>
         {plan && (
@@ -249,11 +250,11 @@ function Tomorrow({ api, date, who }: { api: Api; date: string; who: string }) {
   );
 }
 
-/** 모레 · 글피 잠정 */
+/** 사흘 뒤(±5%) · 나흘 뒤(±10%) 잠정 */
 function Ahead({ api, today }: { api: Api; today: string }) {
   return (
     <main className="content">
-      {[2, 3].map((k) => (
+      {[CONFIRM_LEAD + 1, CONFIRM_LEAD + 2].map((k) => (
         <AheadDay key={k} api={api} date={addDays(today, k)} />
       ))}
     </main>
@@ -364,7 +365,7 @@ function TodayOrder({ api, date, board }: { api: Api; date: string; board: strin
     <main className="content">
       <section className="card">
         <h2>{shortLabel(date)} 생산 명령서</h2>
-        {err ? <p className="error box">{err}</p> : loaded && !plan && !order ? <p className="empty box">아직 계획이 없습니다 — 매일 14시에 새로 셉니다.</p> : null}
+        {err ? <p className="error box">{err}</p> : loaded && !plan && !order ? <p className="empty box">아직 계획이 없습니다 — 매일 16시에 새로 셉니다.</p> : null}
         <OrderList rows={rows} big={false} />
         <pre className="share-text">{text}</pre>
         <button className="primary big" disabled={!rows.length} onClick={async () => setMsg(await share(text, "생산 명령서"))}>
@@ -446,7 +447,7 @@ function FloorDay({ api, date }: { api: Api; date: string }) {
   );
 }
 
-/** 지난 날 결과 — 빵별 생산(확정 · 자동) · 판매 · 50% 할인 · 폐기 (매일 밤 22:10 수집 뒤 채워짐, 다음 14시 계획의 보정에 쓰임) */
+/** 지난 날 결과 — 빵별 생산(확정 · 자동) · 판매 · 50% 할인 · 폐기 (매일 밤 22:10 수집 뒤 채워짐, 다음 16시 계획의 보정에 쓰임) */
 function Result({ api, today }: { api: Api; today: string }) {
   const [date, setDate] = useState(addDays(today, -1));
   const [rows, setRows] = useState<BreadResult[] | null>(null);
@@ -479,7 +480,7 @@ function Result({ api, today }: { api: Api; today: string }) {
             ›
           </button>
         </div>
-        <p className="muted">폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 매일 밤 22:10 실적 수집 뒤 채워지고, 다음 14시 계획이 이 차이만큼 빵별 수량을 고칩니다</p>
+        <p className="muted">폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 매일 밤 22:10 실적 수집 뒤 채워지고, 다음 16시 계획이 이 차이만큼 빵별 수량을 고칩니다</p>
         {err && <p className="error">{err}</p>}
         {rows && !rows.length && <p className="empty">이날 실적이 아직 없습니다.</p>}
         {rows && rows.length > 0 && (

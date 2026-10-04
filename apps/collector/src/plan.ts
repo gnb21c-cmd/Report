@@ -1,11 +1,11 @@
 /* ============================================================
-   작업지시 계획 — 매일 14시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로
-   내일(확정안) · 모레(잠정 ±5%) · 글피(잠정 ±10%) 빵별 수량을 세어 plans/{날짜} 에 씀 (packages/core/src/bakery.ts makePlans)
+   작업지시 계획 — 매일 16시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로
+   이틀 뒤(확정안) · 사흘 뒤(잠정 ±5%) · 나흘 뒤(잠정 ±10%) 빵별 수량을 세어 plans/{날짜} 에 씀 (packages/core/src/bakery.ts makePlans)
    전날 밤 22:10 자동 수집된 실적으로 지난 2주의 빵별 생산 대비 정가 판매 · 50% 할인 · 폐기를 셈 → 오차를 보정 배수로 다시 넣음 (corrections)
-   매니저(D)는 내일 계획을 보고 18시 전에 확정 → orders/{날짜}, 현장 태블릿(D-1)이 확정 수량을 보여 줌
+   매니저(D)는 이틀 뒤 계획을 보고 그날 18시 전에 확정 → orders/{날짜}, 현장 태블릿(D-1)이 확정 수량을 보여 줌
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    ============================================================ */
-import { addDays, applySettings, Board, corrections, dayRange, dayResult, learnWeather, makePlans, nowKst, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, Board, corrections, dayRange, dayResult, learnWeather, makePlans, nowKst, STAGES, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readOrder, readPlan, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -22,7 +22,7 @@ async function main() {
   const learned = learnWeather(board, weather, "2025-01-01", asOf);
   const fb = await fbLogin({ ...cfg, email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") });
   const prev = new Map<string, PlanDoc>();
-  for (const k of [1, 2, 3]) {
+  for (const k of STAGES) {
     const d = addDays(today, k);
     const j = await readPlan(fb, d);
     if (j) prev.set(d, JSON.parse(j));
@@ -44,7 +44,7 @@ async function main() {
   }
   await writePlans(fb, plans.map((p) => ({ date: p.date, json: JSON.stringify(p) })));
   console.log(`지난 결과 ${past.length}일 · 보정한 빵 ${Object.values(corr).filter((c) => Math.abs(c - 1) >= 0.005).length}종`);
-  console.log(`계획 씀 (${today} 14시 · 실적 ${asOf} 까지): ${plans.map((p) => `${p.date} 빵 ${p.items.length}종`).join(" · ")}`);
+  console.log(`계획 씀 (${today} 16시 · 실적 ${asOf} 까지): ${plans.map((p) => `${p.date} 빵 ${p.items.length}종`).join(" · ")}`);
 }
 
 main().catch((e) => {

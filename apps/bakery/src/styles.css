@@ -156,7 +156,7 @@ input {
   margin-left: 4px;
   vertical-align: 2px;
 }
-/* 내일 확정 — 위에 붙는 [일괄 확정] */
+/* 모레 확정 — 위에 붙는 [일괄 확정] */
 .sticky {
   position: sticky;
   top: 0;

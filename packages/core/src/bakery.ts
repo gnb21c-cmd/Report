@@ -1,9 +1,9 @@
 /* ============================================================
-   베이커리 작업지시 — 계획(plans) · 확정(orders) 문서와 그 규칙 (D 매니저 앱 · D-1 현장 태블릿 · 14시 예약 작업이 함께 씀)
-   - 매일 14시 (전날 밤 22:10 수집 실적의 오차를 보정): 내일(확정안) · 모레(잠정 ±5%) · 글피(잠정 ±10%) 계획을 새로 셈 → plans/{날짜}
-     어제 알려 준 범위를 벗어나지 않게 묶음: 어제 글피(±10%)였던 날은 오늘 그 범위 안, 어제 모레(±5%)였던 날은 그 범위 안
-   - 매니저는 내일 생산량을 18시 전에 확정 (빵마다 또는 한꺼번에) → orders/{날짜}
-   - 생산 = 확정 수량 (확정 안 한 빵은 18시가 지나면 계획 수량을 그대로 '자동'), 폐기 = 생산 − 판매
+   베이커리 작업지시 — 계획(plans) · 확정(orders) 문서와 그 규칙 (D 매니저 앱 · D-1 현장 태블릿 · 16시 예약 작업이 함께 씀)
+   - 매일 16시 (전날 밤 22:10 수집 실적의 오차를 보정): 이틀 뒤(확정안) · 사흘 뒤(잠정 ±5%) · 나흘 뒤(잠정 ±10%) 계획을 새로 셈 → plans/{날짜}
+     어제 알려 준 범위를 벗어나지 않게 묶음: 어제 나흘 뒤(±10%)였던 날은 오늘 그 범위 안, 어제 사흘 뒤(±5%)였던 날은 그 범위 안
+   - 매니저는 이틀 뒤 생산량을 그날 18시 전에 확정 (빵마다 또는 한꺼번에) → orders/{날짜}
+   - 생산 = 확정 수량 (확정 안 한 빵은 이틀 전 18시가 지나면 계획 수량을 그대로 '자동'), 폐기 = 생산 − 판매
    ============================================================ */
 import { addDays } from "./dates";
 import { breadPlan, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
@@ -11,12 +11,15 @@ import type { Board } from "./metrics";
 import type { WeatherMap } from "./weather";
 
 /** 계획을 새로 세는 시각 (한국 시간) */
-export const PLAN_HOUR = 14;
+export const PLAN_HOUR = 16;
 /** 매니저 확정 마감 (한국 시간) */
 export const CONFIRM_DEADLINE = "18:00";
-/** 며칠 앞 → 범위 (1 = 내일 확정안, 2 = 모레 ±5%, 3 = 글피 ±10%) */
-export const STAGE_BAND: Record<number, number> = { 1: 0, 2: 0.05, 3: 0.1 };
-export const STAGE_LABEL: Record<number, string> = { 1: "확정안", 2: "잠정 ±5%", 3: "잠정 ±10%" };
+/** 확정 기준일 — 오늘 16시 계획에서 확정하는 날 = 이틀 뒤 (빵 준비 · 반죽 · 해동 시간) */
+export const CONFIRM_LEAD = 2;
+/** 며칠 앞 → 범위 (2 = 이틀 뒤 확정안, 3 = 사흘 뒤 ±5%, 4 = 나흘 뒤 ±10%) */
+export const STAGE_BAND: Record<number, number> = { 2: 0, 3: 0.05, 4: 0.1 };
+export const STAGE_LABEL: Record<number, string> = { 2: "확정안", 3: "잠정 ±5%", 4: "잠정 ±10%" };
+export const STAGES = [2, 3, 4];
 
 export interface PlanItem {
   name: string;
@@ -43,7 +46,7 @@ export interface PlanDoc {
   date: string;
   /** 센 날 (한국 날짜) */
   madeOn: string;
-  /** 며칠 앞 (1 · 2 · 3) */
+  /** 며칠 앞 (2 · 3 · 4) */
   stage: number;
   kind: DayKind;
   /** 예상 손님 (명) */
@@ -54,7 +57,7 @@ export interface PlanDoc {
   total: number;
   /** 센 날마다 빵별 수량 — 다음 날 범위 묶기에 씀 (최근 3번) */
   history: Record<string, Record<string, number>>;
-  /** 내일 계획에만: 앞으로 1 ~ 4주차 평일 · 휴일 하루 생산 개수 */
+  /** 확정안(이틀 뒤)에만: 그날부터 1 ~ 4주차 평일 · 휴일 하루 생산 개수 */
   outlook?: Outlook[];
 }
 
@@ -69,7 +72,7 @@ export interface OrderDoc {
   items: Record<string, OrderLine>;
 }
 
-/** 오늘(14시) 계획 세 장 — prev(날짜) = 이미 있던 계획 (범위 묶기) */
+/** 오늘(16시) 계획 세 장 — prev(날짜) = 이미 있던 계획 (범위 묶기) */
 export function makePlans(
   board: Board,
   weather: WeatherMap,
@@ -81,7 +84,7 @@ export function makePlans(
   corr: Record<string, number> = {},
 ): PlanDoc[] {
   const out: PlanDoc[] = [];
-  for (const stage of [1, 2, 3]) {
+  for (const stage of STAGES) {
     const date = addDays(today, stage);
     const p = breadPlan(board, weather, asOf, date, learned);
     const old = prev(date);
@@ -110,7 +113,7 @@ export function makePlans(
       items,
       total: items.reduce((a, b) => a + b.qty, 0),
       history,
-      ...(stage === 1 ? { outlook: weeklyOutlook(board, asOf, addDays(today, 1), learned) } : {}),
+      ...(stage === CONFIRM_LEAD ? { outlook: weeklyOutlook(board, asOf, addDays(today, CONFIRM_LEAD), learned) } : {}),
     });
   }
   return out;
@@ -128,11 +131,12 @@ export interface OrderRow {
   state: OrderState;
 }
 
-/** 그날 만들 목록 — 확정한 빵은 확정 수량, 안 한 빵은 마감(전날 18시)이 지나면 계획 수량 '자동' */
+/** 그날 만들 목록 — 확정한 빵은 확정 수량, 안 한 빵은 마감(이틀 전 18시)이 지나면 계획 수량 '자동' */
 export function orderRows(plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined, nowKst: { date: string; time: string }): OrderRow[] {
   const date = plan?.date || order?.date || "";
   if (!date) return [];
-  const pastDeadline = nowKst.date > addDays(date, -1) || (nowKst.date === addDays(date, -1) && nowKst.time >= CONFIRM_DEADLINE);
+  const due = addDays(date, -CONFIRM_LEAD);
+  const pastDeadline = nowKst.date > due || (nowKst.date === due && nowKst.time >= CONFIRM_DEADLINE);
   const names = new Map<string, number>();
   for (const it of plan?.items || []) names.set(it.name, it.qty);
   for (const n of Object.keys(order?.items || {})) if (!names.has(n)) names.set(n, 0);
