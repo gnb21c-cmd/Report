@@ -57,6 +57,9 @@ GitHub → Report 저장소 → **Settings → Actions → General**
 
 ## 참고
 
+- **절전 모드 끄기 (POS 메인 PC):** Windows 설정 → 시스템 → 전원 → 화면 · 절전 → '절전 모드로 전환' **안 함**. 절전 중이면 21:50에 돌지 못함.
+- 사장님 PC 시험(`run.cmd` 창)에서는 창 안을 마우스로 누르면 Windows가 프로그램을 일시 정지합니다(선택 모드). 그러면 Esc.
+
 - PC에 따로 설치할 것 없음 (Node · pnpm · 크롬은 실행할 때 실행기가 받아 둠). Git for Windows 는 있으면 더 빠름.
 - 실행기를 멈추려면: Windows **서비스** 에서 `GitHub Actions Runner (…pos-main)` 중지.
 - 지우려면: `C:\actions-runner` 에서 `./config.cmd remove --token ...` (토큰은 Runners 화면에서 새로 받음).
