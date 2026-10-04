@@ -2,11 +2,12 @@
    폰 한 손 보기: 위 달력 띠 → 총 매출 → 팀별 한 줄 상자 → 누계 2×2 → 방문·키즈 */
 :root {
   color-scheme: light;
-  --page: #f6f6f3;
+  /* 바탕은 밝은 회색 — 흰 상자가 또렷이 떠 보이게. 흐린 글씨는 바탕 위에서도 읽히게 조금 진하게 */
+  --page: #ebecee;
   --surface-1: #fdfdfc;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --muted: #898781;
+  --muted: #6f6d67;
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
