@@ -138,6 +138,10 @@ async function main() {
             }
             const d = naverDiff(oldWay, old.p as NaverPart);
             say(`  예전 방식('완료 1' 줄 수)으로 세면 손 입력과: ${d.newVisitors.length ? `다름 (${d.newVisitors.join(",")})` : "같음"}`);
+            // 새 방식이 손 입력보다 많은(+) · 적은(-) 칸 — 바뀐 셈법 때문이면 + 만 나와야 함
+            const hand = (old.p as NaverPart).newVisitors;
+            const dir = NAVER_SLOTS.map((t, i) => (r.part.newVisitors[i] > (hand[i] || 0) ? `${t}+` : r.part.newVisitors[i] < (hand[i] || 0) ? `${t}-` : "")).filter(Boolean);
+            say(`  새 방식 - 손 입력: ${dir.length ? dir.join(",") : "모두 같음"}`);
           }
         }
         if (!naverAutoWritable(old)) {
