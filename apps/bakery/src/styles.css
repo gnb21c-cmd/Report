@@ -382,7 +382,7 @@ th {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 4px 18px;
-  font-size: 26px;
+  font-size: 24px;
 }
 .order.big .order-row {
   grid-template-columns: minmax(0, 1fr) auto 90px;
@@ -394,18 +394,7 @@ th {
 .order.big .state {
   font-size: 17px;
 }
-@media (min-width: 900px) {
-  .order.big {
-    grid-template-columns: 1fr 1fr;
-    column-gap: 40px;
-  }
-  .order.big .order-row:nth-child(2) {
-    border-top: 0;
-  }
-  .order.big .order-row.total {
-    grid-column: 1 / -1;
-  }
-}
+
 /* 로그인 */
 .login {
   max-width: 420px;
@@ -463,4 +452,67 @@ th {
 tr.sum td {
   font-weight: 800;
   border-top: 2px solid var(--text);
+}
+/* 주간 잠정 — 주 넘기기 · 요일 고르기 */
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.week-nav .ghost {
+  padding: 6px 14px;
+}
+.chips {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.chips button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 10px;
+  padding: 8px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chips button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.sticky .ghost {
+  width: 100%;
+  padding: 10px;
+}
+/* 최종 확정 줄: 제품명 · 잠정 · 최종안 · 수정 · 확정 */
+.row.fin {
+  grid-template-columns: minmax(0, 1fr) 40px 44px 64px 68px;
+  gap: 6px;
+}
+.row .name small {
+  font-weight: 400;
+  font-size: 12px;
+}
+/* D-1 — 오늘 생산 · 내일 준비 두 칸 (가로 화면은 나란히) */
+.floor-grid {
+  display: grid;
+  gap: 16px;
+  padding: 4px 16px 24px;
+}
+@media (min-width: 900px) {
+  .floor-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.floor-date span {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.8em;
+  margin-left: 6px;
+}
+.floor-day:last-child .floor-date {
+  color: var(--accent);
 }

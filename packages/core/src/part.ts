@@ -6,7 +6,7 @@
    시간대: 10시 ~ 22시를 한 시간씩 12칸 (10시 전 주문은 10시 칸, 22시 넘은 주문은 21시 칸에)
    ============================================================ */
 import { guessSector, kidsKind, SECTORS, sectorFromCategory, type KidsKind, type Sector } from "./classify";
-import { cupsPerItem, isCup, isHalfOff, isKidsCoupon, isVoucherPayment, oldTicketPrice } from "./rules";
+import { cupsPerItem, isCup, isHalfOff, isKidsCoupon, isVoucherPayment, NOT_BREAD, oldTicketPrice } from "./rules";
 import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } from "./receipt";
 import type { SaleLine, StoreId } from "./types";
 import type { CashPart } from "./cash";
@@ -249,7 +249,7 @@ function addLine(
   let sector: Sector | KidsKind;
   let cups = 0;
   if (store === "cafe") {
-    const s = sectorOf(l.name);
+    const s: Sector = NOT_BREAD.has(l.name) ? "기타" : sectorOf(l.name);
     sector = s;
     part.sectors[s] += l.net;
     if (isCup("cafe", { name: l.name, cat1, gross: l.gross, net: l.net }, s)) cups = l.qty * cupsPerItem(l.name);

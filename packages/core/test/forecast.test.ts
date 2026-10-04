@@ -123,6 +123,8 @@ describe("잠정 수량 묶기 · 시험", () => {
     expect(withinBand(100, 120, 0.05)).toBe(105);
     expect(withinBand(100, 80, 0.1)).toBe(90);
     expect(withinBand(100, 103, 0.05)).toBe(103);
+    expect(withinBand(50, 80, 0.1)).toBe(55); // 50 × 1.1 소수 오차로 56 이 되지 않게
+    expect(withinBand(30, 0, 0.1)).toBe(27);
   });
   it("모양이 같으면 오차가 작음", () => {
     const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-03", () => 1)]);

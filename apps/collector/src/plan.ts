@@ -1,15 +1,17 @@
 /* ============================================================
-   작업지시 계획 — 매일 16시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로
-   이틀 뒤(확정안) · 사흘 뒤(잠정 ±5%) · 나흘 뒤(잠정 ±10%) 빵별 수량을 세어 plans/{날짜} 에 씀 (packages/core/src/bakery.ts makePlans)
-   전날 밤 22:10 자동 수집된 실적으로 지난 2주의 빵별 생산 대비 정가 판매 · 50% 할인 · 폐기를 셈 → 오차를 보정 배수로 다시 넣음 (corrections)
-   매니저(D)는 이틀 뒤 계획을 보고 그날 18시 전에 확정 → orders/{날짜}, 현장 태블릿(D-1)이 확정 수량을 보여 줌
+   작업지시 계획 — 매일 15시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로 셈 (packages/core/src/bakery.ts)
+   - 목요일: 다음 주 월 ~ 일 주간 잠정안 → plans/{날짜}.week (매니저가 목요일에 잠정 확정)
+   - 매일: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
+   - 전날 밤 22:10 자동 수집된 실적으로 지난 2주 빵별 결과(생산 대비 정가 판매 · 50% 할인 · 폐기)를 셈 → 보정 배수로 다시 넣음
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
+   PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, Board, corrections, dayRange, dayResult, learnWeather, makePlans, nowKst, STAGES, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
 import { fbLogin, readOrder, readPlan, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
+const parse = (j: string | undefined) => (j ? JSON.parse(j) : null);
 
 async function main() {
   const cfg = { apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY") };
@@ -21,30 +23,45 @@ async function main() {
   const asOf = [board.latest() || addDays(today, -1), addDays(today, -1)].sort()[0];
   const learned = learnWeather(board, weather, "2025-01-01", asOf);
   const fb = await fbLogin({ ...cfg, email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") });
-  const prev = new Map<string, PlanDoc>();
-  for (const k of STAGES) {
-    const d = addDays(today, k);
-    const j = await readPlan(fb, d);
-    if (j) prev.set(d, JSON.parse(j));
-  }
-  // 지난 2주 결과 — 계획(앱 수량)이 있던 날만 (작업지시를 쓰기 전 날은 없음)
+
+  // 지난 2주 결과 — 작업지시 계획이 있던 날만 (쓰기 전 날은 없음)
   const past: { date: string; rows: ReturnType<typeof dayResult> }[] = [];
   for (const d of dayRange(addDays(asOf, -13), asOf)) {
     if (!board.report(d)?.cafe) continue;
-    const pj = await readPlan(fb, d);
-    if (!pj) continue;
-    const oj = await readOrder(fb, d);
-    past.push({ date: d, rows: dayResult(board, d, JSON.parse(pj) as PlanDoc, oj ? (JSON.parse(oj) as OrderDoc) : null) });
+    const plan = asPlan(parse(await readPlan(fb, d)));
+    if (!plan) continue;
+    past.push({ date: d, rows: dayResult(board, d, plan, asOrder(parse(await readOrder(fb, d)))) });
   }
   const corr = corrections(past, asOf);
-  const plans = makePlans(board, weather, learned, today, asOf, (d) => prev.get(d), corr);
+  console.log(`${today} · 실적 ${asOf} 까지 · 지난 결과 ${past.length}일 · 보정한 빵 ${Object.values(corr).filter((c) => Math.abs(c - 1) >= 0.005).length}종`);
+
+  const out = new Map<string, PlanDoc>();
+  const load = async (d: string): Promise<PlanDoc> => out.get(d) || asPlan(parse(await readPlan(fb, d))) || { v: 2, date: d };
+
+  // 목요일 — 다음 주 주간 잠정안 (있던 최종안은 그대로)
+  if (weekday(today) === WEEK_PLAN_WEEKDAY) {
+    for (const w of makeWeek(board, weather, learned, today, asOf, corr)) {
+      const doc = await load(w.date);
+      out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
+    }
+    console.log(`주간 잠정안: ${[...out.keys()][0]} ~ ${[...out.keys()].slice(-1)[0]}`);
+  }
+
+  // 매일 — 3일 뒤 최종안 (주간 잠정안이 있는 날만)
+  const target = addDays(today, FINAL_LEAD);
+  const doc = await load(target);
+  const fin = makeFinal(board, weather, learned, today, asOf, doc, asOrder(parse(await readOrder(fb, target))), corr);
+  if (fin) {
+    out.set(target, { ...doc, final: fin });
+    console.log(`최종안: ${target} · 빵 ${fin.items.length}종`);
+  } else console.log(`최종안: ${target} 은 주간 잠정안이 없어 건너뜀 (작업지시 시작 전)`);
+
   if (env("PLAN_DRY") === "1") {
-    for (const p of plans) console.log(`${p.date} (${p.stage}일 앞) · 빵 ${p.items.length}종 — 확인만`);
+    console.log(`확인만 — ${out.size}일 (쓰지 않음)`);
     return;
   }
-  await writePlans(fb, plans.map((p) => ({ date: p.date, json: JSON.stringify(p) })));
-  console.log(`지난 결과 ${past.length}일 · 보정한 빵 ${Object.values(corr).filter((c) => Math.abs(c - 1) >= 0.005).length}종`);
-  console.log(`계획 씀 (${today} 16시 · 실적 ${asOf} 까지): ${plans.map((p) => `${p.date} 빵 ${p.items.length}종`).join(" · ")}`);
+  await writePlans(fb, [...out.values()].map((p) => ({ date: p.date, json: JSON.stringify(p) })));
+  console.log(`계획 씀: ${out.size}일`);
 }
 
 main().catch((e) => {

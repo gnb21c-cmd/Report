@@ -4,7 +4,9 @@
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, Board, DEFAULT_LEARNED, makePlans, nowKst, sampleUntilYesterday, type DayReport, type OrderDoc, type OrderLine, type PlanDoc } from "@report/core";
+import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, type DayReport, type OrderDoc, type OrderLine, type PlanDoc } from "@report/core";
+
+export type Kind = "provisional" | "final";
 
 export interface Api {
   kind: "cloud" | "demo";
@@ -12,8 +14,8 @@ export interface Api {
   order(date: string): Promise<OrderDoc | null>;
   /** 그날 카페 실적 (빵 판매 · 50% 할인) — 매출 금액은 화면에 쓰지 않음 */
   report(date: string): Promise<DayReport | null>;
-  /** 빵 몇 개를 확정 (있던 확정에 더해 씀) */
-  confirm(date: string, lines: Record<string, number>, by: string): Promise<OrderDoc>;
+  /** 빵 몇 개를 잠정(provisional) 또는 최종(final) 확정 — 있던 확정에 더해 씀 */
+  confirm(date: string, kind: Kind, lines: Record<string, number>, by: string): Promise<OrderDoc>;
 }
 
 const env = { apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined };
@@ -134,8 +136,8 @@ async function readJson<T>(board: string, coll: string, date: string, auth: bool
 export function cloudApi(board: string, auth: boolean): Api {
   return {
     kind: "cloud",
-    plan: (date) => readJson<PlanDoc>(board, "plans", date, auth),
-    order: (date) => readJson<OrderDoc>(board, "orders", date, auth),
+    plan: async (date) => asPlan(await readJson<PlanDoc>(board, "plans", date, auth)),
+    order: async (date) => asOrder(await readJson<OrderDoc>(board, "orders", date, auth)),
     async report(date) {
       try {
         const headers: Record<string, string> = auth ? { Authorization: `Bearer ${await idToken()}` } : {};
@@ -148,20 +150,25 @@ export function cloudApi(board: string, auth: boolean): Api {
         throw e;
       }
     },
-    async confirm(date, lines, by) {
-      const old = (await readJson<OrderDoc>(board, "orders", date, true)) || { v: 1 as const, date, items: {} };
-      const at = new Date().toISOString();
-      const items: Record<string, OrderLine> = { ...old.items };
-      for (const [name, qty] of Object.entries(lines)) items[name] = { qty: Math.max(0, Math.round(qty)), by, at };
-      const doc: OrderDoc = { v: 1, date, items };
+    async confirm(date, kind, lines, by) {
+      const doc = asOrder(await readJson<OrderDoc>(board, "orders", date, true)) || emptyOrder(date);
+      doc[kind] = put(doc[kind], lines, by);
       await http(`${docs()}/boards/${board}/orders/${date}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${await idToken()}` },
-        body: JSON.stringify({ fields: { date: { stringValue: date }, at: { timestampValue: at }, json: { stringValue: JSON.stringify(doc) } } }),
+        body: JSON.stringify({ fields: { date: { stringValue: date }, at: { timestampValue: new Date().toISOString() }, json: { stringValue: JSON.stringify(doc) } } }),
       });
       return doc;
     },
   };
+}
+
+/** 확정 줄 더하기 */
+function put(old: Record<string, OrderLine>, lines: Record<string, number>, by: string): Record<string, OrderLine> {
+  const at = new Date().toISOString();
+  const out = { ...old };
+  for (const [name, qty] of Object.entries(lines)) out[name] = { qty: Math.max(0, Math.round(Number(qty) || 0)), by, at };
+  return out;
 }
 
 /* ---------- 체험판 ---------- */
@@ -169,36 +176,42 @@ export function demoApi(): Api {
   const today = nowKst().date;
   const board = new Board(sampleUntilYesterday(today));
   const plans = new Map<string, PlanDoc>();
-  // 그제 · 어제 · 오늘 16시에 센 계획 (오늘 · 내일은 이미 확정 기준일이 지남)
-  for (const k of [2, 1, 0]) {
-    const day = addDays(today, -k);
-    for (const p of makePlans(board, {}, DEFAULT_LEARNED, day, addDays(day, -1), (d) => plans.get(d))) plans.set(p.date, p);
+  const orders = new Map<string, OrderDoc>();
+  const KEY = "bakery.demo.orders.v2";
+  try {
+    for (const o of Object.values(JSON.parse(localStorage.getItem(KEY) || "{}"))) {
+      const x = asOrder(o);
+      if (x) orders.set(x.date, x);
+    }
+  } catch {
+    /* 처음 */
   }
-  const KEY = "bakery.demo.orders";
-  const load = (): Record<string, OrderDoc> => {
+  // 지난 3주 동안 이 방식으로 돌았다고 치고 계획을 미리 세움 (목요일 주간 · 매일 최종, 확정은 안 한 채로 → 자동)
+  for (const d of [...Array(21).keys()].reverse().map((k) => addDays(today, -k))) {
+    const asOf = addDays(d, -1);
+    if (weekday(d) === WEEK_PLAN_WEEKDAY) for (const w of makeWeek(board, {}, DEFAULT_LEARNED, d, asOf)) plans.set(w.date, { ...(plans.get(w.date) || { v: 2, date: w.date }), week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
+    const t = addDays(d, FINAL_LEAD);
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, d, asOf, plans.get(t) || null, orders.get(t) || null);
+    if (f) plans.set(t, { ...plans.get(t)!, final: f });
+  }
+  const save = () => {
     try {
-      return JSON.parse(localStorage.getItem(KEY) || "{}");
+      localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(orders)));
     } catch {
-      return {};
+      /* 이번만 */
     }
   };
   return {
     kind: "demo",
     plan: async (date) => plans.get(date) || null,
+    order: async (date) => orders.get(date) || null,
     report: async (date) => board.report(date) || null,
-    order: async (date) => load()[date] || null,
-    async confirm(date, lines, by) {
-      const all = load();
-      const old = all[date] || { v: 1 as const, date, items: {} };
-      const at = new Date().toISOString();
-      for (const [name, qty] of Object.entries(lines)) old.items[name] = { qty: Math.max(0, Math.round(qty)), by, at };
-      all[date] = old;
-      try {
-        localStorage.setItem(KEY, JSON.stringify(all));
-      } catch {
-        /* 이번만 */
-      }
-      return old;
+    async confirm(date, kind, lines, by) {
+      const doc = orders.get(date) || emptyOrder(date);
+      doc[kind] = put(doc[kind], lines, by);
+      orders.set(date, doc);
+      save();
+      return doc;
     },
   };
 }

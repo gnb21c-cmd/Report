@@ -1,17 +1,20 @@
-# 베이커리 작업지시 계획 — 매일 16시(한국 시간), 전날 밤 22:10 수집 실적의 오차를 보정해 이틀 뒤(확정안) · 사흘 뒤(±5%) · 나흘 뒤(±10%) 빵별 수량을 세어 클라우드 plans/{날짜} 에 씀
-# apps/collector/src/plan.ts (계산은 packages/core/src/bakery.ts) · 매니저 앱(D)이 그날 18시 전에 이틀 뒤 수량을 확정
+# 베이커리 작업지시 계획 — 매일 15시(한국 시간) apps/collector/src/plan.ts (규칙은 packages/core/src/bakery.ts)
+#   목요일: 다음 주 월 ~ 일 주간 잠정안 · 매일: 3일 뒤 최종안 (전날 밤 22:10 수집 실적의 오차를 보정)
 # 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD
-# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작할 수 있어 15:40 에 걸어 둠
+# 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작할 수 있어 14:35 에 걸어 둠
 name: 베이커리 계획
 on:
   schedule:
-    - cron: "40 6 * * *" # 06:40 UTC = 15:40 한국
-  # 작업 브랜치에 올리면 확인만 (쓰지 않음)
+    - cron: "35 5 * * *" # 05:35 UTC = 14:35 한국
+  # 작업 브랜치에 올리면 다가오는 목요일로 확인만 (쓰지 않음)
   push:
-    branches: ["feature/bakery-order", "feature/bakery-feedback"]
+    branches: ["feature/bakery-weekly"]
     paths: ["apps/collector/src/plan.ts", "packages/core/src/bakery.ts", "packages/core/src/forecast.ts", ".github/workflows/bakery-plan.yml"]
   workflow_dispatch:
     inputs:
+      today:
+        description: "이 날인 것처럼 (YYYY-MM-DD, 비우면 오늘)"
+        required: false
       dry:
         description: "확인만 (쓰지 않음)"
         type: boolean
@@ -28,9 +31,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: 다가오는 목요일 (작업 브랜치 시험용)
+        id: when
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            d=$(TZ=Asia/Seoul date +%F); while [ "$(date -d "$d" +%u)" != "4" ]; do d=$(date -d "$d +1 day" +%F); done
+            echo "today=$d" >> "$GITHUB_OUTPUT"; echo "dry=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "today=${{ inputs.today }}" >> "$GITHUB_OUTPUT"; echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
+          fi
       - run: pnpm --filter @report/collector plan
         env:
-          PLAN_DRY: ${{ (github.event_name == 'push' || inputs.dry == true) && '1' || '' }}
+          PLAN_TODAY: ${{ steps.when.outputs.today }}
+          PLAN_DRY: ${{ steps.when.outputs.dry }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}

@@ -12,7 +12,7 @@
    ============================================================ */
 import { addDays, dayRange, weekday } from "./dates";
 import type { Board } from "./metrics";
-import { holidayName } from "./rules";
+import { holidayName, NOT_BREAD } from "./rules";
 import { seasonOf, type DayWeather, type WeatherMap } from "./weather";
 
 export type DayKind = "평일" | "금요일" | "휴일";
@@ -219,7 +219,8 @@ export function breadPlan(board: Board, weather: WeatherMap, asOf: string, date:
   const days = dayRange(addDays(asOf, -(RATE_DAYS - 1)), asOf).filter((d) => visitorsOn(board, d) != null);
   let same = days.filter((d) => dayKind(d) === v.kind);
   if (same.length < 2) same = days;
-  const active = new Set(board.products(addDays(asOf, -13), asOf, "베이커리").map((p) => p.name));
+  // 최근 2주에 팔린 빵 (딸기잼 같은 베이커리 생산품이 아닌 상품은 빼고 — 지난 자료엔 베이커리로 남아 있을 수 있음)
+  const active = new Set(board.products(addDays(asOf, -13), asOf, "베이커리").map((p) => p.name).filter((n) => !NOT_BREAD.has(n)));
   let vis = 0;
   const qty = new Map<string, number[]>();
   for (const d of same) {
@@ -260,9 +261,13 @@ export function weeklyOutlook(board: Board, asOf: string, start: string, learned
 
 /** 잠정 수량 묶기 — 처음 알려 준 수량에서 ±band 안으로만 (D+2 는 5%, D+3 은 10%) */
 export function withinBand(first: number, now: number, band: number): number {
-  const lo = Math.floor(first * (1 - band));
-  const hi = Math.ceil(first * (1 + band));
+  const [lo, hi] = bandRange(first, band);
   return clamp(now, lo, hi);
+}
+
+/** 범위 — 소수 오차(50 × 1.1 = 55.000…01)로 한 개 더 넓어지지 않게 */
+export function bandRange(first: number, band: number): [number, number] {
+  return [Math.floor(first * (1 - band) + 1e-9), Math.ceil(first * (1 + band) - 1e-9)];
 }
 
 /** 시험 — 그날 lead 일 전에 예측했다면 얼마나 틀렸을까 (방문객 · 빵 총 개수, 절대 % 오차) */

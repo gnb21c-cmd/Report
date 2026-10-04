@@ -165,6 +165,16 @@ describe("매장 하루치 계산", () => {
   });
 });
 
+describe("베이커리 생산품이 아닌 상품", () => {
+  it("딸기잼은 분류표에 베이커리로 있어도 기타 판매품", () => {
+    const s = parseReceiptSheet(sheet([row("01", "0001", "", "12:00:00", "딸기잼", 2, 3000), row("01", "0002", "", "12:01:00", "소금빵", 1, 3500)]));
+    const { part } = buildStorePart({ store: "cafe", date: "2026-10-02", file: "t.xls", sheet: s, sectorOf: sectorLookup({ 딸기잼: "베이커리" }) });
+    expect(part.sectors.베이커리).toBe(3500);
+    expect(part.sectors.기타).toBe(3000);
+    expect(part.products.find((p) => p[0] === "딸기잼")?.[1]).toBe("기타");
+  });
+});
+
 describe("베이커리 50% 할인 (저녁 8시 30분 뒤)", () => {
   it("20:30 뒤 반값 줄만 셈 — 앞 시간 할인 · 음료 · 반품은 뺌", () => {
     const s = parseReceiptSheet(

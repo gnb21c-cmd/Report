@@ -1,36 +1,56 @@
 /* ============================================================
-   베이커리 작업지시 — 계획(plans) · 확정(orders) 문서와 그 규칙 (D 매니저 앱 · D-1 현장 태블릿 · 16시 예약 작업이 함께 씀)
-   - 매일 16시 (전날 밤 22:10 수집 실적의 오차를 보정): 이틀 뒤(확정안) · 사흘 뒤(잠정 ±5%) · 나흘 뒤(잠정 ±10%) 계획을 새로 셈 → plans/{날짜}
-     어제 알려 준 범위를 벗어나지 않게 묶음: 어제 나흘 뒤(±10%)였던 날은 오늘 그 범위 안, 어제 사흘 뒤(±5%)였던 날은 그 범위 안
-   - 매니저는 이틀 뒤 생산량을 그날 18시 전에 확정 (빵마다 또는 한꺼번에) → orders/{날짜}
-   - 생산 = 확정 수량 (확정 안 한 빵은 이틀 전 18시가 지나면 계획 수량을 그대로 '자동'), 폐기 = 생산 − 판매
+   베이커리 작업지시 — 계획(plans) · 확정(orders) 문서와 그 규칙 (D 매니저 앱 · D-1 현장 태블릿 · 15시 예약 작업이 함께 씀)
+   [주간] 매주 목요일 15시: 다음 주 월 ~ 일 7일치 계획(주간 잠정안) → 매니저가 목요일에 잠정 확정
+   [최종] 매일 15시: 3일 뒤 수량을 다시 셈(전날 밤 22:10 수집 실적의 오차 보정 · 잠정 확정 수량 ±10% 안) → 매니저가 그날 18시 전에 최종 확정
+          금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
+   마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
+   [현장] 아침 6시부터 그날 — 오늘 생산(최종) + 내일 준비(최종, 하루 전에 미리 준비) 두 날을 함께 보여 줌
+   생산 = 최종 수량, 폐기 = 생산 − 판매
    ============================================================ */
-import { addDays } from "./dates";
-import { breadPlan, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
+import { addDays, weekday } from "./dates";
+import { bandRange, breadPlan, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
+import { NOT_BREAD } from "./rules";
 import type { WeatherMap } from "./weather";
 
-/** 계획을 새로 세는 시각 (한국 시간) */
-export const PLAN_HOUR = 16;
-/** 매니저 확정 마감 (한국 시간) */
+/** 계획을 세는 시각 (한국 시간) — 예약 작업은 조금 일찍 걸어 둠 */
+export const PLAN_TIME = "15:00";
+/** 주간 계획을 세는 요일 (목) */
+export const WEEK_PLAN_WEEKDAY = 4;
+/** 최종 확정 = 3일 뒤 */
+export const FINAL_LEAD = 3;
+/** 매니저 확정 마감 (한국 시간, 잠정 · 최종 모두) */
 export const CONFIRM_DEADLINE = "18:00";
-/** 확정 기준일 — 오늘 16시 계획에서 확정하는 날 = 이틀 뒤 (빵 준비 · 반죽 · 해동 시간) */
-export const CONFIRM_LEAD = 2;
-/** 며칠 앞 → 범위 (2 = 이틀 뒤 확정안, 3 = 사흘 뒤 ±5%, 4 = 나흘 뒤 ±10%) */
-export const STAGE_BAND: Record<number, number> = { 2: 0, 3: 0.05, 4: 0.1 };
-export const STAGE_LABEL: Record<number, string> = { 2: "확정안", 3: "잠정 ±5%", 4: "잠정 ±10%" };
-export const STAGES = [2, 3, 4];
+/** 최종 수량은 잠정 확정 수량의 ±10% 안 (재료 · 인원 계획이 흔들리지 않게) */
+export const FINAL_BAND = 0.1;
+/** 현장 태블릿의 하루 시작 */
+export const DAY_START = "06:00";
 
 export interface PlanItem {
   name: string;
   qty: number;
-  /** 보정 배수 (1 이 아니면 지난 결과로 고친 것) */
-  adj?: number;
   /** 보정 전 예측 수량 (다음 보정의 기준 — 보정이 되풀이해 쌓이지 않게) */
   base?: number;
-  /** 잠정일 때 알려 주는 범위 */
+  /** 보정 배수 (1 이 아니면 지난 결과로 고친 것) */
+  adj?: number;
+  /** 최종 계산에서: 잠정 수량 ±10% 범위 */
   lo?: number;
   hi?: number;
+}
+
+/** 한 번 센 계획 (주간 또는 최종) */
+export interface PlanStep {
+  /** 센 날 (한국 날짜) */
+  madeOn: string;
+  /** 쓴 실적의 마지막 날 */
+  asOf: string;
+  kind: DayKind;
+  /** 예상 손님 (명) */
+  visitors: number;
+  /** 날씨 칸 (모르면 '모름') */
+  weather: string;
+  items: PlanItem[];
+  total: number;
 }
 
 export interface Outlook {
@@ -42,22 +62,13 @@ export interface Outlook {
 }
 
 export interface PlanDoc {
-  v: 1;
+  v: 2;
   date: string;
-  /** 센 날 (한국 날짜) */
-  madeOn: string;
-  /** 며칠 앞 (2 · 3 · 4) */
-  stage: number;
-  kind: DayKind;
-  /** 예상 손님 (명) */
-  visitors: number;
-  /** 날씨 칸 (모르면 '모름') */
-  weather: string;
-  items: PlanItem[];
-  total: number;
-  /** 센 날마다 빵별 수량 — 다음 날 범위 묶기에 씀 (최근 3번) */
-  history: Record<string, Record<string, number>>;
-  /** 확정안(이틀 뒤)에만: 그날부터 1 ~ 4주차 평일 · 휴일 하루 생산 개수 */
+  /** 주간 잠정안 (그 주 앞 목요일 15시) */
+  week?: PlanStep;
+  /** 최종안 (3일 전 15시) */
+  final?: PlanStep;
+  /** 주간 계획의 월요일 문서에만: 그 주부터 1 ~ 4주차 평일 · 휴일 하루 생산 개수 */
   outlook?: Outlook[];
 }
 
@@ -67,90 +78,153 @@ export interface OrderLine {
   at: string;
 }
 export interface OrderDoc {
-  v: 1;
+  v: 2;
   date: string;
-  items: Record<string, OrderLine>;
+  /** 목요일 잠정 확정 */
+  provisional: Record<string, OrderLine>;
+  /** 3일 전 최종 확정 */
+  final: Record<string, OrderLine>;
 }
 
-/** 오늘(16시) 계획 세 장 — prev(날짜) = 이미 있던 계획 (범위 묶기) */
-export function makePlans(
-  board: Board,
-  weather: WeatherMap,
-  learned: Learned,
-  today: string,
-  asOf: string,
-  prev: (date: string) => PlanDoc | undefined,
-  /** 빵별 보정 배수 (지난 생산 대비 정가 판매 — corrections) */
-  corr: Record<string, number> = {},
-): PlanDoc[] {
-  const out: PlanDoc[] = [];
-  for (const stage of STAGES) {
-    const date = addDays(today, stage);
-    const p = breadPlan(board, weather, asOf, date, learned);
-    const old = prev(date);
-    // 어제 알려 준 수량 · 범위 (어제는 stage + 1 이었음)
-    const yesterday = old?.history?.[addDays(today, -1)];
-    const yBand = STAGE_BAND[stage + 1] ?? 0;
-    const items: PlanItem[] = p.items.map((it) => {
-      let qty = Math.round(it.qty * (corr[it.name] ?? 1));
-      const y = yesterday?.[it.name];
-      if (y != null && yBand > 0) qty = withinBand(y, qty, yBand);
-      const band = STAGE_BAND[stage];
-      const adj = corr[it.name] != null && Math.abs(corr[it.name] - 1) >= 0.005 ? Math.round(corr[it.name] * 100) / 100 : undefined;
-      const base = { name: it.name, qty, base: it.qty, ...(adj ? { adj } : {}) };
-      return band ? { ...base, lo: Math.floor(qty * (1 - band)), hi: Math.ceil(qty * (1 + band)) } : base;
-    });
-    const history = { ...(old?.history || {}), [today]: Object.fromEntries(items.map((i) => [i.name, i.qty])) };
-    for (const k of Object.keys(history).sort().slice(0, -3)) delete history[k];
-    out.push({
-      v: 1,
-      date,
-      madeOn: today,
-      stage,
-      kind: p.visitors.kind,
-      visitors: p.visitors.value,
-      weather: p.visitors.weather.cls,
-      items,
-      total: items.reduce((a, b) => a + b.qty, 0),
-      history,
-      ...(stage === CONFIRM_LEAD ? { outlook: weeklyOutlook(board, asOf, addDays(today, CONFIRM_LEAD), learned) } : {}),
-    });
-  }
-  return out;
+/** 클라우드 문서 → 계획 (예전 모양 v1 은 버림) */
+export function asPlan(x: unknown): PlanDoc | null {
+  const o = x as PlanDoc | null;
+  return o && o.v === 2 && typeof o.date === "string" ? o : null;
+}
+export function asOrder(x: unknown): OrderDoc | null {
+  const o = x as OrderDoc | null;
+  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: o.provisional || {}, final: o.final || {} } : null;
+}
+export const emptyOrder = (date: string): OrderDoc => ({ v: 2, date, provisional: {}, final: {} });
+
+/* ---------- 날짜 ---------- */
+
+/** 그 날이 든 주의 주간 계획을 세는 목요일 (그 주 월요일의 나흘 전) */
+export function weekPlanDay(date: string): string {
+  const monday = addDays(date, -((weekday(date) + 6) % 7));
+  return addDays(monday, -4);
+}
+/** 목요일 → 다음 주 월 ~ 일 */
+export function weekDates(thursday: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(thursday, 4 + i));
+}
+/** 최종 확정하는 날 (3일 전) */
+export const finalDay = (date: string) => addDays(date, -FINAL_LEAD);
+
+type Now = { date: string; time: string };
+const passed = (now: Now, day: string) => now.date > day || (now.date === day && now.time >= CONFIRM_DEADLINE);
+
+/** 현장 태블릿이 보여 줄 두 날 — 아침 6시 전에는 아직 어제 */
+export function displayDays(now: Now): [string, string] {
+  const today = now.time < DAY_START ? addDays(now.date, -1) : now.date;
+  return [today, addDays(today, 1)];
 }
 
-export type OrderState = "확정" | "자동" | "확정 전";
+/* ---------- 계획 세기 ---------- */
+
+function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, corr: Record<string, number>): PlanStep {
+  const p = breadPlan(board, weather, asOf, date, learned);
+  const items: PlanItem[] = p.items.map((it) => {
+    const c = corr[it.name] ?? 1;
+    const adj = Math.abs(c - 1) >= 0.005 ? Math.round(c * 100) / 100 : undefined;
+    return { name: it.name, qty: Math.round(it.qty * c), base: it.qty, ...(adj ? { adj } : {}) };
+  });
+  return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0) };
+}
+
+/** 목요일 15시 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌) */
+export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, corr: Record<string, number> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
+  const dates = weekDates(thursday);
+  return dates.map((date, i) => ({
+    date,
+    week: step(board, weather, learned, thursday, asOf, date, corr),
+    ...(i === 0 ? { outlook: weeklyOutlook(board, asOf, date, learned) } : {}),
+  }));
+}
+
+/**
+ * 매일 15시 — 3일 뒤 최종안. 주간 잠정안이 없으면 null (작업지시를 쓰기 전 날)
+ * 빵마다 기준 = 매니저 잠정 확정 수량(없으면 주간 수량) → 새로 센 수량을 그 ±10% 안으로 묶음
+ * 새로 생긴 빵(잠정에 없던 빵)은 새로 센 수량 그대로
+ */
+export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, today: string, asOf: string, plan: PlanDoc | null, order: OrderDoc | null, corr: Record<string, number> = {}): PlanStep | null {
+  const date = addDays(today, FINAL_LEAD);
+  if (!plan?.week || plan.date !== date) return null;
+  const now = step(board, weather, learned, today, asOf, date, corr);
+  const fresh = new Map(now.items.map((i) => [i.name, i]));
+  const anchor = new Map<string, number>();
+  for (const it of plan.week.items) anchor.set(it.name, it.qty);
+  for (const [n, l] of Object.entries(order?.provisional || {})) anchor.set(n, l.qty);
+  const names = [...new Set([...anchor.keys(), ...fresh.keys()])];
+  const items: PlanItem[] = names
+    .map((name) => {
+      const f = fresh.get(name);
+      const a = anchor.get(name);
+      if (a == null) return f!;
+      const [lo, hi] = bandRange(a, FINAL_BAND);
+      const qty = withinBand(a, f?.qty ?? 0, FINAL_BAND);
+      return { name, qty, base: f?.base ?? a, ...(f?.adj ? { adj: f.adj } : {}), lo, hi };
+    })
+    .filter((i) => i.qty > 0)
+    .sort((x, y) => y.qty - x.qty || x.name.localeCompare(y.name, "ko"));
+  return { ...now, items, total: items.reduce((a, b) => a + b.qty, 0) };
+}
+
+/* ---------- 만들 목록 ---------- */
+
+export type OrderState = "확정" | "자동" | "잠정" | "확정 전";
 export interface OrderRow {
   name: string;
-  /** 계획 수량 */
-  plan: number;
-  /** 매니저가 확정한 수량 */
+  /** 주간 잠정안 수량 */
+  week: number | null;
+  /** 매니저 잠정 확정 수량 (없으면 null) */
+  provisional: number | null;
+  /** 최종안 수량 (3일 전 15시) */
+  suggested: number | null;
+  /** 매니저 최종 확정 수량 */
   confirmed: number | null;
-  /** 만들 수량 (확정 · 자동) — 확정 전이면 null */
+  /** 지금 기준 만들 수량 — 확정 · 자동 = 최종, 잠정 = 잠정 수량, 확정 전 = null */
   qty: number | null;
   state: OrderState;
 }
 
-/** 그날 만들 목록 — 확정한 빵은 확정 수량, 안 한 빵은 마감(이틀 전 18시)이 지나면 계획 수량 '자동' */
-export function orderRows(plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined, nowKst: { date: string; time: string }): OrderRow[] {
+/**
+ * 그날 빵별 상태 (지금 시각 기준)
+ * 확정: 매니저 최종 확정 · 자동: 최종 마감(3일 전 18시)이 지나 최종안(없으면 잠정 · 주간) 그대로
+ * 잠정: 매니저 잠정 확정 또는 잠정 마감(목 18시)이 지나 주간 수량 그대로 · 확정 전: 아직 아무것도 없음
+ */
+export function orderRows(plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined, now: Now): OrderRow[] {
   const date = plan?.date || order?.date || "";
   if (!date) return [];
-  const due = addDays(date, -CONFIRM_LEAD);
-  const pastDeadline = nowKst.date > due || (nowKst.date === due && nowKst.time >= CONFIRM_DEADLINE);
-  const names = new Map<string, number>();
-  for (const it of plan?.items || []) names.set(it.name, it.qty);
-  for (const n of Object.keys(order?.items || {})) if (!names.has(n)) names.set(n, 0);
-  return [...names.entries()].map(([name, planQty]) => {
-    const c = order?.items?.[name];
-    if (c) return { name, plan: planQty, confirmed: c.qty, qty: c.qty, state: "확정" as const };
-    return pastDeadline ? { name, plan: planQty, confirmed: null, qty: planQty, state: "자동" as const } : { name, plan: planQty, confirmed: null, qty: null, state: "확정 전" as const };
+  const week = new Map((plan?.week?.items || []).map((i) => [i.name, i.qty]));
+  const fin = new Map((plan?.final?.items || []).map((i) => [i.name, i.qty]));
+  const prov = order?.provisional || {};
+  const conf = order?.final || {};
+  const finalPassed = passed(now, finalDay(date));
+  const provPassed = passed(now, plan?.week?.madeOn || weekPlanDay(date));
+  const names = [...new Set([...fin.keys(), ...week.keys(), ...Object.keys(prov), ...Object.keys(conf)])];
+  const rows = names.map((name): OrderRow => {
+    const base = { name, week: week.get(name) ?? null, provisional: prov[name]?.qty ?? null, suggested: fin.get(name) ?? null, confirmed: conf[name]?.qty ?? null };
+    if (conf[name]) return { ...base, qty: conf[name].qty, state: "확정" };
+    if (finalPassed) {
+      const q = plan?.final ? (fin.get(name) ?? 0) : (prov[name]?.qty ?? week.get(name) ?? 0);
+      return { ...base, qty: q, state: "자동" };
+    }
+    if (prov[name]) return { ...base, qty: prov[name].qty, state: "잠정" };
+    if (provPassed && week.has(name)) return { ...base, qty: week.get(name)!, state: "잠정" };
+    return { ...base, qty: null, state: "확정 전" };
   });
+  // 최종이 정해졌는데 0 개인 빵은 뺌 (최종안에서 빠진 빵)
+  return rows
+    .filter((r) => !((r.state === "자동" || r.state === "확정") && !r.qty))
+    .sort((a, b) => (b.qty ?? b.week ?? 0) - (a.qty ?? a.week ?? 0) || a.name.localeCompare(b.name, "ko"));
 }
 
-/** 생산 합계 (확정 + 자동) — 확정 전이 하나라도 있으면 아는 만큼 */
+/** 생산 합계 — 최종(확정 · 자동)만. 최종 전이면 null */
 export function madeTotal(rows: OrderRow[]): number | null {
-  if (!rows.length) return null;
-  return rows.reduce((a, r) => a + (r.qty || 0), 0);
+  const fin = rows.filter((r) => r.state === "확정" || r.state === "자동");
+  if (!fin.length || fin.length !== rows.length) return null;
+  return fin.reduce((a, r) => a + (r.qty || 0), 0);
 }
 
 /** 카톡으로 보낼 생산 명령서 글 */
@@ -158,11 +232,11 @@ export function orderText(date: string, rows: OrderRow[], label = "생산 명령
   const [, m, d] = date.split("-").map(Number);
   const list = rows.filter((r) => (r.qty || 0) > 0);
   const total = list.reduce((a, r) => a + (r.qty || 0), 0);
-  return [`[${m}월 ${d}일 ${label}] 총 ${total}개`, ...list.map((r) => `· ${r.name} ${r.qty}개${r.state === "자동" ? " (자동)" : ""}`)].join("\n");
+  return [`[${m}월 ${d}일 ${label}] 총 ${total}개`, ...list.map((r) => `· ${r.name} ${r.qty}개${r.state === "확정" ? "" : ` (${r.state})`}`)].join("\n");
 }
 
 /** 한국 시간 지금 */
-export function nowKst(d = new Date()): { date: string; time: string } {
+export function nowKst(d = new Date()): Now {
   const k = new Date(d.getTime() + 9 * 3600e3).toISOString();
   return { date: k.slice(0, 10), time: k.slice(11, 16) };
 }
@@ -185,12 +259,14 @@ export interface BreadResult {
 }
 
 export function dayResult(board: Board, date: string, plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): BreadResult[] {
-  // 지난 날이라 확정 안 한 빵은 모두 '자동'
+  // 지난 날이라 최종 확정 안 한 빵은 모두 '자동'
   const rows = orderRows(plan, order, { date: "9999-12-31", time: "00:00" });
   const made = new Map(rows.map((r) => [r.name, r.qty]));
-  const sold = new Map(board.products(date, date, "베이커리").map((p) => [p.name, p.qty]));
+  const sold = new Map(board.products(date, date, "베이커리").filter((p) => !NOT_BREAD.has(p.name)).map((p) => [p.name, p.qty]));
   const halfBy = board.report(date)?.cafe?.bakeryHalfBy || {};
-  const baseOf = new Map((plan?.items || []).map((i) => [i.name, i.base ?? i.qty]));
+  const baseOf = new Map<string, number>();
+  for (const it of plan?.week?.items || []) baseOf.set(it.name, it.base ?? it.qty);
+  for (const it of plan?.final?.items || []) baseOf.set(it.name, it.base ?? it.qty);
   const names = [...new Set([...made.keys(), ...sold.keys()])];
   return names
     .map((name) => {
