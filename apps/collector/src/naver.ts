@@ -1,6 +1,7 @@
 /* ============================================================
    네이버 예약 자동 수집 — 매일 아침 09:40 POS 메인 PC(실행기 nice-pos)에서 어제 예약현황을 읽어 A 네이버 칸(30분마다)을 채움
    - 판매입장권 = 이용완료, 신규방문자 = 완료자 목록의 '완료 1' (packages/core/src/naverAuto.ts)
+     '완료 N' 은 손님 아이디를 따라가는 누적 방문 수라, 다음 날 아침에 본 어제만 신규방문자가 맞음 — 더 지난 날은 신규방문자 '모름'(판매입장권만)
    - 어제 + 지난 7일 중 네이버 칸이 빈 날 (PC가 꺼져 있던 날) · 사람이 A 에서 넣은 칸은 그대로
    - 로그인은 사람이 POS 메인 PC에서 한 번 해 둔 상태(state.json) — 없거나 풀렸으면 실패로 끝나고 다시 로그인하라고 알림
      로그인 창(naver-login.cmd)은 이 수집이 실행기 폴더에 깔아 둠
@@ -91,8 +92,11 @@ async function main() {
         let firstOk = 0;
         let listMismatch = 0;
         for (const c of cells) {
-          let first: number | null = null;
-          if (c.done > 0 && isNaverTicketProduct(c.product)) {
+          let first: number | null = 0;
+          // '완료 N' 은 그 손님의 지금까지 누적 방문 수 — 다음 날 아침(다시 오기 전)에 본 어제만 신규방문자가 맞음
+          // 그 전 날짜는 그 뒤에 다시 온 손님이 '완료 2' 이상으로 바뀌어 있으니 신규방문자는 '모름'(noNew)
+          if (date !== yesterday) first = null;
+          else if (c.done > 0 && isNaverTicketProduct(c.product)) {
             try {
               const r = await nb.countFirst(c.key);
               first = r.first;
@@ -101,7 +105,7 @@ async function main() {
             } catch (e) {
               say(`  ${md(date)} 완료자 목록을 못 읽은 칸 하나 (${mask((e as Error).message).split("\n")[0].slice(0, 60)})`);
             }
-          } else first = 0;
+          }
           reads.push({ product: c.product, time: c.time, done: c.done, first });
         }
         const r = naverPartFrom(date, reads);
