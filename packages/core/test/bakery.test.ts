@@ -15,6 +15,7 @@ import {
   madeTotal,
   makeFinal,
   makeWeek,
+  snapUnit,
   nowKst,
   orderRows,
   orderText,
@@ -181,5 +182,27 @@ describe("결과 · 오차 → 다음 예측", () => {
     const x: BreadResult = { name: "소금빵", made: 45, base: 60, sold: 45, half: 0, full: 45, waste: 0, soldOut: true };
     const c = corrections([1, 2, 3, 4, 5, 6].map((k) => ({ date: addDays("2026-10-12", -k), rows: [x] })), "2026-10-12");
     expect(c["소금빵"]).toBeCloseTo(Math.exp((6 / 8) * Math.log(0.75 * 1.1)), 2);
+  });
+});
+
+describe("생산 단위 — 몽블랑은 5개 단위", () => {
+  it("가까운 5의 배수, 0 보다 많으면 적어도 5개", () => {
+    expect(snapUnit("몽블랑", 37)).toBe(35);
+    expect(snapUnit("몽블랑", 38)).toBe(40);
+    expect(snapUnit("몽블랑", 2)).toBe(5);
+    expect(snapUnit("몽블랑", 0)).toBe(0);
+    expect(snapUnit("소금빵", 37)).toBe(37);
+  });
+  it("범위가 있으면 범위 안의 5의 배수 (없으면 가장 가까운 배수)", () => {
+    expect(snapUnit("몽블랑", 38, 36, 44)).toBe(40);
+    expect(snapUnit("몽블랑", 36, 36, 44)).toBe(40); // 35 는 범위 밖
+    expect(snapUnit("몽블랑", 41, 41, 44)).toBe(40); // 범위 안 배수가 없으면 가까운 쪽
+  });
+  it("주간 · 최종안에 적용", () => {
+    const b = new Board([...make("2025-08-01", "2025-12-31", () => 1), ...make("2026-08-01", "2026-10-07", () => 1)].map((r) => ({ ...r, cafe: { ...r.cafe!, products: [...r.cafe!.products, ["몽블랑", "베이커리", 23, 0] as any] } })));
+    const [mon] = makeWeek(b, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07");
+    expect(mon.week.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
+    const f = makeFinal(b, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", { v: 2, date: mon.date, week: mon.week }, null, { 몽블랑: 1.07 })!;
+    expect(f.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
   });
 });

@@ -516,3 +516,37 @@ tr.sum td {
 .floor-day:last-child .floor-date {
   color: var(--accent);
 }
+
+/* 큰 화면 둘 · 작은 링크 */
+.tabs.two button {
+  font-size: 15px;
+  padding: 10px 4px;
+}
+.more {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 16px 8px;
+}
+.more button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 2px;
+}
+.more button.on {
+  color: var(--accent);
+  font-weight: 700;
+}
+.img-btn {
+  width: 100%;
+  padding: 11px;
+}
+.row .name .unit {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12px;
+}

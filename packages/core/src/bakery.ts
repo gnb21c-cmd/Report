@@ -26,6 +26,24 @@ export const FINAL_BAND = 0.1;
 /** 현장 태블릿의 하루 시작 */
 export const DAY_START = "06:00";
 
+/** 만드는 단위 (적지 않은 빵은 1개 단위) */
+export const PRODUCTION_UNIT: Readonly<Record<string, number>> = { 몽블랑: 5 };
+export const breadUnit = (name: string) => PRODUCTION_UNIT[name] || 1;
+
+/** 단위에 맞추기 — 가까운 배수 (0 보다 많으면 적어도 한 단위), 범위가 있으면 범위 안의 배수 중 가까운 것 */
+export function snapUnit(name: string, qty: number, lo?: number, hi?: number): number {
+  const u = breadUnit(name);
+  const q = Math.max(0, Math.round(qty));
+  if (u === 1 || q === 0) return q;
+  let best = Math.max(u, Math.round(q / u) * u);
+  if (lo != null && hi != null && (best < lo || best > hi)) {
+    const inside: number[] = [];
+    for (let m = Math.ceil(lo / u) * u; m <= hi; m += u) if (m > 0) inside.push(m);
+    if (inside.length) best = inside.reduce((a, b) => (Math.abs(b - q) < Math.abs(a - q) ? b : a));
+  }
+  return best;
+}
+
 export interface PlanItem {
   name: string;
   qty: number;
@@ -127,7 +145,7 @@ function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: strin
   const items: PlanItem[] = p.items.map((it) => {
     const c = corr[it.name] ?? 1;
     const adj = Math.abs(c - 1) >= 0.005 ? Math.round(c * 100) / 100 : undefined;
-    return { name: it.name, qty: Math.round(it.qty * c), base: it.qty, ...(adj ? { adj } : {}) };
+    return { name: it.name, qty: snapUnit(it.name, it.qty * c), base: it.qty, ...(adj ? { adj } : {}) };
   });
   return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
@@ -162,7 +180,7 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
       const a = anchor.get(name);
       if (a == null) return f!;
       const [lo, hi] = bandRange(a, FINAL_BAND);
-      const qty = withinBand(a, f?.qty ?? 0, FINAL_BAND);
+      const qty = snapUnit(name, withinBand(a, f?.qty ?? 0, FINAL_BAND), lo, hi);
       return { name, qty, base: f?.base ?? a, ...(f?.adj ? { adj: f.adj } : {}), lo, hi };
     })
     .filter((i) => i.qty > 0)

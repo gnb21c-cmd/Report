@@ -19,6 +19,8 @@ import {
   orderRows,
   orderText,
   shortLabel,
+  snapUnit,
+  breadUnit,
   weekday,
   weekDates,
   weekPlanDay,
@@ -29,6 +31,7 @@ import {
   type PlanDoc,
 } from "@report/core";
 import { cloudApi, CloudError, demoApi, login, logout, session, tabletKey, tabletUrl, type Api, type Kind } from "./data";
+import { finalImage, shareImage, weekImage, type ImgRow } from "./image";
 
 export function App() {
   if (__DEMO__) return <Demo />;
@@ -117,12 +120,16 @@ function Login({ onDone }: { onDone: () => void }) {
 
 /* ---------- D 매니저 ---------- */
 type Tab = "week" | "final" | "order" | "result" | "outlook";
+/** 큰 화면 둘 — 다음 주 잠정 확정 · 3일 뒤 최종 확정 */
 const TABS: [Tab, string][] = [
-  ["week", "주간 잠정"],
-  ["final", "최종 확정"],
-  ["order", "명령서"],
+  ["week", "다음 주 잠정 확정"],
+  ["final", "3일 뒤 최종 확정"],
+];
+/** 그 밖 (작게) */
+const MORE: [Tab, string][] = [
+  ["order", "오늘·내일 명령서"],
   ["result", "결과"],
-  ["outlook", "1~4주"],
+  ["outlook", "1~4주 전망"],
 ];
 
 function useDay(api: Api, date: string) {
@@ -173,8 +180,15 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
           </button>
         )}
       </header>
-      <nav className="tabs">
+      <nav className="tabs two">
         {TABS.map(([k, label]) => (
+          <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+            {label}
+          </button>
+        ))}
+      </nav>
+      <nav className="more">
+        {MORE.map(([k, label]) => (
           <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
             {label}
           </button>
@@ -198,6 +212,36 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
   const [pick, setPick] = useState(dates[0]);
   useEffect(() => setPick(weekDates(addDays(monday, -4))[0]), [monday]);
   const thursday = weekPlanDay(monday);
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgMsg, setImgMsg] = useState("");
+  // 7일 표 전체를 그림 한 장으로 — 잠정 확정 수량, 안 한 빵은 계획 수량에 • 표시
+  const shareWeek = async () => {
+    setImgBusy(true);
+    setImgMsg("");
+    try {
+      const docs = await Promise.all(dates.map(async (d) => ({ d, p: await api.plan(d), o: await api.order(d) })));
+      if (!docs.some((x) => x.p?.week)) throw new Error("이 주 계획이 아직 없습니다.");
+      const tot = new Map<string, number>();
+      for (const { p, o } of docs) {
+        for (const it of p?.week?.items || []) tot.set(it.name, (tot.get(it.name) || 0) + (o?.provisional[it.name]?.qty ?? it.qty));
+        for (const [n, l] of Object.entries(o?.provisional || {})) if (!tot.has(n)) tot.set(n, l.qty);
+      }
+      const names = [...tot.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")).map(([n]) => n);
+      const get = (d: string, n: string) => {
+        const x = docs.find((y) => y.d === d)!;
+        const c = x.o?.provisional[n];
+        if (c) return { qty: c.qty, pending: false };
+        const w = x.p?.week?.items.find((i) => i.name === n);
+        return w ? { qty: w.qty, pending: true } : null;
+      };
+      const b = await weekImage(dates, names, get, who);
+      setImgMsg(await shareImage(b, `잠정생산_${dates[0]}.png`, "다음 주 잠정 생산"));
+    } catch (e) {
+      setImgMsg((e as Error).message);
+    } finally {
+      setImgBusy(false);
+    }
+  };
   return (
     <main className="content">
       <div className="week-nav">
@@ -221,6 +265,10 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
           </button>
         ))}
       </div>
+      <button className="ghost img-btn" disabled={imgBusy} onClick={shareWeek}>
+        {imgBusy ? "그리는 중…" : "📷 잠정 확정 7일 표 이미지로 카톡 보내기"}
+      </button>
+      {imgMsg && <p className="msg center">{imgMsg}</p>}
       <Confirm key={pick} api={api} date={pick} kind="provisional" who={who} weekDays={dates} />
     </main>
   );
@@ -245,9 +293,10 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const done = order?.[kind] || {};
   const prov = order?.provisional || {};
   const rows = step?.items || [];
+  // 고친 수량도 만드는 단위로 (몽블랑 5개)
   const valueOf = (name: string, q: number) => {
     const v = edit[name];
-    if (v != null && v !== "") return Math.max(0, Math.round(Number(v) || 0));
+    if (v != null && v !== "") return snapUnit(name, Number(v) || 0);
     return done[name]?.qty ?? q;
   };
   const save = async (lines: Record<string, number>, label: string) => {
@@ -290,6 +339,19 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
       setBusy(null);
     }
   };
+  // 최종 확정 목록 전체를 그림 한 장으로 (확정 안 한 빵은 최종안 수량에 • 표시)
+  const shareFinal = async () => {
+    setBusy("img");
+    try {
+      const list: ImgRow[] = rows.map((r) => ({ name: r.name, qty: done[r.name]?.qty ?? r.qty, pending: !done[r.name] })).filter((r) => r.qty > 0);
+      const b = await finalImage(date, list, who);
+      setMsg(await shareImage(b, `최종생산_${date}.png`, `${shortLabel(date)} 최종 생산 지시`));
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
   const confirmedN = rows.filter((r) => done[r.name]).length;
   const total = rows.reduce((a, r) => a + valueOf(r.name, r.qty), 0);
   return (
@@ -322,6 +384,11 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
             {busy === "week" ? "확정 중…" : "7일 모두 일괄 잠정 확정"}
           </button>
         )}
+        {kind === "final" && rows.length > 0 && (
+          <button className="ghost" disabled={!!busy} onClick={shareFinal}>
+            📷 최종 확정 목록 이미지로 카톡 보내기
+          </button>
+        )}
         {msg && <p className="msg">{msg}</p>}
       </section>
       {err && <p className="error box">{err}</p>}
@@ -344,6 +411,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
               <div key={r.name} className={`row${c ? " done" : ""}${kind === "final" ? " fin" : ""}`}>
                 <span className="name">
                   {r.name}
+                  {breadUnit(r.name) > 1 && <small className="unit"> {breadUnit(r.name)}개 단위</small>}
                   {r.lo != null && (
                     <small className="muted">
                       {" "}
