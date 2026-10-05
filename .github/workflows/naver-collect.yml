@@ -7,6 +7,8 @@ name: 네이버 예약 자동 수집
 on:
   schedule:
     - cron: "15 0 * * *" # 00:15 UTC = 09:15 한국 (문 열기 전 — '완료 N' 이 바뀌기 전에)
+    # 안 됐으면 10분 뒤 한 번 더 (첫 실행이 성공했으면 건너뜀)
+    - cron: "25 0 * * *" # 00:25 UTC = 09:25 한국
   # 작업 브랜치에 올리면 POS 메인 PC에서 최근 며칠을 읽어 사람이 넣은 값과 견주기만 (올리지 않음)
   push:
     branches: ["feature/naver-collect"]
@@ -27,7 +29,27 @@ concurrency:
   group: naver-collect
   cancel-in-progress: false
 jobs:
+  # 10분 뒤 다시 하는 예약이면: 오늘 아침 예약 실행이 이미 성공했는지 보고, 성공했으면 건너뜀
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      done: ${{ steps.c.outputs.done }}
+    steps:
+      - id: c
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== "schedule" || context.payload.schedule !== "25 0 * * *") return core.setOutput("done", "");
+            const day = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+            const r = await github.rest.actions.listWorkflowRuns({ ...context.repo, workflow_id: "naver-collect.yml", event: "schedule", status: "success", created: `>=${day}T00:00:00+09:00` });
+            const ok = r.data.workflow_runs.some((x) => x.id !== context.runId);
+            core.info(ok ? "오늘 아침 실행이 이미 성공 — 건너뜀" : "오늘 아침 실행이 안 됐거나 실패 — 다시 함");
+            core.setOutput("done", ok ? "1" : "");
   collect:
+    needs: check
+    if: needs.check.outputs.done != '1'
     runs-on: [self-hosted, Windows, nice-pos]
     timeout-minutes: 40
     defaults:

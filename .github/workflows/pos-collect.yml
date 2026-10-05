@@ -7,8 +7,8 @@ name: POS 자동 수집
 on:
   schedule:
     - cron: "12 0 * * *" # 00:12 UTC = 09:12 한국 — 어제
-    # GitHub 예약 실행은 가끔 건너뜀 → 한 번 더 (자동으로 올린 칸은 다시 받아 덮고, 사람이 올린 칸은 그대로)
-    - cron: "28 0 * * *" # 00:28 UTC = 09:28 한국 — 어제
+    # 안 됐으면(실패 · GitHub 가 예약을 건너뜀) 10분 뒤 한 번 더 — 첫 실행이 성공했으면 건너뜀
+    - cron: "22 0 * * *" # 00:22 UTC = 09:22 한국 — 어제
   # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
   push:
     branches: ["feature/pos-auto", "feature/pos-backfill", "feature/bakery-feedback"]
@@ -29,8 +29,31 @@ on:
         description: "확인만 (올리지 않음)"
         type: boolean
         default: false
+concurrency:
+  group: pos-collect
+  cancel-in-progress: false
 jobs:
+  # 10분 뒤 다시 하는 예약이면: 오늘 아침 예약 실행이 이미 성공했는지 보고, 성공했으면 건너뜀
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      done: ${{ steps.c.outputs.done }}
+    steps:
+      - id: c
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== "schedule" || context.payload.schedule !== "22 0 * * *") return core.setOutput("done", "");
+            const day = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+            const r = await github.rest.actions.listWorkflowRuns({ ...context.repo, workflow_id: "pos-collect.yml", event: "schedule", status: "success", created: `>=${day}T00:00:00+09:00` });
+            const ok = r.data.workflow_runs.some((x) => x.id !== context.runId);
+            core.info(ok ? "오늘 아침 실행이 이미 성공 — 건너뜀" : "오늘 아침 실행이 안 됐거나 실패 — 다시 함");
+            core.setOutput("done", ok ? "1" : "");
   collect:
+    needs: check
+    if: needs.check.outputs.done != '1'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
