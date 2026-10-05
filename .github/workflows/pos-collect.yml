@@ -1,4 +1,4 @@
-# POS 자동 수집 — 매일 밤 10시 10분(한국 시간) OKPOS 점주 웹에서 카페 · 키즈 영수증별 매출 엑셀을 받아 클라우드에 올림
+# POS 자동 수집 — 매일 아침 9시 10분대(한국 시간) OKPOS 점주 웹에서 어제 카페 · 키즈 영수증별 매출 엑셀을 받아 클라우드에 올림
 # 직원 PC 가 켜져 있을 필요 없음 (GitHub 가 대신). apps/collector/src/collect.ts
 # 필요한 값: Secrets OKPOS_ID · OKPOS_PW · REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD, Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID
 # 공개 저장소라 기록에는 줄 수 · 일치 여부만 남김 (매출 숫자 · 매장 이름 없음)
@@ -6,9 +6,9 @@
 name: POS 자동 수집
 on:
   schedule:
-    - cron: "10 13 * * *" # 13:10 UTC = 22:10 한국
+    - cron: "12 0 * * *" # 00:12 UTC = 09:12 한국 — 어제
     # GitHub 예약 실행은 가끔 건너뜀 → 한 번 더 (자동으로 올린 칸은 다시 받아 덮고, 사람이 올린 칸은 그대로)
-    - cron: "45 13 * * *" # 13:45 UTC = 22:45 한국
+    - cron: "28 0 * * *" # 00:28 UTC = 09:28 한국 — 어제
   # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
   push:
     branches: ["feature/pos-auto", "feature/pos-backfill", "feature/bakery-feedback"]
@@ -47,6 +47,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "date=$(TZ=Asia/Seoul date -d yesterday +%F)" >> "$GITHUB_OUTPUT"; echo "dry=1" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            # 아침 예약은 어제
+            echo "date=$(TZ=Asia/Seoul date -d yesterday +%F)" >> "$GITHUB_OUTPUT"
           else
             echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"; echo "to=${{ inputs.to }}" >> "$GITHUB_OUTPUT"; echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
           fi

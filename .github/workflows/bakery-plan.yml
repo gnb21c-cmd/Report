@@ -1,5 +1,5 @@
 # 베이커리 작업지시 계획 — 매일 15시(한국 시간) apps/collector/src/plan.ts (규칙은 packages/core/src/bakery.ts)
-#   목요일: 다음 주 월 ~ 일 주간 잠정안 · 매일: 3일 뒤 최종안 (전날 밤 22:10 수집 실적의 오차를 보정)
+#   목요일: 다음 주 월 ~ 일 주간 잠정안 · 매일: 3일 뒤 최종안 (아침 09:10 수집한 어제까지 실적의 오차를 보정)
 # 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD
 # 공개 저장소라 기록에는 날짜 · 빵 종류 수만. GitHub 예약 실행은 10~20분 늦게 시작하거나 건너뛸 수 있어 14:35 · 15:20 두 번 걸어 둠
 name: 베이커리 계획

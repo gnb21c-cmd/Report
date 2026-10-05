@@ -2,7 +2,7 @@
    작업지시 계획 — 매일 15시(한국 시간) GitHub 가 클라우드의 실적 · 날씨 · 설정으로 셈 (packages/core/src/bakery.ts)
    - 목요일: 다음 주 월 ~ 일 주간 잠정안 → plans/{날짜}.week (매니저가 목요일에 잠정 확정)
    - 매일: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
-   - 전날 밤 22:10 자동 수집된 실적으로 지난 2주 빵별 결과(생산 대비 정가 판매 · 50% 할인 · 폐기)를 셈 → 보정 배수로 다시 넣음
+   - 아침 09:10 자동 수집된 어제까지의 실적으로 지난 2주 빵별 결과(생산 대비 정가 판매 · 50% 할인 · 폐기)를 셈 → 보정 배수로 다시 넣음
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
@@ -19,7 +19,7 @@ async function main() {
   applySettings(settings);
   const board = new Board(reports);
   const today = env("PLAN_TODAY") || nowKst().date;
-  // 쓸 수 있는 실적은 어제까지 (어제 밤 22:10 자동 수집)
+  // 쓸 수 있는 실적은 어제까지 (오늘 아침 09:10 자동 수집)
   const asOf = [board.latest() || addDays(today, -1), addDays(today, -1)].sort()[0];
   const learned = learnWeather(board, weather, "2025-01-01", asOf);
   const fb = await fbLogin({ ...cfg, email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") });
