@@ -673,7 +673,7 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
   );
 }
 
-/** 지난 날 결과 — 빵별 생산(확정 · 자동) · 판매 · 50% 할인 · 폐기 (매일 밤 22:10 수집 뒤 채워짐, 다음 15시 계획의 보정에 쓰임) */
+/** 지난 날 결과 — 빵별 생산(확정 · 자동) · 판매 · 50% 할인 · 폐기 (다음 날 아침 9시 10분 수집 뒤 채워짐, 그날 15시 계획의 보정에 쓰임) */
 function Result({ api, today }: { api: Api; today: string }) {
   const [date, setDate] = useState(addDays(today, -1));
   const [rows, setRows] = useState<BreadResult[] | null>(null);
@@ -706,7 +706,7 @@ function Result({ api, today }: { api: Api; today: string }) {
             ›
           </button>
         </div>
-        <p className="muted">폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 매일 밤 22:10 실적 수집 뒤 채워지고, 다음 15시 계획이 이 차이만큼 빵별 수량을 고칩니다</p>
+        <p className="muted">폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 다음 날 아침 9시 10분 실적 수집 뒤 채워지고, 그날 15시 계획이 이 차이만큼 빵별 수량을 고칩니다</p>
         {err && <p className="error">{err}</p>}
         {rows && !rows.length && <p className="empty">이날 실적이 아직 없습니다.</p>}
         {rows && rows.length > 0 && (

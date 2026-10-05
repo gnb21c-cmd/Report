@@ -189,8 +189,8 @@ export function autoExtraKinds(old: ExtraPart | undefined | null, kinds: ExtraKi
 }
 
 /** 자동 수집이 받을 기간 (한국 날짜 · 시각 기준)
-    - evening (매일 21:50, POS 메인 PC): 어제 ~ 오늘. PC가 꺼져 있어 다음 날 켜질 때 늦게 돌면 건너뜀 (아침 실행이 받음)
-    - morning (매일 09:30): 지난 7일 ~ 어제 — 저녁에 PC가 꺼져 있던 날, 21:50 뒤 밤늦은 결제까지 채움 (사람이 올린 칸은 그대로)
+    - morning (매일 09:10, POS 메인 PC): 지난 7일 ~ 어제 — 밤늦은 결제 · PC가 꺼져 있던 날까지 채움 (사람이 올린 칸은 그대로)
+    - evening: 어제 ~ 오늘, 21시 전이면 건너뜀 — 지금은 예약하지 않음 (예전 21:50 저녁 실행)
     - manual (손으로 돌림 · 시험): 어제 ~ 오늘 */
 export function niceRange(today: string, hour: number, mode: "evening" | "morning" | "manual"): { from: string; to: string } | { skip: true } {
   if (mode === "evening" && hour < 21) return { skip: true };

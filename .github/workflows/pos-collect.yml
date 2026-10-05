@@ -1,4 +1,4 @@
-# POS 자동 수집 — 매일 밤 10시 10분(한국 시간) OKPOS 점주 웹에서 카페 · 키즈 영수증별 매출 엑셀을 받아 클라우드에 올림
+# POS 자동 수집 — 매일 아침 9시 10분대(한국 시간) OKPOS 점주 웹에서 어제 카페 · 키즈 영수증별 매출 엑셀을 받아 클라우드에 올림
 # 직원 PC 가 켜져 있을 필요 없음 (GitHub 가 대신). apps/collector/src/collect.ts
 # 필요한 값: Secrets OKPOS_ID · OKPOS_PW · REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD, Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID
 # 공개 저장소라 기록에는 줄 수 · 일치 여부만 남김 (매출 숫자 · 매장 이름 없음)
@@ -6,9 +6,9 @@
 name: POS 자동 수집
 on:
   schedule:
-    - cron: "10 13 * * *" # 13:10 UTC = 22:10 한국
-    # GitHub 예약 실행은 가끔 건너뜀 → 한 번 더 (자동으로 올린 칸은 다시 받아 덮고, 사람이 올린 칸은 그대로)
-    - cron: "45 13 * * *" # 13:45 UTC = 22:45 한국
+    - cron: "12 0 * * *" # 00:12 UTC = 09:12 한국 — 어제
+    # 안 됐으면(실패 · GitHub 가 예약을 건너뜀) 10분 뒤 한 번 더 — 첫 실행이 성공했으면 건너뜀
+    - cron: "22 0 * * *" # 00:22 UTC = 09:22 한국 — 어제
   # 작업 브랜치에 올리면 어제 날짜로 확인만 (올리지 않음)
   push:
     branches: ["feature/pos-auto", "feature/pos-backfill", "feature/bakery-feedback"]
@@ -29,8 +29,31 @@ on:
         description: "확인만 (올리지 않음)"
         type: boolean
         default: false
+concurrency:
+  group: pos-collect
+  cancel-in-progress: false
 jobs:
+  # 10분 뒤 다시 하는 예약이면: 오늘 아침 예약 실행이 이미 성공했는지 보고, 성공했으면 건너뜀
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      done: ${{ steps.c.outputs.done }}
+    steps:
+      - id: c
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== "schedule" || context.payload.schedule !== "22 0 * * *") return core.setOutput("done", "");
+            const day = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+            const r = await github.rest.actions.listWorkflowRuns({ ...context.repo, workflow_id: "pos-collect.yml", event: "schedule", status: "success", created: `>=${day}T00:00:00+09:00` });
+            const ok = r.data.workflow_runs.some((x) => x.id !== context.runId);
+            core.info(ok ? "오늘 아침 실행이 이미 성공 — 건너뜀" : "오늘 아침 실행이 안 됐거나 실패 — 다시 함");
+            core.setOutput("done", ok ? "1" : "");
   collect:
+    needs: check
+    if: needs.check.outputs.done != '1'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -47,6 +70,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "date=$(TZ=Asia/Seoul date -d yesterday +%F)" >> "$GITHUB_OUTPUT"; echo "dry=1" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            # 아침 예약은 어제
+            echo "date=$(TZ=Asia/Seoul date -d yesterday +%F)" >> "$GITHUB_OUTPUT"
           else
             echo "date=${{ inputs.date }}" >> "$GITHUB_OUTPUT"; echo "to=${{ inputs.to }}" >> "$GITHUB_OUTPUT"; echo "dry=${{ inputs.dry == true && '1' || '' }}" >> "$GITHUB_OUTPUT"
           fi

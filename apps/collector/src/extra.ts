@@ -44,7 +44,7 @@ function chunks(from: string, to: string): [string, string][] {
 
 async function main() {
   const today = todayKst();
-  // 받을 기간 — 날짜를 정해 주면 그대로, 아니면 실행 종류(저녁 21:50 · 아침 09:30 · 손으로)에 따라 (packages/core/src/extra.ts niceRange)
+  // 받을 기간 — 날짜를 정해 주면 그대로, 아니면 실행 종류(아침 09:10 · 손으로)에 따라 (packages/core/src/extra.ts niceRange)
   const mode = (["evening", "morning"].includes(env("NICE_MODE")) ? env("NICE_MODE") : "manual") as "evening" | "morning" | "manual";
   const hour = new Date(Date.now() + 9 * 3600e3).getUTCHours();
   let from: string;
@@ -55,7 +55,7 @@ async function main() {
   } else {
     const r = niceRange(today, hour, mode);
     if ("skip" in r) {
-      say(`저녁 예약이 늦게(${hour}시) 돌아 건너뜀 — PC가 꺼져 있었던 날은 아침 09:30 실행이 지난 7일을 받음`);
+      say(`저녁 예약이 늦게(${hour}시) 돌아 건너뜀 — PC가 꺼져 있었던 날은 아침 09:10 실행이 지난 7일을 받음`);
       return;
     }
     ({ from, to } = r);
