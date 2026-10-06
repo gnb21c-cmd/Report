@@ -6,18 +6,19 @@
    ④ 시간대별 4주 같은 요일 추세 (선 · 시간마다 ▲ ▼)
    ⑤ 분석 (판단 · 달라진 이유 · 흐름 · 운영 관점 해석 · 다음 주 — packages/core/src/insight.ts)
    ⑥ 적게 팔린 상품 5개 (그날 · 이달) — 기타는 뺌 (자판기 · 네컷 · 주차 등 상품이 아님)
+   베이커리만: 맨 위 총 생산 · 정가판매 · 할인판매 · 폐기 합계, 맨 아래 빵별 같은 표
+     생산 = 그날 D 확정 수량(그날 생산 기록) · 판매 = 다음 날 아침 수집한 영수증 · 폐기 = 생산 − 정가 − 할인
    ============================================================ */
 import { useEffect, useMemo, useState } from "react";
 import {
   count,
+  breadTotals,
+  dayResult,
   extraTotal,
   hourDay,
   hourLabel,
   kidsPrice,
   HOURS,
-  madeTotal,
-  nowKst,
-  orderRows,
   sectorAnalysis,
   shortLabel,
   weeksAverage,
@@ -29,7 +30,7 @@ import {
   type Metrics,
   type WeatherMap,
 } from "@report/core";
-import { bakeryDay } from "../data/firebase";
+import { useBakeryDoc, type BakeryDoc } from "../data/bakery";
 import { BarChart } from "../charts/BarChart";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
@@ -60,6 +61,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
   const analysis = useMemo(() => sectorAnalysis(board, date, box, props.weather), [board, date, box, props.weather]);
   const yMax = Math.max(0, ...(today?.sales || []), ...avg.sales.map((v) => v || 0));
   const unit = kids ? "장" : "명";
+  const bread = useBakeryDoc(board, box === "베이커리" ? date : "");
 
   return (
     <>
@@ -71,7 +73,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           {box === "키즈입장료" && <span className="note">{kidsFormula(m, date)}</span>}
         </HeroBox>
 
-        {box === "베이커리" && <BreadCount board={board} date={date} />}
+        {box === "베이커리" && <BreadCount board={board} date={date} doc={bread} />}
 
         <ChartCard
           title="마감일 시간대별 매출"
@@ -133,6 +135,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           ))}
         </section>
 
+        {box === "베이커리" && <BreadTable board={board} date={date} doc={bread} />}
       </main>
     </>
   );
@@ -289,27 +292,15 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
   );
 }
 
-/** 베이커리 이날 개수 — 생산(작업지시 확정 수량) · 판매 · 50% 할인(저녁 8시 30분 뒤) · 폐기(생산 − 판매) */
-function BreadCount({ board, date }: { board: Board; date: string }) {
-  const sold = board.products(date, date, "베이커리").reduce((a, p) => a + p.qty, 0);
-  const half = board.report(date)?.cafe?.bakeryHalf;
-  // 생산 = 작업지시 앱(D)에서 매니저가 확정한 수량 (확정 안 한 빵은 계획 수량 '자동'). 작업지시를 쓰기 전 날은 모름
-  const [made, setMade] = useState<number | null>(null);
-  useEffect(() => {
-    let live = true;
-    setMade(null);
-    void bakeryDay(date).then((x) => {
-      if (live && x && (x.plan || x.order)) setMade(madeTotal(orderRows(x.plan, x.order, nowKst())));
-    });
-    return () => {
-      live = false;
-    };
-  }, [date]);
-  const cells: [string, number | null | undefined][] = [
-    ["생산", made],
-    ["판매", board.report(date)?.cafe ? sold : null],
-    ["50% 할인", half],
-    ["폐기", made == null ? null : Math.max(0, made - sold)],
+/** 베이커리 맨 위 합계 — 총 생산(그날 D 확정 수량) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) · 폐기(= 생산 − 정가 − 할인) */
+function BreadCount({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
+  const t = useMemo(() => breadTotals(dayResult(board, date, doc?.plan, doc?.order)), [board, date, doc]);
+  const sales = !!board.report(date)?.cafe;
+  const cells: [string, number | null][] = [
+    ["총 생산", t.made],
+    ["정가판매", sales ? t.full : null],
+    ["할인판매", sales ? t.half : null],
+    ["폐기", sales ? t.waste : null],
   ];
   return (
     <div className="quad" aria-label="베이커리 개수">
@@ -320,5 +311,63 @@ function BreadCount({ board, date }: { board: Board; date: string }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** 베이커리 맨 아래 — 빵별 생산 · 정가판매 · 50% 할인 · 폐기 (생산은 작업지시, 판매는 그날 영수증) */
+function BreadTable({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
+  const rows = useMemo(() => dayResult(board, date, doc?.plan, doc?.order), [board, date, doc]);
+  const hasSales = !!board.report(date)?.cafe;
+  const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("ko-KR"));
+  const sum = (f: (r: (typeof rows)[number]) => number | null) => (rows.some((r) => f(r) != null) ? rows.reduce((a, r) => a + (f(r) || 0), 0) : null);
+  return (
+    <section className="card">
+      <h2>
+        빵별 생산 · 판매 · 폐기 <small className="muted">개수</small>
+      </h2>
+      {doc === undefined ? (
+        <p className="empty">작업지시 자료를 받는 중입니다…</p>
+      ) : !rows.length ? (
+        <p className="empty">이날은 베이커리 생산 · 판매 자료가 없습니다.</p>
+      ) : (
+        <>
+          <table className="bread-tbl">
+            <thead>
+              <tr>
+                <th>상품</th>
+                <th className="num">생산</th>
+                <th className="num">정가판매</th>
+                <th className="num">할인판매</th>
+                <th className="num">폐기</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.name}>
+                  <td>{r.name}</td>
+                  <td className="num">{n(r.made)}</td>
+                  <td className="num">{hasSales ? n(r.full) : "—"}</td>
+                  <td className="num">{hasSales ? n(r.half) : "—"}</td>
+                  <td className={`num${r.waste ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>합계 {rows.length}종</td>
+                <td className="num">{n(sum((r) => r.made))}</td>
+                <td className="num">{hasSales ? n(sum((r) => r.full)) : "—"}</td>
+                <td className="num">{hasSales ? n(sum((r) => r.half)) : "—"}</td>
+                <td className="num">{hasSales ? n(sum((r) => r.waste)) : "—"}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <p className="note muted">
+            생산 = 그날 베이커리 작업지시(D) 확정 수량 · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 다음 날 아침 수집한 영수증 · 폐기 = 생산 − 정가판매 − 할인판매
+            {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
+          </p>
+        </>
+      )}
+    </section>
   );
 }

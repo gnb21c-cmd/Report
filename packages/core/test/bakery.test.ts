@@ -231,3 +231,22 @@ describe("태블릿 키 번호", () => {
     expect(validFloorKey(" 910278")).toBe(false);
   });
 });
+
+describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금", async () => {
+  const { breadTotals, productionStarted } = await import("../src");
+  it("합계: 총 생산 · 정가판매 · 할인판매 · 폐기(= 생산 − 정가 − 할인), 작업지시 없는 빵은 생산 · 폐기를 모름", () => {
+    const t = breadTotals([
+      { name: "소금빵", made: 50, base: null, sold: 48, half: 6, full: 42, waste: 2, soldOut: false },
+      { name: "몽블랑", made: 20, base: null, sold: 20, half: 0, full: 20, waste: 0, soldOut: true },
+      { name: "딸기빵", made: null, base: null, sold: 3, half: 0, full: 3, waste: null, soldOut: false },
+    ]);
+    expect(t).toEqual({ made: 70, full: 65, half: 6, waste: 2 });
+    expect(breadTotals([{ name: "x", made: null, base: null, sold: 3, half: 1, full: 2, waste: null, soldOut: false }])).toEqual({ made: null, full: 2, half: 1, waste: null });
+  });
+  it("그날 아침 6시(현장 시작)부터는 그날 최종 수량을 못 바꿈 — 현장에 지시한 수량이 그날 생산 기록", () => {
+    expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "05:59" })).toBe(false);
+    expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "06:00" })).toBe(true);
+    expect(productionStarted("2026-10-08", { date: "2026-10-09", time: "01:00" })).toBe(true);
+    expect(productionStarted("2026-10-08", { date: "2026-10-07", time: "23:00" })).toBe(false);
+  });
+});

@@ -19,6 +19,7 @@ import {
   nowKst,
   orderRows,
   orderText,
+  productionStarted,
   shortLabel,
   snapUnit,
   breadUnit,
@@ -292,7 +293,9 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const after = (d: string) => now.date > d || (now.date === d && now.time >= CONFIRM_DEADLINE);
   const late = after(due);
   // 최종 마감(3일 전 18시)이 지난 날의 잠정 확정은 효과가 없어 막음
-  const locked = kind === "provisional" && after(addDays(date, -FINAL_LEAD));
+  // 생산날 아침 6시부터는 최종도 못 바꿈 — 현장에 지시한 수량이 그날 생산 기록 (보고 앱 B 가 판매와 맞춤)
+  const made = kind === "final" && productionStarted(date, now);
+  const locked = (kind === "provisional" && after(addDays(date, -FINAL_LEAD))) || made;
   const done = order?.[kind] || {};
   const prov = order?.provisional || {};
   const rows = step?.items || [];
@@ -365,7 +368,9 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
             {shortLabel(date)} {kind === "final" ? "최종 확정" : "잠정 확정"}
           </b>
           <span className={late ? "warn" : "muted"}>
-            {locked
+            {made
+              ? "생산한 날 — 수량을 바꿀 수 없음 (그날 생산 기록)"
+              : locked
               ? "최종 확정 단계로 넘어간 날 — 최종 확정 탭에서"
               : late
                 ? kind === "final"
