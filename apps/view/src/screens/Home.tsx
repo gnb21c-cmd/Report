@@ -4,12 +4,12 @@
    ② 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 (한 줄 상자 다섯 개 → 섹터 상세)
    ③ 당월 매출 합계 · 전년도 같은 기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
-   ⑤ 네이버 입장권 판매수 · 현장 입장권 판매수 · 이벤트 무료입장팀 수 (→ 각 상세)
+   ⑤ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 '44(신10)장' · 현장판매 · 이벤트 무료입장 (→ 각 상세)
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -123,21 +123,30 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         </div>
       </div>
 
-      <div className="stats three">
-        <button className="stat tap" onClick={() => open({ name: "naver" })}>
-          <div className="stat-label">네이버 입장권 판매수</div>
-          <div className="stat-value">{count(day.naver, "장")}</div>
-          <span className="note">{day.newKnown ? `신규 ${count(day.newVisitors, "명")}` : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}</span>
+      {/* 키즈 입장 4칸 한 줄 — 이름 · 장수 모두 가운데. 네이버는 '44(신10)장' */}
+      <div className="stats four">
+        <div className="stat">
+          <div className="stat-label">
+            입장권 판매
+            <br />총 수량
+          </div>
+          <div className="stat-value">{count(kidsTickets(day), "장")}</div>
+        </div>
+        <button className="stat tap" onClick={() => open({ name: "naver" })} title={day.newKnown ? "" : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}>
+          <div className="stat-label">네이버판매</div>
+          <div className="stat-value naver">{day.newKnown ? `${day.naver.toLocaleString("ko-KR")}(신${day.newVisitors.toLocaleString("ko-KR")})장` : count(day.naver, "장")}</div>
         </button>
         <button className="stat tap" onClick={() => open({ name: "kids", key: "walkIn" })}>
-          <div className="stat-label">현장 입장권 판매수</div>
+          <div className="stat-label">현장판매</div>
           <div className="stat-value">{count(day.walkIn, "장")}</div>
-          <span className="note">입장료 결제</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "kids", key: "eventFree" })}>
-          <div className="stat-label">이벤트 무료입장팀 수</div>
-          <div className="stat-value">{count(day.eventFree, "팀")}</div>
-          <span className="note">쿠폰 입장</span>
+          <div className="stat-label">
+            이벤트
+            <br />
+            무료입장
+          </div>
+          <div className="stat-value">{count(day.eventFree, "장")}</div>
         </button>
       </div>
 

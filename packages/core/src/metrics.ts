@@ -9,7 +9,8 @@
    - 키즈입장료 = (네이버 입장권 + 현장 입장권) × 그날 단가 (평일 12,000 / 휴일 14,000)
        · 네이버 입장권 = A 에 넣은 시간대별 판매 입장권 합. 아직 안 넣은 날은 키즈 POS 로 추정 (0원 입장 발행 − 현장)
        · 현장 입장권 = 키즈 POS 에서 돈을 받은 입장권 (반품은 지워짐)
-       · 이벤트 무료입장 = 0원 쿠폰 입장 (팀 수만 셈, 입장료·잔 수에 안 들어감)
+       · 이벤트 무료입장 = 0원 쿠폰 입장 (장 수만 셈, 입장료·잔 수에 안 들어감)
+       · 총 입장권 수 = 네이버 + 현장 + 이벤트 무료입장 (kidsTickets — 보여 주기만)
    - 총매출 = 위 다섯 상자의 합 (상품권·교환권 결제는 결제 수단이라 빼지 않음)
    - 카페아스타나 방문인원 = 카페 음료·맥주 잔 수 × 0.96 (날마다 반올림), 1인 평균소비 = 총매출 ÷ 방문인원
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
@@ -36,9 +37,9 @@ export const METRIC_LABEL: Record<MetricKey, string> = {
   기타: "기타",
   visitors: "카페아스타나 방문인원",
   avgSpend: "1인 평균소비",
-  naver: "네이버 입장권 판매수",
-  walkIn: "현장 입장권 판매수",
-  eventFree: "이벤트 무료입장팀 수",
+  naver: "네이버 판매 수",
+  walkIn: "현장 판매 수",
+  eventFree: "이벤트 무료입장",
   newVisitors: "신규방문자 수",
 };
 
@@ -48,7 +49,7 @@ export function isMoney(key: MetricKey): boolean {
 }
 
 export function unitOf(key: MetricKey): string {
-  return key === "visitors" || key === "newVisitors" ? "명" : key === "eventFree" ? "팀" : "장";
+  return key === "visitors" || key === "newVisitors" ? "명" : "장";
 }
 
 export function formatMetric(key: MetricKey, v: number | null): string {
@@ -146,6 +147,11 @@ export function valueOf(m: Metrics, key: MetricKey): number | null {
   if (key === "eventFree") return m.eventFree;
   if (key === "newVisitors") return m.newVisitors;
   return m.box[key];
+}
+
+/** 키즈 총 입장권 수 = 네이버 판매 + 현장 판매 + 이벤트 무료입장 (보여 주기만 — 매출 계산에는 안 씀) */
+export function kidsTickets(m: Metrics): number {
+  return m.naver + m.walkIn + m.eventFree;
 }
 
 /** 매출 자료(카페 · 키즈)가 하나라도 있는지 */

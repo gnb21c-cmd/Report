@@ -1,10 +1,10 @@
 /* ============================================================
    키즈 입장권 상세
-   네이버 입장권 판매수 (11-8): 마감일 총판매수량 · 신규방문자 수 · 신규 비율
+   네이버 판매 수 (11-8): 마감일 총판매수량 · 신규방문자 수 · 신규 비율
      시간대별 판매 막대 (마감일 · 이달 누계) — 작년 같은 날/같은 기간 = 회색, 올해 = 빨강
      날마다(이달) · 달마다(올해) · 올해 쌓은 판매수 선 — 작년 전체 = 회색, 올해 마감일까지 = 빨강
      작년 같은 기간 대비 증감 수 · 증감률 (분석 글 · 고치기 칸 없음 — 네이버는 A 에서 넣음)
-   현장 입장권 판매수 · 이벤트 무료입장팀 수: 1일 ~ 말일 막대 (작년 = 회색, 올해 = 빨강)
+   현장 판매 수 · 이벤트 무료입장: 1일 ~ 말일 막대 (작년 = 회색, 올해 = 빨강)
    ============================================================ */
 import {
   changePct,
@@ -102,7 +102,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
 
   return (
     <>
-      <DetailHeader title="네이버 입장권 판매수" {...props} />
+      <DetailHeader title="네이버 판매 수" {...props} />
       <main className="content">
         {!day.naverInput && (
           <div className="banner">{day.has.kids ? `${shortLabel(date)} 네이버 표가 아직 입력되지 않아 키즈 POS(입장 발행 − 현장)로 추정한 값입니다.` : `${shortLabel(date)} 네이버 표가 아직 입력되지 않았습니다.`}</div>
@@ -182,8 +182,8 @@ export function NaverDetail(props: { board: Board } & Nav) {
 
 export function KidsBarsDetail(props: { board: Board; k: "walkIn" | "eventFree" } & Nav) {
   const { board, date, k } = props;
-  const unit = k === "walkIn" ? "장" : "팀";
-  const title = k === "walkIn" ? "현장 입장권 판매수" : "이벤트 무료입장팀 수";
+  const unit = "장";
+  const title = k === "walkIn" ? "현장 판매 수" : "이벤트 무료입장";
   const ly = lyOf(date);
   const d = monthDaily(board, k, date);
   const day = board.day(date);

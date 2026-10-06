@@ -68,3 +68,14 @@ describe("기타로 잡히던 상품 옮기기 (2026-10-06 사장님 기준)", (
     expect([before.extra.vending, before.box.키즈입장료, before.box.기타]).toEqual([0, 0, 0]);
   });
 });
+
+describe("키즈 총 입장권 수 (보여 주기만)", async () => {
+  const { kidsTickets, METRIC_LABEL, unitOf } = await import("../src");
+  it("네이버 + 현장 + 이벤트 무료입장, 이름 · 단위는 '장'", () => {
+    const m = new Board([{ date: "2026-10-05", kids: day("kids", "2026-10-05", [sold("[휴일] 1시간 50분 입장권", 16, 14000), line({ name: "[평일] 무제한 이용", qty: 152 })]) }]).day("2026-10-05");
+    expect([m.naver, m.walkIn]).toEqual([136, 16]); // 네이버 미입력이면 발행 − 현장
+    expect(kidsTickets(m)).toBe(152);
+    expect([METRIC_LABEL.naver, METRIC_LABEL.walkIn, METRIC_LABEL.eventFree]).toEqual(["네이버 판매 수", "현장 판매 수", "이벤트 무료입장"]);
+    expect(unitOf("eventFree")).toBe("장");
+  });
+});
