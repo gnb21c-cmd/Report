@@ -103,7 +103,7 @@ export function DayDetail(props: { board: Board; weather: WeatherMap } & Nav) {
               <Row label="객단가" now={day.avgSpend} before={last.avgSpend} ok={ok && last.avgSpend != null} fmt={num} />
               <Row label="네이버 입장" now={day.naver} before={last.naver} ok={ok} fmt={(v) => count(v, "장")} />
               <Row label="현장 입장" now={day.walkIn} before={last.walkIn} ok={ok} fmt={(v) => count(v, "장")} />
-              <Row label="이벤트 무료" now={day.eventFree} before={last.eventFree} ok={ok} fmt={(v) => count(v, "팀")} />
+              <Row label="이벤트 무료" now={day.eventFree} before={last.eventFree} ok={ok} fmt={(v) => count(v, "장")} />
             </tbody>
           </table>
         </section>
