@@ -1358,3 +1358,9 @@ table.detail {
 .hcal-day:hover {
   border-color: #1e88e5;
 }
+
+/* ⚙ 설정 ③ 베이커리 생산 비율 */
+.weight-table td { vertical-align: middle; }
+.weight-cell { white-space: nowrap; text-align: right; }
+.weight-cell input { width: 4.5em; text-align: right; }
+.weight-cell span { margin-left: 4px; }

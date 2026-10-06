@@ -1,9 +1,18 @@
 /* ⚙ 설정 — 아래에서 올라오는 창. 해마다 · 때때로 바뀌는 보고 기준만 (클라우드 settings/main, 보고 앱도 씀)
    ① 기간 스티커: 성수기(빨강) · 평상시(노랑) · 비수기(파랑) — 해마다 같은 월·일, 위에서부터 먼저 맞는 것, 나머지는 평상시
    ② 휴일 달력: 토 · 일 · 공휴일(대체공휴일 · 알려진 임시공휴일 포함)은 자동 빨강.
-      평일을 누르면 휴일 더하기(갑자기 정한 임시공휴일 등), 자동 공휴일을 누르면 휴일 빼기(쉬지 않는 날) — 키즈 휴일 단가 · 숏타임 단가 · 휴일 표시에 쓰임 */
+      평일을 누르면 휴일 더하기(갑자기 정한 임시공휴일 등), 자동 공휴일을 누르면 휴일 빼기(쉬지 않는 날) — 키즈 휴일 단가 · 숏타임 단가 · 휴일 표시에 쓰임
+   ③ 베이커리 생산 비율: 빵 총 개수 = 작년 같은 날 무렵 · 최근 같은 날 · 작년 같은 주와 다음 주 (%, 합 100, 처음 60 · 10 · 30)
+      목요일 주간 계획 · 매일 3일 뒤 최종 계획(작업지시 D)이 다음 계산부터 이 비율을 씀 */
 import { useEffect, useState } from "react";
-import { DEFAULT_SETTINGS, EXTRA_HOLIDAYS, HOLIDAYS, seasonIn, weekday, type ReportSettings, type SeasonKind, type SeasonRule } from "@report/core";
+import { DEFAULT_BREAD_WEIGHTS, DEFAULT_SETTINGS, EXTRA_HOLIDAYS, HOLIDAYS, seasonIn, weekday, type BreadWeights, type ReportSettings, type SeasonKind, type SeasonRule } from "@report/core";
+
+/** ③ 베이커리 생산 비율 칸 */
+const WEIGHT_ROWS: [keyof BreadWeights, string, string][] = [
+  ["ly", "작년 같은 날 무렵", "364일 전 앞뒤 같은 날 유형(평일 · 금 · 휴일) 3일 평균 × 추세"],
+  ["recent", "최근 같은 날", "최근 같은 날 유형 2번 평균 (지난주 흐름)"],
+  ["lyNext", "작년 같은 주 · 다음 주", "작년 그 주와 다음 주 같은 날 유형 평균 × 추세 (계절 흐름)"],
+];
 
 const KINDS: SeasonKind[] = ["성수기", "평상시", "비수기"];
 const KIND_CLASS: Record<SeasonKind, string> = { 성수기: "s-hot", 평상시: "s-normal", 비수기: "s-low" };
@@ -29,7 +38,11 @@ export function SettingsSheet(props: { initial: ReportSettings; busy: boolean; o
     setS({ ...s, seasons: xs });
   };
   const okMd = (v: string) => /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(v);
-  const bad = s.seasons.some((r) => !okMd(r.from) || !okMd(r.to));
+  const w = s.bakeryWeights || DEFAULT_BREAD_WEIGHTS;
+  const wSum = w.ly + w.recent + w.lyNext;
+  const wBad = wSum !== 100 || [w.ly, w.recent, w.lyNext].some((v) => !Number.isInteger(v) || v < 0 || v > 100);
+  const setW = (k: keyof BreadWeights, v: string) => setS({ ...s, bakeryWeights: { ...w, [k]: v === "" ? 0 : Math.round(Number(v)) } });
+  const bad = s.seasons.some((r) => !okMd(r.from) || !okMd(r.to)) || wBad;
 
   /* 휴일 달력 */
   const [y, m] = ym.split("-").map(Number);
@@ -63,7 +76,7 @@ export function SettingsSheet(props: { initial: ReportSettings; busy: boolean; o
       <section className="sheet settings-sheet" role="dialog" aria-modal="true" aria-label="설정">
         <header className="sheet-head">
           <h2>⚙ 설정</h2>
-          <span className="hint">보고 앱의 기간 스티커 · 휴일(키즈 휴일 단가)에 바로 쓰입니다. 바꾼 뒤 [저장]</span>
+          <span className="hint">보고 앱의 기간 스티커 · 휴일(키즈 휴일 단가) · 베이커리 생산 비율에 쓰입니다. 바꾼 뒤 [저장]</span>
           <button className="ghost" onClick={() => setS(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS })))} disabled={props.busy}>
             처음 값으로
           </button>
@@ -127,7 +140,7 @@ export function SettingsSheet(props: { initial: ReportSettings; busy: boolean; o
             <button className="ghost" onClick={() => setS({ ...s, seasons: [...s.seasons, { kind: "성수기", from: "01-01", to: "01-01", name: "" }] })}>
               + 기간 추가
             </button>
-            {bad && <p className="error">날짜는 월-일 (예: 07-20) 로 적어 주세요.</p>}
+            {s.seasons.some((r) => !okMd(r.from) || !okMd(r.to)) && <p className="error">날짜는 월-일 (예: 07-20) 로 적어 주세요.</p>}
           </section>
 
           <section>
@@ -173,6 +186,40 @@ export function SettingsSheet(props: { initial: ReportSettings; busy: boolean; o
             <p className="hint">
               <span className="legend red">■</span> 휴일 · <span className="legend added">+</span> 더한 휴일 · <s>줄 그음</s> 뺀 공휴일 · 색 줄: <span className="legend s-hot">■</span> 성수기 <span className="legend s-normal">■</span> 평상시 <span className="legend s-low">■</span> 비수기
             </p>
+          </section>
+
+          <section>
+            <h3>③ 베이커리 생산 비율 (빵 총 개수)</h3>
+            <p className="hint">
+              작업지시(D)의 목요일 주간 계획 · 매일 3일 뒤 최종 계획이 빵 총 개수를 셀 때 쓰는 비율입니다. 세 칸의 합은 100%. 추세 = 최근 28일 올해 빵 판매 ÷ 작년 같은 날. 빵별 수량은 총 개수를 최근 14일 빵 비율로 나눔
+            </p>
+            <table className="list weight-table">
+              <tbody>
+                {WEIGHT_ROWS.map(([k, name, note]) => (
+                  <tr key={k}>
+                    <td>
+                      <b>{name}</b>
+                      <div className="hint">{note}</div>
+                    </td>
+                    <td className="weight-cell">
+                      <input type="number" inputMode="numeric" min={0} max={100} step={5} value={w[k]} className={wBad ? "bad" : ""} onChange={(e) => setW(k, e.target.value)} aria-label={`${name} 비율`} />
+                      <span>%</span>
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td>합계</td>
+                  <td className={`weight-cell${wBad ? " error" : ""}`}>
+                    <b>{wSum}</b>
+                    <span>%</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <button className="ghost" onClick={() => setS({ ...s, bakeryWeights: { ...DEFAULT_BREAD_WEIGHTS } })}>
+              처음 비율로 (60 · 10 · 30)
+            </button>
+            {wBad && <p className="error">세 칸은 0 ~ 100 정수, 합은 100% 여야 저장됩니다.</p>}
           </section>
         </div>
       </section>

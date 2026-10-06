@@ -135,3 +135,43 @@ describe("잠정 수량 묶기 · 시험", () => {
     expect(addDays("2026-10-03", 1)).toBe("2026-10-04");
   });
 });
+
+describe("빵 총 개수 = 작년 같은 날 무렵 · 최근 · 작년 다음 주 (비율은 A ⚙ 설정, 처음 60 · 10 · 30)", async () => {
+  const { applySettings, breadTrend, cleanSettings, DEFAULT_BREAD_WEIGHTS, forecastBread } = await import("../src");
+  // 작년: 빵 = 잔 × 0.4 · 올해: 1.2 배
+  const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-07", () => 1.2)]);
+  it("처음 비율 60 · 10 · 30, 합이 100 이 아니거나 이상하면 처음 값", () => {
+    expect(DEFAULT_BREAD_WEIGHTS).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+    expect(cleanSettings({}).bakeryWeights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+    expect(cleanSettings({ bakeryWeights: { ly: 50, recent: 30, lyNext: 20 } }).bakeryWeights).toEqual({ ly: 50, recent: 30, lyNext: 20 });
+    expect(cleanSettings({ bakeryWeights: { ly: 50, recent: 30, lyNext: 30 } }).bakeryWeights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+    expect(cleanSettings({ bakeryWeights: { ly: -10, recent: 80, lyNext: 30 } }).bakeryWeights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+  });
+  it("추세 = 최근 28일 올해 빵 ÷ 작년 같은 날", () => {
+    expect(breadTrend(board, "2026-10-07")).toBeCloseTo(1.2, 1);
+  });
+  it("작년 × 추세 · 최근 · 작년 다음 주 × 추세 — 모양이 같으면 모두 작년 × 1.2", () => {
+    applySettings(null);
+    const f = forecastBread(board, "2026-10-07", "2026-10-13"); // 화 (평일 100잔 × 0.4 = 40개 → 48개)
+    expect(f.weights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+    expect(f.value).toBeGreaterThan(45);
+    expect(f.value).toBeLessThan(51);
+  });
+  it("A 에서 바꾼 비율을 씀 — 최근만 100% 면 최근 같은 날 유형 2번 평균", () => {
+    const b = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-07", (d) => (d >= "2026-09-28" ? 2 : 1))]);
+    applySettings(cleanSettings({ bakeryWeights: { ly: 0, recent: 100, lyNext: 0 } }));
+    expect(forecastBread(b, "2026-10-07", "2026-10-13").value).toBe(80); // 최근 평일 = 200잔 × 0.4
+    applySettings(cleanSettings({ bakeryWeights: { ly: 100, recent: 0, lyNext: 0 } }));
+    expect(forecastBread(b, "2026-10-07", "2026-10-13").value).toBeLessThan(80);
+    applySettings(null);
+  });
+  it("빵 나누기 — 최근 14일, 최근 날일수록 무겁게 (요즘 늘어난 빵을 빨리 따라감)", () => {
+    const days = dayRange("2026-09-01", "2026-10-07").map((d) =>
+      day(d, 100, d >= "2026-10-01" ? [["소금빵", 20], ["새빵", 20]] : [["소금빵", 30], ["새빵", 10]]),
+    );
+    const p = breadPlan(new Board(days), {}, "2026-10-07", "2026-10-13");
+    const salt = p.items.find((x) => x.name === "소금빵")!.qty;
+    const neu = p.items.find((x) => x.name === "새빵")!.qty;
+    expect(neu / salt).toBeGreaterThan(0.6); // 14일 단순 평균이면 0.6
+  });
+});

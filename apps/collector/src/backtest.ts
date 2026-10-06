@@ -1,7 +1,7 @@
 /* 작업지시 예측 시험 — 클라우드의 지난 자료로 "그날 나흘 전 자료로(3일 전 15시 최종 확정) 예측했다면 몇 % 틀렸을까"
    공개 저장소라 기록에는 오차 % · 날씨 배수만 남김 (방문객 수 · 매출 · 빵 개수 없음)
    BT_FROM ~ BT_TO (없으면 2026-04-01 ~ 마지막 자료일) · 날씨 배수는 그 전 자료로 배움 */
-import { addDays, applySettings, backtest, Board, dayKind, dayRange, DEFAULT_LEARNED, learnWeather, WEATHER_CLASSES, type Learned } from "@report/core";
+import { addDays, applySettings, backtest, cleanSettings, Board, dayKind, dayRange, DEFAULT_LEARNED, learnWeather, WEATHER_CLASSES, type Learned } from "@report/core";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
@@ -25,6 +25,19 @@ async function main() {
     console.log(`${title.padEnd(22)} 방문객 오차 ${r.all.visitors}% (평일 ${r.평일.visitors} · 금 ${r.금요일.visitors} · 휴일 ${r.휴일.visitors}) · 빵 총 개수 오차 ${r.all.bread}% (평일 ${r.평일.bread} · 금 ${r.금요일.bread} · 휴일 ${r.휴일.bread}) · ${r.all.days}일`);
     return r;
   };
+  // 빵 총 개수 비율 (A ⚙ 설정) — 목요일 주간(앞 4 ~ 10일) · 3일 전 최종(앞 4일)
+  console.log("\n빵 총 개수 비율별 오차 (절대 %) — 7 ~ 9월 · 4 ~ 6월, 앞 4일 / 앞 7일 예측");
+  for (const w of [{ ly: 60, recent: 10, lyNext: 30 }, { ly: 50, recent: 30, lyNext: 20 }, { ly: 100, recent: 0, lyNext: 0 }, { ly: 0, recent: 100, lyNext: 0 }]) {
+    applySettings(cleanSettings({ ...(settings || {}), bakeryWeights: w }));
+    const b2 = new Board(reports);
+    const cell = (a: string, z: string, lead: number) => {
+      const r = backtest(b2, weather, a, z, lead, learned);
+      return `${r.all.bread}%`;
+    };
+    console.log(`  ${w.ly}·${w.recent}·${w.lyNext}: 7~9월 ${cell("2026-07-01", "2026-09-30", 4)} / ${cell("2026-07-01", "2026-09-30", 7)} · 4~6월 ${cell("2026-04-01", "2026-06-30", 4)} / ${cell("2026-04-01", "2026-06-30", 7)}`);
+  }
+  applySettings(settings);
+
   console.log("\n방법별 평균 오차 (절대 %, 작을수록 좋음)");
   for (const lambda of [0, 0.25, 0.5, 0.75, 1]) show(`되돌림 λ=${lambda}`, { ...learned, lambda });
   show("날씨 안 씀 (λ=0.5)", { ...DEFAULT_LEARNED, weather: Object.fromEntries(WEATHER_CLASSES.map((c) => [c, 1])) as any }, {});
