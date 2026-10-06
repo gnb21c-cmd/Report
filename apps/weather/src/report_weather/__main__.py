@@ -20,6 +20,9 @@ KST = dt.timezone(dt.timedelta(hours=9))
 
 
 CHUNK_DAYS = 60  # 기상청은 긴 기간을 한 번에 달라면 늦게 답해서 나눠 받음
+# 기상청은 어제 관측을 아침 일찍 최고/최저 없이 먼저 내줄 때가 있음 → 'observed-partial' 로 두고 다시 받음
+# (최근 7일만 — 오래전 날이 끝내 비어 있어도 매시간 그날부터 다시 받지 않게)
+PARTIAL_DAYS = 7
 
 
 def chunks(start: str, end: str, size: int = CHUNK_DAYS) -> list:
@@ -41,13 +44,16 @@ def run(relay, kma, now: dt.datetime, errors: list | None = None) -> list:
 
     def put(days):
         for d in days:
-            if d["source"] != "observed" and have.get(d["date"]) == "observed":
+            if d["source"] != "observed" and have.get(d["date"], "").startswith("observed"):
                 continue  # 예보는 관측을 못 바꿈
             relay.put_weather(d)
-            have[d["date"]] = d["source"]
+            partial = d["source"] == "observed" and (d.get("tempMax") is None or d.get("tempMin") is None)
+            have[d["date"]] = "observed-partial" if partial else d["source"]
             done.append((d["date"], d["source"]))
 
-    span = days_to_fetch(now.date(), {d for d, s in have.items() if s == "observed"}, kma.conf.get("since", "2025-01-01"))
+    recent = (now.date() - dt.timedelta(days=PARTIAL_DAYS)).isoformat()
+    finished = {d for d, s in have.items() if s == "observed" or (s == "observed-partial" and d < recent)}
+    span = days_to_fetch(now.date(), finished, kma.conf.get("since", "2025-01-01"))
     for a, b in chunks(*span) if span else []:
         try:
             put(kma.observed(a, b))  # 받은 만큼 바로 올림 → 다음 번엔 이어서

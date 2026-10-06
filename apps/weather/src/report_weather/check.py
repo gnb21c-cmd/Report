@@ -37,3 +37,7 @@ try:
         print(f"  {x['date']}: 예보 최고 {x['tempMax']} · 최저 {x['tempMin']} · 기준 {x['basis']}")
 except WeatherError as e:
     print("  실패:", e)
+print("── 고친 규칙으로 보면 (쓰지 않음)")
+have = relay.weather_sources()
+part = sorted(d for d, s in have.items() if s == "observed-partial")
+print("  최고/최저가 빈 관측일:", ", ".join(part) or "없음")
