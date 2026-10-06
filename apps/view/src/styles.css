@@ -576,6 +576,25 @@ button.stat {
 .stats.three .stat {
   padding: 10px 10px;
 }
+/* 키즈 입장 4칸 한 줄 — 폰에서도 한 줄에 넣으려고 글을 줄임 */
+.stats.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.stats.four .stat {
+  padding: 9px 7px;
+}
+.stats.four .stat-label {
+  font-size: min(14px, 3.1vw);
+  line-height: 1.25;
+}
+.stats.four .stat-value {
+  font-size: min(21px, 4.1vw);
+}
+.stats.four .note {
+  font-size: min(12.5px, 2.8vw);
+  white-space: nowrap;
+}
 /* 숫자 상자: 이름은 왼쪽 위, 금액·비교는 오른쪽 정렬 */
 .stat {
   background: var(--surface-1);
