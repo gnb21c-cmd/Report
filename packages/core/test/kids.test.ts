@@ -152,7 +152,9 @@ describe("'[아키 2만원] 교환권' — 카페 매출은 그대로, 키즈 �
     expect(m1.box.키친).toBe(46000);
     expect(m1.kidsCoupon).toBe(20000);
     expect(m1.box.키즈입장료).toBe(3 * 12000 - 20000);
-    expect(m1.total).toBe(46000 + 16000);
+    // '[종이쿠폰]만원권' 1장 = 상품권 사용 → 그날 바리스타에서 1만원 뺌 (2026-10-06 기준)
+    expect(m1.giftUse).toBe(10000);
+    expect(m1.total).toBe(46000 + 16000 - 10000);
     expect(b.range(before, after).kidsCoupon).toBe(40000);
   });
 });

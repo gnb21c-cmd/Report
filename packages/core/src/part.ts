@@ -6,7 +6,7 @@
    시간대: 10시 ~ 22시를 한 시간씩 12칸 (10시 전 주문은 10시 칸, 22시 넘은 주문은 21시 칸에)
    ============================================================ */
 import { guessSector, kidsKind, SECTORS, sectorFromCategory, type KidsKind, type Sector } from "./classify";
-import { cupsPerItem, isCup, isHalfOff, isKidsCoupon, isVoucherPayment, NOT_BREAD, oldTicketPrice } from "./rules";
+import { cupsPerItem, etcMove, isCup, isGiftUse, isHalfOff, isKidsCoupon, isVoucherPayment, NOT_BREAD, oldTicketPrice } from "./rules";
 import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } from "./receipt";
 import type { SaleLine, StoreId } from "./types";
 import type { CashPart } from "./cash";
@@ -61,6 +61,8 @@ export interface StorePart {
   posNet: number;
   /** 상품권·교환권 결제 (양수) — 결제 수단이라 매출에서 빼지 않음 */
   voucher: number;
+  /** 그중 상품권 1만원권 사용 (양수) — 판 날 바리스타 매출로 잡았으므로 쓴 날 바리스타에서 뺌 (metrics) */
+  giftUse?: number;
   /** 그중 키즈 교환권 · 사은권 ('[아키 2만원] 교환권', 양수) — 2026-04 부터 키즈 매출에서 뺌 (없으면 0) */
   kidsCoupon?: number;
   /** 베이커리 50% 마감 할인으로 팔린 개수 (영수증별 · 카페만. 이 칸이 생기기 전에 올린 날은 없음 = 모름) */
@@ -159,6 +161,7 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
     if (isVoucherPayment(l)) {
       part.voucher -= l.net;
       if (isKidsCoupon(l)) part.kidsCoupon = (part.kidsCoupon || 0) - l.net;
+      if (store === "cafe" && isGiftUse(l)) part.giftUse = (part.giftUse || 0) - l.net;
       continue;
     }
     const cls = addLine(part, store, l, sectorOf, products);
@@ -205,6 +208,7 @@ export function buildDailyPart(input: { store: StoreId; date: string; file: stri
     if (isVoucherPayment(r)) {
       part.voucher -= r.net;
       if (isKidsCoupon(r)) part.kidsCoupon = (part.kidsCoupon || 0) - r.net;
+      if (store === "cafe" && isGiftUse(r)) part.giftUse = (part.giftUse || 0) - r.net;
       continue;
     }
     const fromCat = sectorFromCategory(r.cat1);
@@ -249,7 +253,9 @@ function addLine(
   let sector: Sector | KidsKind;
   let cups = 0;
   if (store === "cafe") {
-    const s: Sector = NOT_BREAD.has(l.name) ? "기타" : sectorOf(l.name);
+    // 사장님이 정한 옮김(맥주 · 상품권 → 바리스타, 폭립할인 → 키친)이 분류표 · OK포스 대분류보다 먼저
+    const mv = etcMove("cafe", l.name);
+    const s: Sector = mv === "바리스타" || mv === "키친" ? mv : NOT_BREAD.has(l.name) ? "기타" : sectorOf(l.name);
     sector = s;
     part.sectors[s] += l.net;
     if (isCup("cafe", { name: l.name, cat1, gross: l.gross, net: l.net }, s)) cups = l.qty * cupsPerItem(l.name);
