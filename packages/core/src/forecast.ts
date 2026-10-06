@@ -7,9 +7,10 @@
       - 날씨: 약한 · 중간 비, 아주 덥거나 추우면 실내로(손님 ↑) · 폭우 · 눈, 봄가을 쾌적한 날은 밖으로(손님 ↓)
         방향은 사장님 규칙, 크기는 지난 자료에서 배움(learnWeather). 작년 기준일 날씨와 견줘 비율로 곱함
       - 기간: 설정의 기간 스티커(성수기 · 평상시 · 비수기). 작년 기준일과 스티커가 다르면 그만큼 곱함
-   ② 빵 총 개수 (2026-10 부터, forecastBread) — 비율은 A ⚙ 설정 (처음 60 · 10 · 30, 2026-07 ~ 09 실적에 가장 잘 맞음)
+   ② 빵 총 개수 (2026-10 부터, forecastBread) — 비율은 A ⚙ 설정 (처음 30 · 30 · 40, 7 ~ 9월 · 4 ~ 6월 모두 오차 10% 안팎)
       = 작년 같은 날 무렵(364일 전 앞뒤 같은 날 유형 3일) × 추세 · 최근 같은 날 유형 2번 평균 · 작년 같은 주와 다음 주 × 추세
-      추세 = 최근 28일 올해 빵 판매 ÷ 작년 같은 날. 그 위에 ①의 날씨 · 기간 배수
+      추세 = 최근 28일 올해 빵 판매 ÷ 작년 같은 날. 그 위에 빵용 날씨 배수(breadWeatherFactor, 예보가 있는 날만) · 기간 배수
+      ①의 손님용 날씨 배수는 빵에는 오히려 오차를 키워(시험 11.6% → 안 쓰면 10.5%) 손님 수 표시에만 씀
    ③ 빵별 수량 = 빵 총 개수 × 최근 14일 같은 날 유형에서 그 빵의 비율 (최근 날일수록 무겁게, 7일 지나면 반)
       작년 · 최근 빵 자료가 없으면 예전처럼 예상 방문객 × 방문객 1명당 개수
    계산은 여기 한 곳 — 작업지시 앱 · GitHub 예약 작업이 같은 식을 씀
@@ -292,6 +293,22 @@ export function forecastBread(board: Board, asOf: string, date: string): BreadFo
   return { date, value: w ? sum / w : null, weights, trend, parts, days: { ly, recent, lyNext } };
 }
 
+/**
+ * 빵용 날씨 배수 — 앞뒤 2주 같은 날 유형 대비 실적을 날씨별로 모은 시험(2025-01 ~ 2026-10, 642일)에서 뚜렷했던 칸만
+ * 눈 −6% · 33도 넘음 +8% · 약한 비(0.5 ~ 5mm) −4% · 비 안 오는 20 ~ 30도(나들이 날씨) −4%. 나머지 · 날씨 모름은 1
+ * 실측 날씨로 시험하면 빵 총 개수 오차 10.4% → 9.9% (7~9월), 10.2% → 9.5% (4~6월). 기상청 예보가 있는 날(3 ~ 4일 앞)만 효과
+ */
+export function breadWeatherFactor(w?: DayWeather | null): number {
+  if (!w) return 1;
+  const t = w.tempMax ?? 20;
+  const r = w.rainMm ?? 0;
+  if (w.key === "snow") return 0.94;
+  if (t >= 33) return 1.08;
+  if (r >= 0.5 && r < 5) return 0.96;
+  if (r < 0.5 && t >= 20 && t < 30) return 0.96;
+  return 1;
+}
+
 /** 빵별 비율 — 최근 SHARE_DAYS 일 같은 날 유형(2일 안 되면 모든 날)에서 그날 빵 판매 중 그 빵 몫, 최근 날일수록 무겁게 */
 function breadShares(board: Board, asOf: string, kind: DayKind, active: Set<string>): Map<string, number> {
   const all = dayRange(addDays(asOf, -(SHARE_DAYS - 1)), asOf).filter((d) => (breadOn(board, d) || 0) > 0);
@@ -334,7 +351,7 @@ export function breadPlan(board: Board, weather: WeatherMap, asOf: string, date:
     }
   }
   const shares = fb.value != null ? breadShares(board, asOf, v.kind, active) : null;
-  const total = fb.value != null ? fb.value * v.weather.factor * v.season.factor : null;
+  const total = fb.value != null ? fb.value * breadWeatherFactor(weather[date]) * v.season.factor : null;
   const items: BreadLine[] = [...qty.entries()]
     .map(([name, xs]) => {
       const rate = vis > 0 ? xs.reduce((a, b) => a + b, 0) / vis : 0;

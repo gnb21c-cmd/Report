@@ -3,7 +3,7 @@
    - 기간 스티커: 성수기 · 평상시 · 비수기 (해마다 같은 월·일, 위에서부터 먼저 맞는 것, 나머지는 평상시)
    - 휴일: 공휴일 표(대체공휴일 · 알려진 임시공휴일 포함, holidays.ts)는 자동.
            갑자기 정한 임시공휴일은 '더하기', 표에 있지만 쉬지 않는 날은 '빼기'
-   - 베이커리 생산 비율: 빵 총 개수 = 작년 같은 날 무렵 · 최근 같은 날 · 작년 같은 주와 다음 주 (%, 합 100 — 처음 60 · 10 · 30, forecast.ts)
+   - 베이커리 생산 비율: 빵 총 개수 = 작년 같은 날 무렵 · 최근 같은 날 · 작년 같은 주와 다음 주 (%, 합 100 — 처음 30 · 30 · 40, forecast.ts)
    보고 앱 · 입력 화면 · 작업지시 계획 모두 자료를 계산하기 전에 applySettings 로 넣음
    ============================================================ */
 
@@ -23,8 +23,8 @@ export interface BreadWeights {
   recent: number;
   lyNext: number;
 }
-/** 처음 비율 — 2026-07 ~ 09 실적으로 시험해 가장 잘 맞은 값 (4 ~ 6월로 다시 확인) */
-export const DEFAULT_BREAD_WEIGHTS: BreadWeights = { ly: 60, recent: 10, lyNext: 30 };
+/** 처음 비율 — 클라우드 실적(날씨 포함)으로 10% 단위 모든 조합을 시험해 7 ~ 9월 · 4 ~ 6월 모두 오차 10% 안팎으로 가장 고른 값 (2026-10-07) */
+export const DEFAULT_BREAD_WEIGHTS: BreadWeights = { ly: 30, recent: 30, lyNext: 40 };
 
 export interface ReportSettings {
   v: 1;

@@ -2,7 +2,7 @@
    ① 기간 스티커: 성수기(빨강) · 평상시(노랑) · 비수기(파랑) — 해마다 같은 월·일, 위에서부터 먼저 맞는 것, 나머지는 평상시
    ② 휴일 달력: 토 · 일 · 공휴일(대체공휴일 · 알려진 임시공휴일 포함)은 자동 빨강.
       평일을 누르면 휴일 더하기(갑자기 정한 임시공휴일 등), 자동 공휴일을 누르면 휴일 빼기(쉬지 않는 날) — 키즈 휴일 단가 · 숏타임 단가 · 휴일 표시에 쓰임
-   ③ 베이커리 생산 비율: 빵 총 개수 = 작년 같은 날 무렵 · 최근 같은 날 · 작년 같은 주와 다음 주 (%, 합 100, 처음 60 · 10 · 30)
+   ③ 베이커리 생산 비율: 빵 총 개수 = 작년 같은 날 무렵 · 최근 같은 날 · 작년 같은 주와 다음 주 (%, 합 100, 처음 30 · 30 · 40)
       목요일 주간 계획 · 매일 3일 뒤 최종 계획(작업지시 D)이 다음 계산부터 이 비율을 씀 */
 import { useEffect, useState } from "react";
 import { DEFAULT_BREAD_WEIGHTS, DEFAULT_SETTINGS, EXTRA_HOLIDAYS, HOLIDAYS, seasonIn, weekday, type BreadWeights, type ReportSettings, type SeasonKind, type SeasonRule } from "@report/core";
@@ -217,7 +217,7 @@ export function SettingsSheet(props: { initial: ReportSettings; busy: boolean; o
               </tbody>
             </table>
             <button className="ghost" onClick={() => setS({ ...s, bakeryWeights: { ...DEFAULT_BREAD_WEIGHTS } })}>
-              처음 비율로 (60 · 10 · 30)
+              처음 비율로 (30 · 30 · 40)
             </button>
             {wBad && <p className="error">세 칸은 0 ~ 100 정수, 합은 100% 여야 저장됩니다.</p>}
           </section>

@@ -136,16 +136,16 @@ describe("잠정 수량 묶기 · 시험", () => {
   });
 });
 
-describe("빵 총 개수 = 작년 같은 날 무렵 · 최근 · 작년 다음 주 (비율은 A ⚙ 설정, 처음 60 · 10 · 30)", async () => {
-  const { applySettings, breadTrend, cleanSettings, DEFAULT_BREAD_WEIGHTS, forecastBread } = await import("../src");
+describe("빵 총 개수 = 작년 같은 날 무렵 · 최근 · 작년 다음 주 (비율은 A ⚙ 설정, 처음 30 · 30 · 40)", async () => {
+  const { applySettings, breadTrend, breadWeatherFactor, cleanSettings, DEFAULT_BREAD_WEIGHTS, forecastBread } = await import("../src");
   // 작년: 빵 = 잔 × 0.4 · 올해: 1.2 배
   const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-07", () => 1.2)]);
-  it("처음 비율 60 · 10 · 30, 합이 100 이 아니거나 이상하면 처음 값", () => {
-    expect(DEFAULT_BREAD_WEIGHTS).toEqual({ ly: 60, recent: 10, lyNext: 30 });
-    expect(cleanSettings({}).bakeryWeights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+  it("처음 비율 30 · 30 · 40 (7~9월 · 4~6월 모두 오차 10% 안팎), 합이 100 이 아니거나 이상하면 처음 값", () => {
+    expect(DEFAULT_BREAD_WEIGHTS).toEqual({ ly: 30, recent: 30, lyNext: 40 });
+    expect(cleanSettings({}).bakeryWeights).toEqual({ ly: 30, recent: 30, lyNext: 40 });
     expect(cleanSettings({ bakeryWeights: { ly: 50, recent: 30, lyNext: 20 } }).bakeryWeights).toEqual({ ly: 50, recent: 30, lyNext: 20 });
-    expect(cleanSettings({ bakeryWeights: { ly: 50, recent: 30, lyNext: 30 } }).bakeryWeights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
-    expect(cleanSettings({ bakeryWeights: { ly: -10, recent: 80, lyNext: 30 } }).bakeryWeights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+    expect(cleanSettings({ bakeryWeights: { ly: 50, recent: 30, lyNext: 30 } }).bakeryWeights).toEqual({ ly: 30, recent: 30, lyNext: 40 });
+    expect(cleanSettings({ bakeryWeights: { ly: -10, recent: 80, lyNext: 30 } }).bakeryWeights).toEqual({ ly: 30, recent: 30, lyNext: 40 });
   });
   it("추세 = 최근 28일 올해 빵 ÷ 작년 같은 날", () => {
     expect(breadTrend(board, "2026-10-07")).toBeCloseTo(1.2, 1);
@@ -153,7 +153,7 @@ describe("빵 총 개수 = 작년 같은 날 무렵 · 최근 · 작년 다음 �
   it("작년 × 추세 · 최근 · 작년 다음 주 × 추세 — 모양이 같으면 모두 작년 × 1.2", () => {
     applySettings(null);
     const f = forecastBread(board, "2026-10-07", "2026-10-13"); // 화 (평일 100잔 × 0.4 = 40개 → 48개)
-    expect(f.weights).toEqual({ ly: 60, recent: 10, lyNext: 30 });
+    expect(f.weights).toEqual({ ly: 30, recent: 30, lyNext: 40 });
     expect(f.value).toBeGreaterThan(45);
     expect(f.value).toBeLessThan(51);
   });
@@ -175,3 +175,23 @@ describe("빵 총 개수 = 작년 같은 날 무렵 · 최근 · 작년 다음 �
     expect(neu / salt).toBeGreaterThan(0.6); // 14일 단순 평균이면 0.6
   });
 });
+
+describe("빵용 날씨 배수 (2025-01 ~ 2026-10 날씨 대비 판매 시험에서 뚜렷했던 칸만)", async () => {
+  const { breadWeatherFactor, breadPlan: bp } = await import("../src");
+  it("눈 −6% · 33도 넘음 +8% · 약한 비(0.5~5mm) −4% · 비 안 오는 20~30도 −4% · 나머지 · 날씨 모름은 그대로", () => {
+    expect(breadWeatherFactor(W("d", { key: "snow", tempMax: 0 }))).toBe(0.94);
+    expect(breadWeatherFactor(W("d", { tempMax: 34 }))).toBe(1.08);
+    expect(breadWeatherFactor(W("d", { key: "rain", rainMm: 2 }))).toBe(0.96);
+    expect(breadWeatherFactor(W("d", { tempMax: 25 }))).toBe(0.96);
+    expect(breadWeatherFactor(W("d", { key: "rain", rainMm: 20, tempMax: 25 }))).toBe(1);
+    expect(breadWeatherFactor(W("d", { tempMax: 12 }))).toBe(1);
+    expect(breadWeatherFactor(undefined)).toBe(1);
+  });
+  it("계획에 곱함 — 예보가 있는 날만 (주간 계획 때는 대개 모름 → 그대로)", () => {
+    const board = new Board([...make("2025-08-01", "2025-11-30", () => 1), ...make("2026-08-01", "2026-10-07", () => 1)]);
+    const plain = bp(board, {}, "2026-10-07", "2026-10-13").total;
+    const hot = bp(board, { "2026-10-13": W("2026-10-13", { tempMax: 35 }) }, "2026-10-07", "2026-10-13").total;
+    expect(hot / plain).toBeCloseTo(1.08, 1);
+  });
+});
+
