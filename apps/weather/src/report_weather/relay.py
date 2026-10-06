@@ -108,13 +108,16 @@ class FirebaseRelay:
         return self.put(f"boards/{self.board}/weather/{day['date']}", {**body, "at": dt.datetime.now(dt.timezone.utc)})
 
     def weather_sources(self) -> dict:
-        """이미 올린 날씨 {날짜: observed|forecast}"""
+        """이미 올린 날씨 {날짜: observed|observed-partial|forecast} — 관측인데 최고/최저가 비었으면 observed-partial (다시 받을 날)"""
         out, page = {}, ""
         for _ in range(50):
-            url = DOC_URL.format(project=self.project, path=f"boards/{self.board}/weather") + f"?pageSize=300&mask.fieldPaths=source{'&pageToken=' + page if page else ''}"
+            url = DOC_URL.format(project=self.project, path=f"boards/{self.board}/weather") + f"?pageSize=300&mask.fieldPaths=source&mask.fieldPaths=tempMax&mask.fieldPaths=tempMin{'&pageToken=' + page if page else ''}"
             res = self.post(url, None, token=self.token(), method="GET")
             for d in res.get("documents") or []:
-                out[d["name"].rsplit("/", 1)[-1]] = ((d.get("fields") or {}).get("source") or {}).get("stringValue", "")
+                f = d.get("fields") or {}
+                src = (f.get("source") or {}).get("stringValue", "")
+                blank = any(k not in f or "nullValue" in f[k] for k in ("tempMax", "tempMin"))
+                out[d["name"].rsplit("/", 1)[-1]] = "observed-partial" if src == "observed" and blank else src
             page = res.get("nextPageToken") or ""
             if not page:
                 break

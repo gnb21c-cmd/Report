@@ -6,6 +6,10 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+  # 작업 브랜치에 올리면 클라우드 날씨 · 기상청 응답을 보여 주기만 (쓰지 않음)
+  push:
+    branches: ["feature/weather-temp"]
+    paths: ["apps/weather/**", ".github/workflows/weather.yml"]
 jobs:
   weather:
     runs-on: ubuntu-latest
@@ -15,8 +19,21 @@ jobs:
         with:
           python-version: "3.11"
       - name: 기상청 → 클라우드
+        if: github.event_name != 'push'
         working-directory: apps/weather
         run: python -m report_weather
+        env:
+          PYTHONPATH: src
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+          KMA_SERVICE_KEY: ${{ secrets.KMA_SERVICE_KEY }}
+      - name: 확인 (작업 브랜치)
+        if: github.event_name == 'push'
+        working-directory: apps/weather
+        run: python -m report_weather.check
         env:
           PYTHONPATH: src
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

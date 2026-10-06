@@ -79,7 +79,7 @@ class FakeRelay:
 
     def put_weather(self, d):
         self.put.append((d["date"], d["source"]))
-        self.have[d["date"]] = d["source"]
+        self.have[d["date"]] = d["source"] + ("-partial" if d["source"] == "observed" and (d["tempMax"] is None or d["tempMin"] is None) else "")
 
 
 class RunTest(unittest.TestCase):
@@ -120,6 +120,39 @@ class RunTest(unittest.TestCase):
         done = self.run_once(relay, SlowKma(), dt.datetime(2026, 10, 1, 9, 0), errors)
         self.assertEqual(done, [("2026-10-01", "forecast")])  # 관측이 안 돼도 예보는 올라감
         self.assertEqual(len(errors), 1)
+
+    def test_observed_without_temps_is_fetched_again(self):
+        """기상청이 어제 관측을 아침 일찍 최고/최저 없이 먼저 내주는 날 — 비어 있으면 끝난 날로 치지 않고 다시 받음"""
+
+        class EarlyKma(FakeKma):
+            blank = True
+
+            def observed(self, a, b):
+                days = super().observed(a, b)
+                if self.blank:
+                    for d in days:
+                        d["tempMax"] = d["tempMin"] = None
+                return days
+
+        relay, kma = FakeRelay({"2026-09-29": "observed", "2026-09-30": "observed"}), EarlyKma()
+        self.run_once(relay, kma, dt.datetime(2026, 10, 2, 6, 30))
+        self.assertEqual(relay.have["2026-10-01"], "observed-partial")
+        kma.blank = False
+        done = self.run_once(relay, kma, dt.datetime(2026, 10, 2, 7, 30))
+        self.assertEqual(kma.asked[-1], ("2026-10-01", "2026-10-01"))
+        self.assertIn(("2026-10-01", "observed"), done)
+        self.assertEqual(relay.have["2026-10-01"], "observed")
+        # 다 받은 뒤엔 다시 묻지 않음
+        n = len(kma.asked)
+        self.run_once(relay, kma, dt.datetime(2026, 10, 2, 8, 30))
+        self.assertEqual(len(kma.asked), n)
+
+    def test_old_partial_day_does_not_loop(self):
+        """오래전(7일 넘은) 날이 최고/최저 없이 남아 있어도 매시간 그날부터 다시 받지 않음"""
+        have = {"2026-09-29": "observed-partial", "2026-09-30": "observed", "2026-10-01": "observed"}
+        relay, kma = FakeRelay(have), FakeKma()
+        self.run_once(relay, kma, dt.datetime(2026, 10, 9, 9, 0))
+        self.assertEqual(kma.asked[0][0], "2026-10-02")
 
 
 if __name__ == "__main__":
