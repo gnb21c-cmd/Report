@@ -1358,4 +1358,3 @@ ul.plain li {
 .bread-tbl td:first-child { word-break: keep-all; }
 .bread-tbl tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
 .bread-tbl td.warn { color: var(--bad); }
-.bread-today { width: 100%; }

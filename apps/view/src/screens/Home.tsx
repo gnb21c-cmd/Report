@@ -5,13 +5,11 @@
    ③ 당월 매출 합계 · 전년도 같은 기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
    ⑤ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
-   ⑥ 오늘 베이커리 생산 — 작업지시 확정 수량 (마감일과 상관없이 오늘 것, → 빵별 수량)
-   ⑦ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
-   ⑧ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
+   ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
+   ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { TodayBreadCard } from "./BakeryToday";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type Board, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -24,7 +22,6 @@ export type View =
   | { name: "cash" }
   | { name: "settle" }
   | { name: "visitors" }
-  | { name: "bakeryToday" }
   | { name: "settings" };
 export type Open = (v: View) => void;
 
@@ -60,7 +57,7 @@ export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타",
 
 export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
 
-export function Home({ d, open, weather, cash, cashFrom, settle, board }: { d: Dashboard; open: Open; board?: Board; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle }) {
+export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -156,9 +153,6 @@ export function Home({ d, open, weather, cash, cashFrom, settle, board }: { d: D
           <span className="note" />
         </button>
       </div>
-
-      {/* 오늘 베이커리 생산 (작업지시 확정 수량) — 아침마다 그날 것 */}
-      {board && <TodayBreadCard board={board} open={open} />}
 
       {/* 자금 현황 — 그날 정보 아래. 누르면 계좌 · 적요까지 자세히 */}
       <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">

@@ -5,7 +5,8 @@
           금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
    마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
    [현장] 아침 6시부터 그날 — 오늘 생산(최종) + 내일 준비(최종, 하루 전에 미리 준비) 두 날을 함께 보여 줌
-   생산 = 최종 수량, 폐기 = 생산 − 판매
+   생산 = 최종 수량, 폐기 = 생산 − 판매(정가 + 50% 할인). 그날 아침 6시부터는 최종 수량을 못 바꿈 (productionStarted)
+   보고 앱(B)은 마감일의 plans · orders 를 그날 생산 기록으로 읽어 영수증 판매와 맞춤 (dayResult · breadTotals)
    ============================================================ */
 import { addDays, weekday } from "./dates";
 import { bandRange, breadPlan, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
@@ -313,6 +314,22 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
       return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: m == null ? null : Math.max(0, m - s), soldOut: m != null && m > 0 && s >= m && h === 0 };
     })
     .sort((a, b) => (b.made ?? b.sold) - (a.made ?? a.sold) || a.name.localeCompare(b.name, "ko"));
+}
+
+/** 그날 합계 (B 베이커리 상세 맨 위) — 총 생산 · 정가판매 · 할인판매 · 폐기. 작업지시가 없는 빵뿐이면 생산 · 폐기는 null */
+export function breadTotals(rows: BreadResult[]): { made: number | null; full: number; half: number; waste: number | null } {
+  const planned = rows.filter((r) => r.made != null);
+  return {
+    made: planned.length ? planned.reduce((a, r) => a + (r.made || 0), 0) : null,
+    full: rows.reduce((a, r) => a + r.full, 0),
+    half: rows.reduce((a, r) => a + r.half, 0),
+    waste: planned.length ? planned.reduce((a, r) => a + (r.waste || 0), 0) : null,
+  };
+}
+
+/** 그날 생산이 시작됐는지 (아침 6시 = 현장 태블릿 하루 시작) — 그 뒤로는 그날 최종 수량을 못 바꿈 (현장에 지시한 수량 = 그날 생산 기록) */
+export function productionStarted(date: string, now: Now): boolean {
+  return now.date > date || (now.date === date && now.time >= DAY_START);
 }
 
 /** 다 팔린 날 — 실제로는 더 팔 수 있었다고 보고 올리는 배수 */

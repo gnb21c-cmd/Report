@@ -9,7 +9,6 @@ import { SectorDetail } from "./screens/SectorDetail";
 import { MonthDetail, YearDetail } from "./screens/CumDetail";
 import { KidsBarsDetail, NaverDetail } from "./screens/KidsDetail";
 import { LogScreen } from "./screens/LogScreen";
-import { BakeryToday } from "./screens/BakeryToday";
 import { InstallBanner } from "./ui/InstallBanner";
 import { CashDetail } from "./screens/CashDetail";
 import { SettleDetail } from "./screens/SettleDetail";
@@ -98,7 +97,6 @@ export function App() {
   else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
   else if (view.name === "visitors") body = <VisitorsDetail board={board} {...nav} />;
-  else if (view.name === "bakeryToday") body = <BakeryToday board={board} onBack={back} />;
   else if (view.name === "settle") body = <SettleDetail cashParts={cashParts} {...nav} />;
   else if (view.name === "cash") {
     const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;
@@ -116,7 +114,7 @@ export function App() {
         {d.error && <div className="banner">{d.error}</div>}
       </header>
       <main className={`content${d.syncing ? " busy" : ""}`}>
-        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} board={board} />}
+        {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date)} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} />}
       </main>
     </div>
   );
