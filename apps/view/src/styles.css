@@ -578,8 +578,8 @@ button.stat {
 }
 /* 키즈 입장 4칸 한 줄 — 이름 · 장수 모두 가운데, 이름은 두 줄 높이로 맞춰 장수가 같은 높이에 */
 .stats.four {
-  /* 네이버 칸은 '136(신41)장' 이라 넓게 */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, 1fr);
+  /* 네 칸 같은 크기 */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 .stats.four .stat {
@@ -602,12 +602,16 @@ button.stat {
   font-size: min(20px, 4.1vw);
   letter-spacing: -0.5px;
 }
-.stats.four .stat-value.naver {
-  font-size: min(20px, 3.8vw);
-}
-.stats.four .note {
-  font-size: min(12.5px, 2.8vw);
+/* 네이버 칸 아래 '(中 신규 41장)' — 다른 칸은 빈 줄로 높이를 맞춤 */
+.stats.four .stat .note {
+  font-size: min(12px, 2.6vw);
+  min-height: 1.3em;
   white-space: nowrap;
+  letter-spacing: -0.6px;
+}
+.stats.four .stat {
+  padding-left: 3px;
+  padding-right: 3px;
 }
 /* 숫자 상자: 이름은 왼쪽 위, 금액·비교는 오른쪽 정렬 */
 .stat {
