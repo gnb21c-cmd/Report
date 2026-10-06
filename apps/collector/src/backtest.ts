@@ -25,18 +25,26 @@ async function main() {
     console.log(`${title.padEnd(22)} 방문객 오차 ${r.all.visitors}% (평일 ${r.평일.visitors} · 금 ${r.금요일.visitors} · 휴일 ${r.휴일.visitors}) · 빵 총 개수 오차 ${r.all.bread}% (평일 ${r.평일.bread} · 금 ${r.금요일.bread} · 휴일 ${r.휴일.bread}) · ${r.all.days}일`);
     return r;
   };
-  // 빵 총 개수 비율 (A ⚙ 설정) — 목요일 주간(앞 4 ~ 10일) · 3일 전 최종(앞 4일)
-  console.log("\n빵 총 개수 비율별 오차 (절대 %) — 7 ~ 9월 · 4 ~ 6월, 앞 4일 / 앞 7일 예측");
-  for (const w of [{ ly: 60, recent: 10, lyNext: 30 }, { ly: 50, recent: 30, lyNext: 20 }, { ly: 100, recent: 0, lyNext: 0 }, { ly: 0, recent: 100, lyNext: 0 }]) {
-    applySettings(cleanSettings({ ...(settings || {}), bakeryWeights: w }));
-    const b2 = new Board(reports);
-    const cell = (a: string, z: string, lead: number) => {
-      const r = backtest(b2, weather, a, z, lead, learned);
-      return `${r.all.bread}%`;
-    };
-    console.log(`  ${w.ly}·${w.recent}·${w.lyNext}: 7~9월 ${cell("2026-07-01", "2026-09-30", 4)} / ${cell("2026-07-01", "2026-09-30", 7)} · 4~6월 ${cell("2026-04-01", "2026-06-30", 4)} / ${cell("2026-04-01", "2026-06-30", 7)}`);
-  }
+  // 빵 총 개수 비율 (A ⚙ 설정) — 10% 단위 모든 조합, 날씨 배수 씀/안 씀, 앞 7일(목요일 주간) · 앞 4일(3일 전 최종)
+  // 순위는 7~9월 앞 7일 기준, 4~6월은 확인용
+  const grid: { w: string; wx: string; a7: number; a4: number; b7: number; b4: number }[] = [];
+  for (let ly = 0; ly <= 100; ly += 10)
+    for (let rc = 0; ly + rc <= 100; rc += 10) {
+      const w = { ly, recent: rc, lyNext: 100 - ly - rc };
+      applySettings(cleanSettings({ ...(settings || {}), bakeryWeights: w }));
+      const b2 = new Board(reports);
+      for (const [wx, wm] of [["날씨 씀", weather], ["날씨 안 씀", {}]] as const) {
+        const e = (a: string, z: string, lead: number) => backtest(b2, wm, a, z, lead, learned).all.bread ?? 99;
+        grid.push({ w: `${w.ly}·${w.recent}·${w.lyNext}`, wx, a7: e("2026-07-01", "2026-09-30", 7), a4: e("2026-07-01", "2026-09-30", 4), b7: e("2026-04-01", "2026-06-30", 7), b4: e("2026-04-01", "2026-06-30", 4) });
+      }
+    }
   applySettings(settings);
+  const line = (g: (typeof grid)[number]) => `  ${g.w.padEnd(10)} ${g.wx.padEnd(6)} 7~9월 앞7일 ${g.a7}% · 앞4일 ${g.a4}% | 4~6월 앞7일 ${g.b7}% · 앞4일 ${g.b4}%`;
+  console.log("\n빵 총 개수 비율 (작년 무렵 · 최근 · 작년 다음 주) — 7~9월 앞 7일 오차가 작은 순 10개");
+  for (const g of [...grid].sort((x, y) => x.a7 - y.a7).slice(0, 10)) console.log(line(g));
+  console.log("두 기간 평균이 작은 순 5개");
+  for (const g of [...grid].sort((x, y) => x.a7 + x.b7 + x.a4 + x.b4 - (y.a7 + y.b7 + y.a4 + y.b4)).slice(0, 5)) console.log(line(g));
+  for (const k of ["60·10·30", "50·30·20"]) for (const g of grid.filter((x) => x.w === k)) console.log(line(g));
 
   console.log("\n방법별 평균 오차 (절대 %, 작을수록 좋음)");
   for (const lambda of [0, 0.25, 0.5, 0.75, 1]) show(`되돌림 λ=${lambda}`, { ...learned, lambda });
