@@ -1351,3 +1351,11 @@ ul.plain li {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* 베이커리 빵별 표 (섹터 상세 맨 아래) */
+.bread-tbl { width: 100%; }
+.bread-tbl th, .bread-tbl td { font-size: 12.5px; padding: 5px 3px; }
+.bread-tbl td:first-child { word-break: keep-all; }
+.bread-tbl tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
+.bread-tbl td.warn { color: var(--bad); }
+.bread-today { width: 100%; }
