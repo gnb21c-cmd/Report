@@ -1,0 +1,35 @@
+# 베이커리 예측 비교 (손으로 · 작업 브랜치) — 지금 방식(세 시각 비율 + 빵용 날씨) vs 기계학습(LightGBM) · 월급날 · 풍선효과
+# 하루 표는 실행기 임시 폴더에만 (저장소 · 기록 · 올리기 없음). 기록에는 오차 % · 항목 이름 · 날 수만
+name: 예측 비교 (기계학습)
+on:
+  push:
+    branches: ["feature/forecast-ml"]
+    paths: ["apps/forecast-ml/**", "apps/collector/src/exportDaily.ts", ".github/workflows/forecast-ml.yml"]
+  workflow_dispatch:
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 하루 표 (임시 폴더)
+        run: pnpm --filter @report/collector export-daily
+        env:
+          OUT: ${{ runner.temp }}/daily.json
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -q lightgbm==4.6.0 scikit-learn pandas numpy
+      - name: 비교
+        run: python apps/forecast-ml/compare.py
+        env:
+          DAILY: ${{ runner.temp }}/daily.json
