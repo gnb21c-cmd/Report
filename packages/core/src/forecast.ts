@@ -7,12 +7,18 @@
       - 날씨: 약한 · 중간 비, 아주 덥거나 추우면 실내로(손님 ↑) · 폭우 · 눈, 봄가을 쾌적한 날은 밖으로(손님 ↓)
         방향은 사장님 규칙, 크기는 지난 자료에서 배움(learnWeather). 작년 기준일 날씨와 견줘 비율로 곱함
       - 기간: 설정의 기간 스티커(성수기 · 평상시 · 비수기). 작년 기준일과 스티커가 다르면 그만큼 곱함
-   ② 빵별 수량 = 예상 방문객 × 최근 4주 같은 날 유형의 '방문객 1명당 그 빵 판매 개수' (1개 단위)
+   ② 빵 총 개수 (2026-10 부터, forecastBread) — 비율은 A ⚙ 설정 (처음 30 · 30 · 40, 7 ~ 9월 · 4 ~ 6월 모두 오차 10% 안팎)
+      = 작년 같은 날 무렵(364일 전 앞뒤 같은 날 유형 3일) × 추세 · 최근 같은 날 유형 2번 평균 · 작년 같은 주와 다음 주 × 추세
+      추세 = 최근 28일 올해 빵 판매 ÷ 작년 같은 날. 그 위에 빵용 날씨 배수(breadWeatherFactor, 예보가 있는 날만) · 기간 배수
+      ①의 손님용 날씨 배수는 빵에는 오히려 오차를 키워(시험 11.6% → 안 쓰면 10.5%) 손님 수 표시에만 씀
+   ③ 빵별 수량 = 빵 총 개수 × 최근 14일 같은 날 유형에서 그 빵의 비율 (최근 날일수록 무겁게, 7일 지나면 반)
+      작년 · 최근 빵 자료가 없으면 예전처럼 예상 방문객 × 방문객 1명당 개수
    계산은 여기 한 곳 — 작업지시 앱 · GitHub 예약 작업이 같은 식을 씀
    ============================================================ */
 import { addDays, dayRange, weekday } from "./dates";
 import type { Board } from "./metrics";
 import { holidayName, NOT_BREAD } from "./rules";
+import { currentSettings, DEFAULT_BREAD_WEIGHTS, type BreadWeights } from "./settings";
 import { seasonOf, type DayWeather, type WeatherMap } from "./weather";
 
 export type DayKind = "평일" | "금요일" | "휴일";
@@ -209,13 +215,125 @@ export interface BreadLine {
 export interface BreadPlan {
   date: string;
   visitors: VisitorForecast;
+  /** 빵 총 개수 계산 (작년 · 최근 · 작년 다음 주) */
+  bread?: BreadForecast;
   items: BreadLine[];
   total: number;
 }
 
-/** 빵별 수량 — 최근 4주 같은 날 유형(없으면 모든 날)의 방문객 1명당 판매 개수 × 예상 방문객 */
+/* ---------- 빵 총 개수 (작년 · 최근 · 작년 다음 주) ---------- */
+
+/** 추세를 보는 날 수 · 최근 같은 날 유형 몇 번 · 작년 앞뒤 몇 날 · 빵 비율을 보는 날 수 · 반감 날 수 */
+export const BREAD_TREND_DAYS = 28;
+export const BREAD_RECENT_SAME = 2;
+export const BREAD_LY_NEAR = 3;
+export const SHARE_DAYS = 14;
+export const SHARE_HALF_LIFE = 7;
+
+/** 그날 빵 판매 개수 (베이커리 생산품만, 카페 자료가 없으면 null) */
+function breadOn(board: Board, d: string): number | null {
+  if (!board.report(d)?.cafe) return null;
+  return board.products(d, d, "베이커리").reduce((a, p) => a + (NOT_BREAD.has(p.name) ? 0 : Math.max(0, p.qty)), 0);
+}
+
+/** center 앞뒤 10일 안에서 date 와 같은 날 유형 · 빵 자료가 있는 가까운 n 일 */
+function nearSameKind(board: Board, date: string, center: string, n: number): string[] {
+  const kind = dayKind(date);
+  const c: { d: string; gap: number }[] = [];
+  for (let k = -10; k <= 10; k++) {
+    const d = addDays(center, k);
+    if (dayKind(d) === kind && (breadOn(board, d) || 0) > 0) c.push({ d, gap: Math.abs(k) });
+  }
+  return c.sort((a, b) => a.gap - b.gap || (a.d < b.d ? -1 : 1)).slice(0, n).map((x) => x.d);
+}
+
+/** 추세 = asOf 까지 n 일 올해 빵 판매 ÷ 작년 같은 날 (둘 다 자료 있는 날만, 모르면 1) */
+export function breadTrend(board: Board, asOf: string, n = BREAD_TREND_DAYS): number {
+  let a = 0;
+  let b = 0;
+  for (const d of dayRange(addDays(asOf, -(n - 1)), asOf)) {
+    const x = breadOn(board, d);
+    const y = breadOn(board, addDays(d, -364));
+    if (x == null || y == null) continue;
+    a += x;
+    b += y;
+  }
+  return b > 0 ? clamp(a / b, 0.5, 2) : 1;
+}
+
+export interface BreadForecast {
+  date: string;
+  /** 빵 총 개수 (날씨 · 기간 배수 전, 자료가 없으면 null) */
+  value: number | null;
+  weights: BreadWeights;
+  trend: number;
+  parts: { ly: number | null; recent: number | null; lyNext: number | null };
+  days: { ly: string[]; recent: string[]; lyNext: string[] };
+}
+
+/** 그날 빵 총 개수 — asOf 까지 실적만. 비율은 A ⚙ 설정 (없는 몫은 빼고 나머지 비율로) */
+export function forecastBread(board: Board, asOf: string, date: string): BreadForecast {
+  const weights = currentSettings().bakeryWeights || DEFAULT_BREAD_WEIGHTS;
+  const trend = breadTrend(board, asOf);
+  const mean = (ds: string[]) => (ds.length ? avg(ds.map((d) => breadOn(board, d) || 0)) : null);
+  const ly = nearSameKind(board, date, addDays(date, -364), BREAD_LY_NEAR);
+  const lyNext = [...ly, ...nearSameKind(board, date, addDays(date, -357), BREAD_LY_NEAR)];
+  const recent: string[] = [];
+  for (let d = asOf; recent.length < BREAD_RECENT_SAME && d > addDays(asOf, -60); d = addDays(d, -1)) if (dayKind(d) === dayKind(date) && (breadOn(board, d) || 0) > 0) recent.push(d);
+  const lyV = mean(ly);
+  const parts = { ly: lyV == null ? null : lyV * trend, recent: mean(recent), lyNext: ly.length ? mean(lyNext)! * trend : null };
+  let w = 0;
+  let sum = 0;
+  for (const k of ["ly", "recent", "lyNext"] as const) {
+    const v = parts[k];
+    if (v == null || !weights[k]) continue;
+    w += weights[k];
+    sum += weights[k] * v;
+  }
+  return { date, value: w ? sum / w : null, weights, trend, parts, days: { ly, recent, lyNext } };
+}
+
+/**
+ * 빵용 날씨 배수 — 앞뒤 2주 같은 날 유형 대비 실적을 날씨별로 모은 시험(2025-01 ~ 2026-10, 642일)에서 뚜렷했던 칸만
+ * 눈 −6% · 33도 넘음 +8% · 약한 비(0.5 ~ 5mm) −4% · 비 안 오는 20 ~ 30도(나들이 날씨) −4%. 나머지 · 날씨 모름은 1
+ * 실측 날씨로 시험하면 빵 총 개수 오차 10.4% → 9.9% (7~9월), 10.2% → 9.5% (4~6월). 기상청 예보가 있는 날(3 ~ 4일 앞)만 효과
+ */
+export function breadWeatherFactor(w?: DayWeather | null): number {
+  if (!w) return 1;
+  const t = w.tempMax ?? 20;
+  const r = w.rainMm ?? 0;
+  if (w.key === "snow") return 0.94;
+  if (t >= 33) return 1.08;
+  if (r >= 0.5 && r < 5) return 0.96;
+  if (r < 0.5 && t >= 20 && t < 30) return 0.96;
+  return 1;
+}
+
+/** 빵별 비율 — 최근 SHARE_DAYS 일 같은 날 유형(2일 안 되면 모든 날)에서 그날 빵 판매 중 그 빵 몫, 최근 날일수록 무겁게 */
+function breadShares(board: Board, asOf: string, kind: DayKind, active: Set<string>): Map<string, number> {
+  const all = dayRange(addDays(asOf, -(SHARE_DAYS - 1)), asOf).filter((d) => (breadOn(board, d) || 0) > 0);
+  let days = all.filter((d) => dayKind(d) === kind);
+  if (days.length < 2) days = all;
+  const m = new Map<string, number>();
+  let t = 0;
+  for (const d of days) {
+    const age = (Date.parse(asOf) - Date.parse(d)) / 864e5;
+    const wt = Math.pow(0.5, age / SHARE_HALF_LIFE);
+    const total = breadOn(board, d) || 0;
+    for (const p of board.products(d, d, "베이커리")) {
+      if (!active.has(p.name) || p.qty <= 0) continue;
+      const s = (wt * p.qty) / total;
+      m.set(p.name, (m.get(p.name) || 0) + s);
+      t += s;
+    }
+  }
+  return new Map([...m].map(([n, s]) => [n, t ? s / t : 0]));
+}
+
+/** 빵별 수량 — 빵 총 개수(forecastBread × 날씨 · 기간 배수) × 빵별 비율. 빵 자료가 없으면 방문객 × 1명당 개수 */
 export function breadPlan(board: Board, weather: WeatherMap, asOf: string, date: string, learned: Learned = DEFAULT_LEARNED): BreadPlan {
   const v = forecastVisitors(board, weather, asOf, date, learned);
+  const fb = forecastBread(board, asOf, date);
   const days = dayRange(addDays(asOf, -(RATE_DAYS - 1)), asOf).filter((d) => visitorsOn(board, d) != null);
   let same = days.filter((d) => dayKind(d) === v.kind);
   if (same.length < 2) same = days;
@@ -232,14 +350,17 @@ export function breadPlan(board: Board, weather: WeatherMap, asOf: string, date:
       qty.set(name, xs);
     }
   }
+  const shares = fb.value != null ? breadShares(board, asOf, v.kind, active) : null;
+  const total = fb.value != null ? fb.value * breadWeatherFactor(weather[date]) * v.season.factor : null;
   const items: BreadLine[] = [...qty.entries()]
     .map(([name, xs]) => {
       const rate = vis > 0 ? xs.reduce((a, b) => a + b, 0) / vis : 0;
-      return { name, rate, qty: Math.round(rate * v.value), recent: xs };
+      const q = shares && total != null ? (shares.get(name) || 0) * total : rate * v.value;
+      return { name, rate, qty: Math.round(q), recent: xs };
     })
     .filter((x) => x.qty > 0)
     .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
-  return { date, visitors: v, items, total: items.reduce((a, b) => a + b.qty, 0) };
+  return { date, visitors: v, bread: fb, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 
 /** 앞으로 1 ~ 4주차 — 평일 · 휴일 하루 평균 생산 개수 (날씨는 모름으로) */

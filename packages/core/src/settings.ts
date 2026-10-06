@@ -3,7 +3,8 @@
    - 기간 스티커: 성수기 · 평상시 · 비수기 (해마다 같은 월·일, 위에서부터 먼저 맞는 것, 나머지는 평상시)
    - 휴일: 공휴일 표(대체공휴일 · 알려진 임시공휴일 포함, holidays.ts)는 자동.
            갑자기 정한 임시공휴일은 '더하기', 표에 있지만 쉬지 않는 날은 '빼기'
-   보고 앱 · 입력 화면 모두 자료를 계산하기 전에 applySettings 로 넣음
+   - 베이커리 생산 비율: 빵 총 개수 = 작년 같은 날 무렵 · 최근 같은 날 · 작년 같은 주와 다음 주 (%, 합 100 — 처음 30 · 30 · 40, forecast.ts)
+   보고 앱 · 입력 화면 · 작업지시 계획 모두 자료를 계산하기 전에 applySettings 로 넣음
    ============================================================ */
 
 export type SeasonKind = "성수기" | "평상시" | "비수기";
@@ -16,6 +17,15 @@ export interface SeasonRule {
   name: string;
 }
 
+/** 베이커리 빵 총 개수를 정하는 비율 (%) — 작년 같은 날 무렵 × 추세 · 최근 같은 날 유형 · 작년 같은 주와 다음 주 × 추세 */
+export interface BreadWeights {
+  ly: number;
+  recent: number;
+  lyNext: number;
+}
+/** 처음 비율 — 클라우드 실적(날씨 포함)으로 10% 단위 모든 조합을 시험해 7 ~ 9월 · 4 ~ 6월 모두 오차 10% 안팎으로 가장 고른 값 (2026-10-07) */
+export const DEFAULT_BREAD_WEIGHTS: BreadWeights = { ly: 30, recent: 30, lyNext: 40 };
+
 export interface ReportSettings {
   v: 1;
   seasons: SeasonRule[];
@@ -23,6 +33,8 @@ export interface ReportSettings {
   holidaysAdd: Record<string, string>;
   /** 공휴일 표에 있지만 휴일로 보지 않는 날 */
   holidaysOff: string[];
+  /** 베이커리 생산 비율 (없으면 처음 값) */
+  bakeryWeights?: BreadWeights;
   by?: string;
   at?: string;
 }
@@ -40,7 +52,16 @@ export const DEFAULT_SETTINGS: ReportSettings = {
   ],
   holidaysAdd: {},
   holidaysOff: [],
+  bakeryWeights: { ...DEFAULT_BREAD_WEIGHTS },
 };
+
+/** 비율 고치기 — 0 ~ 100 정수 셋, 합 100 이 아니면 처음 값 */
+export function cleanWeights(x: unknown): BreadWeights {
+  const o = (x && typeof x === "object" ? x : {}) as Partial<BreadWeights>;
+  const w = [o.ly, o.recent, o.lyNext].map((v) => Number(v));
+  if (w.some((v) => !Number.isInteger(v) || v < 0 || v > 100) || w[0] + w[1] + w[2] !== 100) return { ...DEFAULT_BREAD_WEIGHTS };
+  return { ly: w[0], recent: w[1], lyNext: w[2] };
+}
 
 const MD = /^\d{2}-\d{2}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -56,7 +77,7 @@ export function cleanSettings(x: unknown): ReportSettings {
   const holidaysAdd: Record<string, string> = {};
   for (const [d, n] of Object.entries(o.holidaysAdd || {})) if (DAY.test(d)) holidaysAdd[d] = String(n || "휴일").slice(0, 30);
   const holidaysOff = Array.isArray(o.holidaysOff) ? [...new Set(o.holidaysOff.filter((d) => DAY.test(d)))].sort() : [];
-  return { v: 1, seasons, holidaysAdd, holidaysOff, ...(o.by ? { by: String(o.by) } : {}), ...(o.at ? { at: String(o.at) } : {}) };
+  return { v: 1, seasons, holidaysAdd, holidaysOff, bakeryWeights: cleanWeights(o.bakeryWeights), ...(o.by ? { by: String(o.by) } : {}), ...(o.at ? { at: String(o.at) } : {}) };
 }
 
 let current: ReportSettings = DEFAULT_SETTINGS;
