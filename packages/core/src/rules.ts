@@ -77,7 +77,7 @@ export function kidsPrice(date: string): { price: number; kind: "평일" | "휴�
 }
 
 /** 잔 수에서 뺄 것 (옵션·원두·상품 등) */
-const NOT_CUP = /추가|변경|사이즈|업그레이드|연하게|진하게|원두|드립백|시럽|굿즈|텀블러|쿠폰|할인|포장비|봉투|컵\s*홀더|아이스크림/;
+const NOT_CUP = /추가|변경|사이즈|업그레이드|연하게|진하게|원두|드립백|시럽|굿즈|텀블러|쿠폰|상품권|할인|포장비|봉투|컵\s*홀더|아이스크림/;
 /** 잔으로 셀 것 — 카페 POS 바리스타 상품 + 이름으로 맥주 등 */
 const CUP_NAME = /맥주|beer|생맥|필스너|에일|라거|하이볼|와인|커피|라떼|아메리카노|아메(?![가-힣])|에스프레소|에이드|주스|스무디|프라페|밀크티|티(?![가-힣])|차(?![가-힣])|tea|coffee/i;
 
@@ -117,4 +117,31 @@ export function visitorsFromCups(cups: number): number {
  *  2026-04 부터: 마일리지 손님에게 주는 2만원 사은권 → 카페 매출은 그대로, 키즈 매출에서 뺌 (metrics) */
 export function isKidsCoupon(line: Pick<SaleLine, "name" | "net">): boolean {
   return isVoucherPayment(line) && (/아키/.test(line.name || "") || OLD_KIDS_COUPON.test(line.name || ""));
+}
+
+/* ---------- 기타로 잡히던 상품 옮기기 (2026-10-06 사장님 기준) ----------
+   카페: 생맥주(C3 필스너 · C5 바이젠 · C7 페일에일) · 상품권 판매 → 바리스타, 폭립할인(−) → 키친
+         상품권(1만원권) 사용 '[종이쿠폰]만원권'(−) → 그날 바리스타에서 뺌 (giftUse — 판 날 이미 바리스타 매출로 잡았으므로)
+   키즈: 음료(쥬스 · 우유 · 생수) · 자판기상품 → 자판기 매출, 퇴장 지연(이름이 '02.51-03.00' 같은 시각 칸인 것 포함) · 열쇠 분실 · 인원추가 → 키즈입장료
+   대관은 따로 (metrics 의 rental) */
+export type EtcMove = "바리스타" | "키친" | "자판기" | "키즈입장료";
+export function etcMove(store: StoreId, name: string): EtcMove | null {
+  const n = name || "";
+  if (store === "cafe") {
+    if (/필스너|바이젠|페일에일/.test(n)) return "바리스타";
+    if (/상품권/.test(n)) return "바리스타";
+    if (/폭립\s*할인/.test(n)) return "키친";
+    return null;
+  }
+  if (/대관/.test(n)) return null;
+  if (/쥬스|주스|우유|생수|자판기상품/.test(n)) return "자판기";
+  if (/지연/.test(n) || /^\s*\d{1,2}[.:]\d{2}\s*-\s*\d{1,2}[.:]\d{2}\s*$/.test(n)) return "키즈입장료";
+  if (/열쇠/.test(n)) return "키즈입장료";
+  if (/추가/.test(n)) return "키즈입장료";
+  return null;
+}
+
+/** 상품권 1만원권으로 결제한 줄 ('[종이쿠폰]만원권', 음수) — 그날 바리스타 매출에서 뺌 */
+export function isGiftUse(line: Pick<SaleLine, "name" | "net">): boolean {
+  return isVoucherPayment(line) && !isKidsCoupon(line) && /만원권/.test(line.name || "");
 }

@@ -3,7 +3,9 @@
 
    한 날의 숫자
    - 바리스타 · 베이커리 · 키친 = 카페아스타나 분류별 실매출
-   - 기타 = 카페아스타나 기타 + 아스타나키즈 입장권 외 매출 (추가 인원 · 간식 등)
+   - 기타 = 카페아스타나 기타 + 아스타나키즈 입장권 외 매출 + 자판기 · 인생네컷 · 주차
+     기타로 잡히던 상품 중 사장님이 정한 것은 옮김 (rules.etcMove): 맥주 · 상품권 → 바리스타, 폭립할인 → 키친,
+     키즈 음료 · 자판기상품 → 자판기, 키즈 퇴장 지연 · 열쇠 분실 · 인원추가 → 키즈입장료. 상품권 사용액은 그날 바리스타에서 뺌
    - 키즈입장료 = (네이버 입장권 + 현장 입장권) × 그날 단가 (평일 12,000 / 휴일 14,000)
        · 네이버 입장권 = A 에 넣은 시간대별 판매 입장권 합. 아직 안 넣은 날은 키즈 POS 로 추정 (0원 입장 발행 − 현장)
        · 현장 입장권 = 키즈 POS 에서 돈을 받은 입장권 (반품은 지워짐)
@@ -15,7 +17,7 @@
 import { dayRange, daysInMonth, lyCalendar, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
 import { EXTRA_KINDS, type ExtraKind } from "./extra";
 import { rentalIn } from "./cash";
-import { isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
+import { etcMove, isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
@@ -92,6 +94,10 @@ export interface Metrics {
   eventFree: number;
   fee: { naver: number; walkIn: number };
   kidsOtherNet: number;
+  /** 키즈 POS 의 퇴장 지연 · 열쇠 분실 · 인원추가 — 기타에서 키즈입장에 옮긴 금액 */
+  kidsFees: number;
+  /** 상품권 1만원권 사용 — 그날 바리스타에서 뺀 금액 */
+  giftUse: number;
   /** 대관 (어린이집 · 유치원 등) — 키즈 POS '대관' 상품 + 통장 대관 입금, 키즈입장에 더함 */
   rental: number;
   /** POS 밖 매출 (자판기 · 인생네컷 · 주차) — 기타 상자에 더함 */
@@ -124,6 +130,8 @@ function empty(from: string, to: string): Metrics {
     eventFree: 0,
     fee: { naver: 0, walkIn: 0 },
     kidsOtherNet: 0,
+    kidsFees: 0,
+    giftUse: 0,
     rental: 0,
     extra: { vending: 0, photo: 0, parking: 0 },
   };
@@ -219,6 +227,16 @@ export class Board {
       m.kidsCoupon += cafe.kidsCoupon || 0;
       m.cups += cafe.cups;
       m.teams += cafe.teams;
+      // 예전에 기타로 저장된 상품도 볼 때 옮김 (새로 올린 날은 이미 옮겨져 저장됨 → 여기선 기타 줄만 봄)
+      for (const p of cafe.products || []) {
+        if (p[1] !== "기타") continue;
+        const to = etcMove("cafe", p[0]);
+        if (to !== "바리스타" && to !== "키친") continue;
+        m.box.기타 -= p[3];
+        m.box[to] += p[3];
+      }
+      m.giftUse += cafe.giftUse || 0;
+      m.box.바리스타 -= cafe.giftUse || 0;
     }
     let i20 = 0;
     let w20 = 0;
@@ -251,8 +269,19 @@ export class Board {
         for (const p of kids.products || []) if (/대관/.test(p[0]) && p[1] === "기타") rent += p[3];
         m.rental += rent;
         if (sales) {
-          m.kidsOtherNet += k.other - rent;
-          m.box.기타 += k.other - rent;
+          // 기타 중 음료 · 자판기상품 → 자판기, 퇴장 지연 · 열쇠 · 인원추가 → 키즈입장료
+          let vend = 0;
+          let fees = 0;
+          for (const p of kids.products || []) {
+            if (p[1] !== "기타" && p[1] !== "추가인원") continue;
+            const to = etcMove("kids", p[0]);
+            if (to === "자판기") vend += p[3];
+            else if (to === "키즈입장료") fees += p[3];
+          }
+          m.extra.vending += vend;
+          m.kidsFees += fees;
+          m.kidsOtherNet += k.other - rent - vend - fees;
+          m.box.기타 += k.other - rent - vend - fees;
         }
       }
     }
@@ -278,9 +307,10 @@ export class Board {
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     // 통장으로 받은 대관료 (어린이집 · 유치원)
     m.rental += rentalIn(r?.cash);
-    m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon + m.rental;
+    m.box.키즈입장료 = m.fee.naver + m.fee.walkIn - m.kidsCoupon + m.rental + m.kidsFees;
     // POS 밖 매출 (자판기 · 인생네컷 · 주차 — VAN 승인 내역) → 기타
     if (r?.extra) for (const k of EXTRA_KINDS) m.extra[k] += r.extra[k] || 0;
+    // 자판기 = VAN 승인 + 키즈 POS 음료 · 자판기상품 (위에서 더함)
     m.box.기타 += m.extra.vending + m.extra.photo + m.extra.parking;
     m.total = m.box.바리스타 + m.box.베이커리 + m.box.키친 + m.box.키즈입장료 + m.box.기타;
     m.visitors = visitorsFromCups(m.cups);
@@ -319,6 +349,8 @@ export class Board {
       m.fee.naver += x.fee.naver;
       m.fee.walkIn += x.fee.walkIn;
       m.kidsOtherNet += x.kidsOtherNet;
+      m.kidsFees += x.kidsFees;
+      m.giftUse += x.giftUse;
       m.rental += x.rental;
       for (const k of EXTRA_KINDS) m.extra[k] += x.extra[k];
     }
@@ -350,9 +382,10 @@ export class Board {
 
 /** 상품이 그 상자(섹터) 것인지 */
 export function productInBox(part: StorePart, p: ProductTuple, box: BoxKey): boolean {
-  if (part.store === "cafe") return p[1] === box;
-  if (box === "키즈입장료") return p[1] === "현장결제" || p[1] === "입장발행";
-  if (box === "기타") return p[1] === "추가인원" || p[1] === "기타";
+  const to = p[1] === "기타" || p[1] === "추가인원" ? etcMove(part.store, p[0]) : null;
+  if (part.store === "cafe") return (to === "바리스타" || to === "키친" ? to : p[1]) === box;
+  if (box === "키즈입장료") return p[1] === "현장결제" || p[1] === "입장발행" || to === "키즈입장료";
+  if (box === "기타") return (p[1] === "추가인원" || p[1] === "기타") && to !== "키즈입장료";
   return false;
 }
 
