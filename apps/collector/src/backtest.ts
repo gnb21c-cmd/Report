@@ -46,6 +46,29 @@ async function main() {
   for (const g of [...grid].sort((x, y) => x.a7 + x.b7 + x.a4 + x.b4 - (y.a7 + y.b7 + y.a4 + y.b4)).slice(0, 5)) console.log(line(g));
   for (const k of ["60·10·30", "50·30·20"]) for (const g of grid.filter((x) => x.w === k)) console.log(line(g));
 
+  // 빵용 날씨표 실험 — 날씨 대비 판매 시험에서 뚜렷했던 칸만 (실측 날씨로 보므로 '미리 알았다면'의 최선)
+  const wxBread = (w?: { tempMax: number | null; rainMm: number | null; key: string }) => {
+    if (!w) return 1;
+    const t = w.tempMax ?? 20;
+    const r = w.rainMm ?? 0;
+    if (w.key === "snow") return 0.94;
+    if (t >= 33) return 1.08;
+    if (r >= 0.5 && r < 5) return 0.96;
+    if (r < 0.5 && t >= 20 && t < 30) return 0.96;
+    return 1;
+  };
+  for (const k of [{ ly: 30, recent: 30, lyNext: 40 }, { ly: 50, recent: 20, lyNext: 30 }, { ly: 60, recent: 10, lyNext: 30 }]) {
+    applySettings(cleanSettings({ ...(settings || {}), bakeryWeights: k }));
+    const b2 = new Board(reports);
+    const res = (a: string, z: string, lead: number) => {
+      const r = backtest(b2, {}, a, z, lead, learned).rows.filter((x) => x.bread > 0);
+      const m = (f: (x: (typeof r)[number]) => number) => Math.round((r.reduce((s, x) => s + Math.abs(f(x) - x.bread) / x.bread, 0) / r.length) * 1000) / 10;
+      return `${m((x) => x.breadPredicted)}% → ${m((x) => x.breadPredicted * wxBread(weather[x.date] as any))}%`;
+    };
+    console.log(`빵용 날씨표 ${k.ly}·${k.recent}·${k.lyNext}: 7~9월 앞7일 ${res("2026-07-01", "2026-09-30", 7)} · 4~6월 앞7일 ${res("2026-04-01", "2026-06-30", 7)} (안 씀 → 씀)`);
+  }
+  applySettings(settings);
+
   console.log("\n방법별 평균 오차 (절대 %, 작을수록 좋음)");
   for (const lambda of [0, 0.25, 0.5, 0.75, 1]) show(`되돌림 λ=${lambda}`, { ...learned, lambda });
   show("날씨 안 씀 (λ=0.5)", { ...DEFAULT_LEARNED, weather: Object.fromEntries(WEATHER_CLASSES.map((c) => [c, 1])) as any }, {});
