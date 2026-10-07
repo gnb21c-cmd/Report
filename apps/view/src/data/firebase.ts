@@ -7,7 +7,17 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, type DayReport, type DayWeather, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import {
+  asOrder,
+  asPlan,
+  cleanSettings,
+  type DayReport,
+  type LiveDoc,
+  type DayWeather,
+  type OrderDoc,
+  type PlanDoc,
+  type WeatherKey,
+} from "@report/core";
 import type { Source } from "./source";
 
 export interface FirebaseConfig {
@@ -47,13 +57,15 @@ async function call(url: string, init: RequestInit = {}): Promise<any> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const raw = String(body?.error?.message || body?.[0]?.error?.message || res.status);
-    if (res.status === 403 || /PERMISSION/.test(raw)) throw new Error("이 주소로는 자료를 볼 수 없습니다. 설치 주소를 다시 확인해 주세요.");
+    if (res.status === 403 || /PERMISSION/.test(raw))
+      throw new Error("이 주소로는 자료를 볼 수 없습니다. 설치 주소를 다시 확인해 주세요.");
     throw new Error(`클라우드 보관함 오류 (${raw.slice(0, 120)})`);
   }
   return body;
 }
 
-const base = (cfg: FirebaseConfig, board: string) => `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/boards/${board}`;
+const base = (cfg: FirebaseConfig, board: string) =>
+  `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/boards/${board}`;
 
 /** Firestore REST 값 → 자바스크립트 값 */
 function plain(v: any): any {
@@ -92,7 +104,12 @@ export function toReport(f: Record<string, any>): DayReport | null {
 }
 
 /** at(올린 시각) 이 after 뒤인 문서들 — 오래된 것부터 */
-async function since(cfg: FirebaseConfig, board: string, coll: string, after: string | null): Promise<{ docs: Record<string, any>[]; last: string | null }> {
+async function since(
+  cfg: FirebaseConfig,
+  board: string,
+  coll: string,
+  after: string | null,
+): Promise<{ docs: Record<string, any>[]; last: string | null }> {
   const docs: Record<string, any>[] = [];
   let cursor = after;
   // 다음 묶음은 (올린 시각, 문서 이름) 바로 다음부터 — ④ 로 한꺼번에 넣으면 수백 개가 같은 시각이라, 시각만으로 이으면 300개 경계에서 나머지를 건너뜀
@@ -108,9 +125,20 @@ async function since(cfg: FirebaseConfig, board: string, coll: string, after: st
         limit: 300,
       },
     };
-    if (after) query.structuredQuery.where = { fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN", value: { timestampValue: after } } };
-    if (page) query.structuredQuery.startAt = { values: [{ timestampValue: page.at }, { referenceValue: page.name }], before: false };
-    const res = await call(`${base(cfg, board)}:runQuery?key=${cfg.apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(query) });
+    if (after)
+      query.structuredQuery.where = {
+        fieldFilter: { field: { fieldPath: "at" }, op: "GREATER_THAN", value: { timestampValue: after } },
+      };
+    if (page)
+      query.structuredQuery.startAt = {
+        values: [{ timestampValue: page.at }, { referenceValue: page.name }],
+        before: false,
+      };
+    const res = await call(`${base(cfg, board)}:runQuery?key=${cfg.apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(query),
+    });
     const got = (Array.isArray(res) ? res : []).map((r: any) => r.document).filter(Boolean);
     for (const d of got) {
       const f = fieldsOf(d);
@@ -125,7 +153,16 @@ async function since(cfg: FirebaseConfig, board: string, coll: string, after: st
 
 export function weatherOf(f: Record<string, any>): DayWeather | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || "")) return null;
-  return { date: f.date, key: f.key as WeatherKey, label: f.label, icon: f.icon, tempMax: f.tempMax ?? null, tempMin: f.tempMin ?? null, rainMm: f.rainMm ?? null, source: f.source === "observed" ? "observed" : "forecast" };
+  return {
+    date: f.date,
+    key: f.key as WeatherKey,
+    label: f.label,
+    icon: f.icon,
+    tempMax: f.tempMax ?? null,
+    tempMin: f.tempMin ?? null,
+    rainMm: f.rainMm ?? null,
+    source: f.source === "observed" ? "observed" : "forecast",
+  };
 }
 
 export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
@@ -142,6 +179,7 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
     async status() {
       return null;
     },
+    live: (date) => liveDoc(cfg, board, date),
     async settings() {
       try {
         const doc = await call(`${base(cfg, board)}/settings/main?key=${cfg.apiKey}`);
@@ -155,11 +193,13 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
 }
 
 /** 베이커리 작업지시 — 그날 계획(plans) · 매니저 확정(orders). 보고 앱 베이커리 '생산 · 폐기' 칸에 씀 (체험판 · 없으면 null) */
-export async function bakeryDay(date: string): Promise<{ plan: PlanDoc | null; order: OrderDoc | null } | null> {
+export async function bakeryDay(
+  date: string,
+): Promise<{ plan: PlanDoc | null; order: OrderDoc | null } | null> {
   const cfg = firebaseConfig();
   const board = boardKey();
   if (__DEMO__ || !cfg || !board) return null;
-  const one = async <T,>(coll: string): Promise<T | null> => {
+  const one = async <T>(coll: string): Promise<T | null> => {
     try {
       const res = await fetch(`${base(cfg, board)}/${coll}/${date}?key=${cfg.apiKey}`);
       if (!res.ok) return null;
@@ -171,4 +211,26 @@ export async function bakeryDay(date: string): Promise<{ plan: PlanDoc | null; o
   };
   const [plan, order] = await Promise.all([one<unknown>("plans"), one<unknown>("orders")]);
   return { plan: asPlan(plan), order: asOrder(order) };
+}
+
+/** 마감 전 영업정보 — live/{날짜} 한 문서 (없으면 null). 칸 cafe · kids · desk = 조각 JSON {p, by, at} */
+export async function liveDoc(cfg: FirebaseConfig, board: string, date: string): Promise<LiveDoc | null> {
+  try {
+    const res = await fetch(`${base(cfg, board)}/live/${date}?key=${cfg.apiKey}`);
+    if (!res.ok) return null;
+    const f = fieldsOf(await res.json());
+    const doc: LiveDoc = { date, at: f.at || undefined };
+    for (const k of ["cafe", "kids", "desk"] as const) {
+      if (!f[k]) continue;
+      try {
+        const x = JSON.parse(f[k]);
+        if (x && x.p) (doc as any)[k] = x;
+      } catch {
+        /* 깨진 칸은 검사에서 빠짐 */
+      }
+    }
+    return doc;
+  } catch {
+    return null;
+  }
 }

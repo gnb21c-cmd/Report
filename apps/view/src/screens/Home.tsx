@@ -9,7 +9,31 @@
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { LiveBanner, useLive, useNoCompare } from "../ui/Live";
+import {
+  addDays,
+  BOXES,
+  changePct,
+  comparable,
+  count,
+  hasData,
+  holidayName,
+  kidsTickets,
+  money,
+  todayKst,
+  pct,
+  SETTLE_LABEL,
+  shortLabel,
+  STORE_LABEL,
+  won,
+  wonMan,
+  type BoxKey,
+  type CashSummary,
+  type Dashboard,
+  type DayWeather,
+  type Metrics,
+  type SettleKind,
+} from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -25,8 +49,23 @@ export type View =
   | { name: "settings" };
 export type Open = (v: View) => void;
 
-export function Delta({ now, before, label, money = true, missing }: { now: number | null; before: number | null; label: string; money?: boolean; missing?: string }) {
+export function Delta({
+  now,
+  before,
+  label,
+  money = true,
+  missing,
+}: {
+  now: number | null;
+  before: number | null;
+  label: string;
+  money?: boolean;
+  missing?: string;
+}) {
+  // 마감 전(하루가 안 끝난 숫자)은 하루 전체와 견주면 틀린 비교 → 숨김
+  const noCompare = useNoCompare();
   const p = changePct(now, before);
+  if (noCompare) return <span className="delta muted">마감 전 · 비교는 마감 뒤</span>;
   if (p == null) return <span className="delta muted">{missing || `${label} 비교 자료 없음`}</span>;
   const cls = p > 0 ? "up" : p < 0 ? "down" : "";
   return (
@@ -49,21 +88,50 @@ export function partial(m: Metrics): string | undefined {
 
 export const Chevron = () => (
   <svg className="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-    <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="M9 6l6 6-6 6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
-export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타", 베이커리: "베이커리", 키친: "키친", 키즈입장료: "키즈입장", 기타: "기타" };
+export const BOX_LABEL: Record<BoxKey, string> = {
+  바리스타: "바리스타",
+  베이커리: "베이커리",
+  키친: "키친",
+  키즈입장료: "키즈입장",
+  기타: "기타",
+};
 
 export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
 
-export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle }) {
+export function Home({
+  d,
+  open,
+  weather,
+  cash,
+  cashFrom,
+  settle,
+}: {
+  d: Dashboard;
+  open: Open;
+  weather?: DayWeather;
+  cash?: CashSummary;
+  cashFrom?: string | null;
+  settle?: Settle;
+}) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
+  const live = useLive();
 
   return (
     <>
+      <LiveBanner />
       {nothing ? (
         <div className="banner">
           {/* 오늘은 아직 마감 전 — 다음 날 아침 사무실 입력 뒤에 보임 */}
@@ -72,9 +140,11 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
             : `${shortLabel(d.date)} 자료가 없습니다 — 휴무이거나 아직 사무실에서 입력 전입니다.`}
         </div>
       ) : (
+        !live?.today &&
         (day.has.cafe === 0 || day.has.kids === 0) && (
           <div className="banner" role="alert">
-            <span aria-hidden>⚠</span> {day.has.cafe === 0 ? STORE_LABEL.cafe : STORE_LABEL.kids} 엑셀이 아직 입력되지 않았습니다.
+            <span aria-hidden>⚠</span> {day.has.cafe === 0 ? STORE_LABEL.cafe : STORE_LABEL.kids} 엑셀이 아직
+            입력되지 않았습니다.
           </div>
         )
       )}
@@ -82,7 +152,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
       <HeroBox
         label={
           <>
-            마감일 총 매출 · {shortLabel(d.date)}
+            {live?.today ? "오늘 매출 (마감 전)" : "마감일 총 매출"} · {shortLabel(d.date)}
             {hol ? ` ${hol}` : ""}
           </>
         }
@@ -97,11 +167,19 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
       {/* 섹터 상자 — 다섯 개가 한 화면 폭에 (금액은 만 단위, 정확한 금액은 눌러서 상세에서) */}
       <div className="sectors" role="list">
         {BOXES.map((b) => (
-          <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "sector", box: b })} aria-label={`${b} ${won(day.box[b])}`}>
+          <button
+            key={b}
+            role="listitem"
+            className="sector tap"
+            onClick={() => open({ name: "sector", box: b })}
+            aria-label={`${b} ${won(day.box[b])}`}
+          >
             <span className="sec-label">{BOX_LABEL[b]}</span>
             <span className="sec-line">
               <span className="sec-value">{wonMan(day.box[b])}</span>
-              <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : ""}</span>
+              <span className="sec-pct">
+                {day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : ""}
+              </span>
             </span>
           </button>
         ))}
@@ -133,7 +211,13 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <div className="stat-value">{count(kidsTickets(day), "장")}</div>
           <span className="note" />
         </div>
-        <button className="stat tap" onClick={() => open({ name: "naver" })} title={day.newKnown ? "" : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}>
+        <button
+          className="stat tap"
+          onClick={() => open({ name: "naver" })}
+          title={
+            day.newKnown ? "" : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"
+          }
+        >
           <div className="stat-label">네이버판매</div>
           <div className="stat-value">{count(day.naver, "장")}</div>
           <span className="note">{day.newKnown ? `(中 신규 ${count(day.newVisitors, "장")})` : ""}</span>
@@ -155,7 +239,11 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
       </div>
 
       {/* 자금 현황 — 그날 정보 아래. 누르면 계좌 · 적요까지 자세히 */}
-      <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
+      <button
+        className="stat tap cash-stat"
+        onClick={() => open({ name: "cash" })}
+        aria-label="자금 현황 자세히"
+      >
         <div className="stat-label">
           자금 현황 · 잔액 합계 <small className="muted">증권계좌 별도</small> <Chevron />
         </div>
@@ -163,9 +251,14 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <>
             <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
             <CashBar inn={cash.krw.in} out={cash.krw.out} />
-            {cashFrom && <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>}
+            {cashFrom && (
+              <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>
+            )}
             <span className="note">
-              대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
+              대출 제외 자금{" "}
+              <b className={cash.net < 0 ? "minus" : ""}>
+                {cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원
+              </b>
             </span>
           </>
         ) : (
@@ -180,7 +273,10 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
             당월 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.month.total)}</div>
-          <span className="note period">({span(d.month.from, d.date, true)})</span>
+          <span className="note period">
+            ({span(d.month.from, d.cumTo, true)}
+            {d.cumTo !== d.date ? " · 오늘 마감 전 제외" : ""})
+          </span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
@@ -196,7 +292,10 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
             {d.date.slice(2, 4)}년 총 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.year.total)}</div>
-          <span className="note period">({span(`${d.date.slice(0, 4)}-01-01`, d.date, true)})</span>
+          <span className="note period">
+            ({span(`${d.date.slice(0, 4)}-01-01`, d.cumTo, true)}
+            {d.cumTo !== d.date ? " · 오늘 마감 전 제외" : ""})
+          </span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "settle" })}>
           <div className="stat-label">
@@ -214,7 +313,10 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
 function CashBar({ inn, out }: { inn: number; out: number }) {
   const max = Math.max(inn, out, 1);
   return (
-    <div className="cash-bar" aria-label={`입금 ${money(inn, "KRW", false)}원, 출금 ${money(out, "KRW", false)}원`}>
+    <div
+      className="cash-bar"
+      aria-label={`입금 ${money(inn, "KRW", false)}원, 출금 ${money(out, "KRW", false)}원`}
+    >
       <div className="cb-row">
         <span className="cb-label">입금</span>
         <span className="cb-track">

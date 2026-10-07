@@ -31,6 +31,7 @@ import {
   type WeatherMap,
 } from "@report/core";
 import { useBakeryDoc, type BakeryDoc } from "../data/bakery";
+import { useNoCompare } from "../ui/Live";
 import { BarChart } from "../charts/BarChart";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
@@ -41,7 +42,13 @@ import { DetailHeader, md, Seg, type Nav } from "./parts";
 const xs = HOURS.map(String);
 const xTick = (i: number) => (i % 2 === 0 ? hourLabel(HOURS[i]) : null);
 const tip = (i: number) => `${HOURS[i]}시 ~ ${HOURS[i] + 1}시`;
-const TREND_COLORS = ["var(--trend-4)", "var(--trend-3)", "var(--trend-2)", "var(--trend-1)", "var(--pink-strong)"];
+const TREND_COLORS = [
+  "var(--trend-4)",
+  "var(--trend-3)",
+  "var(--trend-2)",
+  "var(--trend-1)",
+  "var(--pink-strong)",
+];
 
 export function SectorDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
   // 기타는 시간대 · 분석 없이 매출 분류만 (자판기 · 인생네컷 · 주차 · 매장 소액 기타)
@@ -58,18 +65,35 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
   const today = useMemo(() => hourDay(board, date, box), [board, date, box]);
   const avg = useMemo(() => weeksAverage(board, date, box), [board, date, box]);
   const trend = useMemo(() => weeksTrend(board, date, box), [board, date, box]);
-  const analysis = useMemo(() => sectorAnalysis(board, date, box, props.weather), [board, date, box, props.weather]);
+  const analysis = useMemo(
+    () => sectorAnalysis(board, date, box, props.weather),
+    [board, date, box, props.weather],
+  );
   const yMax = Math.max(0, ...(today?.sales || []), ...avg.sales.map((v) => v || 0));
   const unit = kids ? "장" : "명";
   const bread = useBakeryDoc(board, box === "베이커리" ? date : "");
+  // 마감 전(하루가 안 끝난 숫자)이면 4주 추세 · 분석 글은 틀린 판단이 되므로 숨김
+  const notClosed = useNoCompare();
 
   return (
     <>
       <DetailHeader title={name} {...props} />
       <main className="content">
-        <HeroBox label={`${shortLabel(date)} ${name}`} value={won(m.box[box])} date={date} w={props.weather[date]}>
-          <Delta now={m.box[box]} before={pw.has.cafe + pw.has.kids ? pw.box[box] : null} label="지난주 같은 요일" money={false} />
-          {m.total > 0 && <span className="note">총 매출의 {((m.box[box] / m.total) * 100).toFixed(1)}%</span>}
+        <HeroBox
+          label={`${shortLabel(date)} ${name}`}
+          value={won(m.box[box])}
+          date={date}
+          w={props.weather[date]}
+        >
+          <Delta
+            now={m.box[box]}
+            before={pw.has.cafe + pw.has.kids ? pw.box[box] : null}
+            label="지난주 같은 요일"
+            money={false}
+          />
+          {m.total > 0 && (
+            <span className="note">총 매출의 {((m.box[box] / m.total) * 100).toFixed(1)}%</span>
+          )}
           {box === "키즈입장료" && <span className="note">{kidsFormula(m, date)}</span>}
         </HeroBox>
 
@@ -77,7 +101,11 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
 
         <ChartCard
           title="마감일 시간대별 매출"
-          sub={kids ? "10시~22시 · 막대 위 숫자 = 그 시간 입장권 수(장) — 네이버 예약 시간 + 현장 결제" : "10시~22시 · 막대 위 숫자 = 그 시간 추정 인원(명) — 음료 잔 × 0.96"}
+          sub={
+            kids
+              ? "10시~22시 · 막대 위 숫자 = 그 시간 입장권 수(장) — 네이버 예약 시간 + 현장 결제"
+              : "10시~22시 · 막대 위 숫자 = 그 시간 추정 인원(명) — 음료 잔 × 0.96"
+          }
           table={<HourTable sales={today?.sales || null} people={today?.people || null} unit={unit} />}
         >
           {today ? (
@@ -99,8 +127,18 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
 
         <ChartCard
           title="지난 4주 같은 요일 평균"
-          sub={avg.dates.length ? `${avg.dates.map(md).reverse().join(" · ")} 평균 (${avg.dates.length}일)` : "같은 요일 시간대 자료가 아직 없습니다"}
-          table={<HourTable sales={avg.dates.length ? avg.sales.map((v) => v || 0) : null} people={avg.dates.length ? avg.people.map((v) => v || 0) : null} unit={unit} />}
+          sub={
+            avg.dates.length
+              ? `${avg.dates.map(md).reverse().join(" · ")} 평균 (${avg.dates.length}일)`
+              : "같은 요일 시간대 자료가 아직 없습니다"
+          }
+          table={
+            <HourTable
+              sales={avg.dates.length ? avg.sales.map((v) => v || 0) : null}
+              people={avg.dates.length ? avg.people.map((v) => v || 0) : null}
+              unit={unit}
+            />
+          }
         >
           {avg.dates.length ? (
             <BarChart
@@ -119,21 +157,30 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           )}
         </ChartCard>
 
-        <TrendCard trend={trend} />
+        {notClosed ? (
+          <section className="card">
+            <h2>추세 · 분석</h2>
+            <p className="empty">마감 전 숫자라 4주 추세와 분석은 마감(다음 날) 뒤에 보입니다.</p>
+          </section>
+        ) : (
+          <>
+            <TrendCard trend={trend} />
 
-        <section className="card">
-          <h2>분석</h2>
-          {analysis.map((s) => (
-            <div className="analysis-part" key={s.title}>
-              <h3>{s.title}</h3>
-              <ul className="analysis">
-                {s.lines.map((l) => (
-                  <li key={l}>{l}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </section>
+            <section className="card">
+              <h2>분석</h2>
+              {analysis.map((s) => (
+                <div className="analysis-part" key={s.title}>
+                  <h3>{s.title}</h3>
+                  <ul className="analysis">
+                    {s.lines.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          </>
+        )}
 
         {box === "베이커리" && <BreadTable board={board} date={date} doc={bread} />}
       </main>
@@ -147,7 +194,15 @@ function addWeek(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function HourTable({ sales, people, unit }: { sales: number[] | null; people: number[] | null; unit: string }) {
+function HourTable({
+  sales,
+  people,
+  unit,
+}: {
+  sales: number[] | null;
+  people: number[] | null;
+  unit: string;
+}) {
   if (!sales) return <p className="empty">자료가 없습니다.</p>;
   return (
     <table>
@@ -181,12 +236,20 @@ function TrendCard({ trend }: { trend: ReturnType<typeof weeksTrend> }) {
     weight: d.weeksAgo ? 1.5 : 3,
     noDot: k !== trend.days.length - 1,
   }));
-  const arrows = trend.dir.map((d) => (d === 1 ? { text: "▲", color: "var(--good)" } : d === -1 ? { text: "▼", color: "var(--bad)" } : { text: d === 0 ? "–" : "", color: "var(--muted)" }));
+  const arrows = trend.dir.map((d) =>
+    d === 1
+      ? { text: "▲", color: "var(--good)" }
+      : d === -1
+        ? { text: "▼", color: "var(--bad)" }
+        : { text: d === 0 ? "–" : "", color: "var(--muted)" },
+  );
   return (
     <ChartCard
       title="시간대별 4주 같은 요일 추세"
       sub="옅은 선 = 4주 전 → 진한 선 = 마감일 · 아래 ▲ 오름 ▼ 내림 (주마다 5% 넘게)"
-      legend={series.length ? <Legend items={series.map((s) => ({ label: s.label, color: s.color }))} /> : undefined}
+      legend={
+        series.length ? <Legend items={series.map((s) => ({ label: s.label, color: s.color }))} /> : undefined
+      }
       table={
         <table>
           <thead>
@@ -209,7 +272,11 @@ function TrendCard({ trend }: { trend: ReturnType<typeof weeksTrend> }) {
                     {wonShort(d.sales[i])}
                   </td>
                 ))}
-                <td className="num">{trend.rate[i] == null ? arrows[i].text || "—" : `${arrows[i].text} ${trend.rate[i]! > 0 ? "+" : ""}${trend.rate[i]}%/주`}</td>
+                <td className="num">
+                  {trend.rate[i] == null
+                    ? arrows[i].text || "—"
+                    : `${arrows[i].text} ${trend.rate[i]! > 0 ? "+" : ""}${trend.rate[i]}%/주`}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -218,7 +285,16 @@ function TrendCard({ trend }: { trend: ReturnType<typeof weeksTrend> }) {
     >
       {trend.days.length >= 2 ? (
         <>
-          <LineChart xs={xs} series={series} xTick={xTick} tipTitle={tip} fmt={won} axisFmt={wonShort} label="시간대별 4주 같은 요일 추세" height={220} />
+          <LineChart
+            xs={xs}
+            series={series}
+            xTick={xTick}
+            tipTitle={tip}
+            fmt={won}
+            axisFmt={wonShort}
+            label="시간대별 4주 같은 요일 추세"
+            height={220}
+          />
           <div className="arrows" aria-label="시간마다 오름 내림">
             {arrows.map((a, i) => (
               <span key={i} style={{ color: a.color }} title={tip(i)}>
@@ -260,9 +336,21 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
     <>
       <DetailHeader title="기타" {...props} />
       <main className="content">
-        <HeroBox label={`${shortLabel(date)} 기타`} value={won(m.box.기타)} date={date} w={props.weather[date]}>
-          <Delta now={m.box.기타} before={pw.has.cafe + pw.has.kids ? pw.box.기타 : null} label="지난주 같은 요일" money={false} />
-          {m.total > 0 && <span className="note">총 매출의 {((m.box.기타 / m.total) * 100).toFixed(1)}%</span>}
+        <HeroBox
+          label={`${shortLabel(date)} 기타`}
+          value={won(m.box.기타)}
+          date={date}
+          w={props.weather[date]}
+        >
+          <Delta
+            now={m.box.기타}
+            before={pw.has.cafe + pw.has.kids ? pw.box.기타 : null}
+            label="지난주 같은 요일"
+            money={false}
+          />
+          {m.total > 0 && (
+            <span className="note">총 매출의 {((m.box.기타 / m.total) * 100).toFixed(1)}%</span>
+          )}
         </HeroBox>
         {/* 한 줄에 하나씩 길게 */}
         <div className="etc-list">
@@ -271,7 +359,8 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
           ))}
         </div>
         <p className="note center-note">
-          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 · 네컷사진 · 주차료 = 카드 단말기 승인 내역(나이스 · KIS) · 매장 소액 기타 = POS 기타 상품 (키즈 간식 · 연장 요금 등 포함)
+          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 · 네컷사진 · 주차료 = 카드 단말기 승인 내역(나이스 ·
+          KIS) · 매장 소액 기타 = POS 기타 상품 (키즈 간식 · 연장 요금 등 포함)
         </p>
       </main>
     </>
@@ -296,11 +385,13 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
 function BreadCount({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
   const t = useMemo(() => breadTotals(dayResult(board, date, doc?.plan, doc?.order)), [board, date, doc]);
   const sales = !!board.report(date)?.cafe;
+  // 마감 전에는 아직 안 팔린 것이라 '폐기'가 아니라 '남음'
+  const open = useNoCompare();
   const cells: [string, number | null][] = [
     ["총 생산", t.made],
     ["정가판매", sales ? t.full : null],
     ["할인판매", sales ? t.half : null],
-    ["폐기", sales ? t.waste : null],
+    [open ? "남음 (마감 전)" : "폐기", sales ? t.waste : null],
   ];
   return (
     <div className="quad" aria-label="베이커리 개수">
@@ -318,8 +409,10 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
 function BreadTable({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
   const rows = useMemo(() => dayResult(board, date, doc?.plan, doc?.order), [board, date, doc]);
   const hasSales = !!board.report(date)?.cafe;
+  const open = useNoCompare();
   const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("ko-KR"));
-  const sum = (f: (r: (typeof rows)[number]) => number | null) => (rows.some((r) => f(r) != null) ? rows.reduce((a, r) => a + (f(r) || 0), 0) : null);
+  const sum = (f: (r: (typeof rows)[number]) => number | null) =>
+    rows.some((r) => f(r) != null) ? rows.reduce((a, r) => a + (f(r) || 0), 0) : null;
   return (
     <section className="card">
       <h2>
@@ -338,7 +431,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
                 <th className="num">생산</th>
                 <th className="num">정가판매</th>
                 <th className="num">할인판매</th>
-                <th className="num">폐기</th>
+                <th className="num">{open ? "남음" : "폐기"}</th>
               </tr>
             </thead>
             <tbody>
@@ -348,7 +441,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
                   <td className="num">{n(r.made)}</td>
                   <td className="num">{hasSales ? n(r.full) : "—"}</td>
                   <td className="num">{hasSales ? n(r.half) : "—"}</td>
-                  <td className={`num${r.waste ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
+                  <td className={`num${r.waste && !open ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -363,7 +456,9 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
             </tfoot>
           </table>
           <p className="note muted">
-            생산 = 그날 베이커리 작업지시(D) 확정 수량 · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 다음 날 아침 수집한 영수증 · 폐기 = 생산 − 정가판매 − 할인판매
+            생산 = 그날 베이커리 작업지시(D) 확정 수량 · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 다음 날
+            아침 수집한 영수증 · 폐기 = 생산 − 정가판매 − 할인판매
+            {open && " · 마감 전이라 '남음' = 생산 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
             {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
           </p>
         </>

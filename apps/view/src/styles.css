@@ -114,7 +114,13 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Apple SD Gothic Neo",
+    "Malgun Gothic",
+    "Segoe UI",
+    sans-serif;
   font-size: 17px;
   line-height: 1.45;
   -webkit-text-size-adjust: 100%;
@@ -1221,9 +1227,18 @@ tr.sum td {
 }
 
 /* 마감일 비교 표 */
-.day-cmp td:first-child { white-space: nowrap; }
-.day-cmp th, .day-cmp td { font-size: 12px; padding-left: 2px; padding-right: 2px; }
-.day-cmp { width: 100%; }
+.day-cmp td:first-child {
+  white-space: nowrap;
+}
+.day-cmp th,
+.day-cmp td {
+  font-size: 12px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.day-cmp {
+  width: 100%;
+}
 
 /* 정산완료 합계 상세 */
 .settle-hero .sh-value {
@@ -1353,8 +1368,72 @@ ul.plain li {
 }
 
 /* 베이커리 빵별 표 (섹터 상세 맨 아래) */
-.bread-tbl { width: 100%; }
-.bread-tbl th, .bread-tbl td { font-size: 12.5px; padding: 5px 3px; }
-.bread-tbl td:first-child { word-break: keep-all; }
-.bread-tbl tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
-.bread-tbl td.warn { color: var(--bad); }
+.bread-tbl {
+  width: 100%;
+}
+.bread-tbl th,
+.bread-tbl td {
+  font-size: 12.5px;
+  padding: 5px 3px;
+}
+.bread-tbl td:first-child {
+  word-break: keep-all;
+}
+.bread-tbl tfoot td {
+  font-weight: 700;
+  border-top: 1px solid var(--border);
+}
+.bread-tbl td.warn {
+  color: var(--bad);
+}
+/* 마감 전 영업정보 */
+.live-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff4e5;
+  color: #8a4b00;
+  border: 1px solid #ffd59a;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.live-banner.past {
+  background: #f3f4f6;
+  color: #555;
+  border-color: #e2e4e8;
+}
+.live-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+.live-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f08c00;
+  margin-right: 2px;
+  vertical-align: 1px;
+}
+.live-at {
+  font-weight: 500;
+}
+.live-sub {
+  opacity: 0.9;
+}
+.live-warn {
+  color: #b42318;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  .live-banner {
+    background: #3a2a12;
+    color: #ffcf8a;
+    border-color: #5c4318;
+  }
+  .live-banner.past {
+    background: #23262b;
+    color: #b8bcc4;
+    border-color: #33373d;
+  }
+}

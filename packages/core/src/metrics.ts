@@ -413,24 +413,31 @@ export interface Dashboard {
   lyYear: Metrics;
   lyDate: string;
   price: { price: number; kind: "평일" | "휴일"; charged: boolean };
+  /** 누계 · 작년 같은 기간의 끝날 (보통 date, 마감 전 영업정보인 날은 어제) */
+  cumTo: string;
 }
 
-export function dashboard(board: Board, date: string): Dashboard {
+export function dashboard(board: Board, date: string, opts: { cumTo?: string } = {}): Dashboard {
   // 작년 비교는 364일 전 (같은 주 · 같은 요일)
   const ly = lyDay(date);
   const pw = addDaysKey(date, -7);
+  // 마감 전 영업정보인 날은 누계를 어제까지 (하루가 안 끝난 숫자를 작년 하루 전체와 견주지 않게)
+  const to = opts.cumTo && opts.cumTo < date ? opts.cumTo : date;
+  const m0 = monthStart(date);
+  const y0 = `${date.slice(0, 4)}-01-01`;
   return {
     date,
     weekday: weekdayLabel(date),
     day: board.day(date),
     prevWeek: { date: pw, m: board.day(pw) },
-    month: board.range(monthStart(date), date),
-    year: board.range(`${date.slice(0, 4)}-01-01`, date),
+    month: board.range(m0, to),
+    year: board.range(y0, to),
     // 월간 비교는 달력 날짜 (작년 같은 달 1일 ~ 같은 날짜) — 하루 · 올해 누계는 364일
-    lyMonth: board.range(lyCalendar(monthStart(date)), lyCalendar(date)),
-    lyYear: board.range(lyDay(`${date.slice(0, 4)}-01-01`), ly),
+    lyMonth: to < m0 ? board.range(lyCalendar(m0), addDaysKey(lyCalendar(m0), -1)) : board.range(lyCalendar(m0), lyCalendar(to)),
+    lyYear: to < y0 ? board.range(lyDay(y0), addDaysKey(lyDay(y0), -1)) : board.range(lyDay(y0), lyDay(to)),
     lyDate: ly,
     price: kidsPrice(date),
+    cumTo: to,
   };
 }
 

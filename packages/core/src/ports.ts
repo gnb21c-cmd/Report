@@ -19,20 +19,60 @@ export interface SystemInfo {
 }
 
 export const SYSTEMS: Record<SystemId, SystemInfo> = {
-  A: { name: "기초 데이터 입력창", where: "직원 PC 브라우저 (…/a/)", code: "Report apps/entry", status: "운영" },
+  A: {
+    name: "기초 데이터 입력창",
+    where: "직원 PC 브라우저 (…/a/)",
+    code: "Report apps/entry",
+    status: "운영",
+  },
   B: { name: "일일 영업 보고 app", where: "폰 (…/b/{열쇠}/)", code: "Report apps/view", status: "운영" },
-  C: { name: "아스타나키즈 통합데스크", where: "키즈 입구 POS (설치형)", code: "astanakiz (이 작업에서 아직 못 읽음)", status: "구축 중" },
+  C: {
+    name: "아스타나키즈 통합데스크",
+    where: "키즈 입구 POS (설치형)",
+    code: "astanakiz apps/desk (Electron) · prototype/desk.html",
+    status: "구축 중",
+  },
   D: { name: "베이커리 결정플랫폼", where: "매니저 폰 (…/d/)", code: "Report apps/bakery", status: "운영" },
-  "D-1": { name: "베이커리 생산지시서", where: "현장 태블릿 (…/d1/{키 번호}/)", code: "Report apps/bakery", status: "운영" },
-  E: { name: "재고추적관리 시스템", where: "GitHub 예약 작업 (매일 계산)", code: "계획 — astana packages/domain inventory.ts 계산을 옮겨 씀", status: "계획" },
-  "E-1": { name: "재고 관리 및 설정", where: "관리자 PC · 창고 입구 태블릿", code: "계획 (astana 관리자 앱 '공급처·원재료' 화면을 옮김)", status: "계획" },
+  "D-1": {
+    name: "베이커리 생산지시서",
+    where: "현장 태블릿 (…/d1/{키 번호}/)",
+    code: "Report apps/bakery",
+    status: "운영",
+  },
+  E: {
+    name: "재고추적관리 시스템",
+    where: "GitHub 예약 작업 (매일 계산)",
+    code: "계획 — astana packages/domain inventory.ts 계산을 옮겨 씀",
+    status: "계획",
+  },
+  "E-1": {
+    name: "재고 관리 및 설정",
+    where: "관리자 PC · 창고 입구 태블릿",
+    code: "계획 (astana 관리자 앱 '공급처·원재료' 화면을 옮김)",
+    status: "계획",
+  },
   F: { name: "발주app", where: "관리자 폰 (설치형 웹앱, 푸시 알림)", code: "계획", status: "계획" },
-  GH: { name: "자동 수집 (GitHub 예약 작업)", where: "GitHub · POS 메인 PC 실행기 nice-pos", code: "Report apps/collector · apps/weather · .github/workflows", status: "운영" },
-  AGENT: { name: "POS 상주 전송기 (마감 전 영업정보)", where: "카페 POS 메인 · 키즈 POS 에 상주", code: "계획", status: "계획" },
+  GH: {
+    name: "자동 수집 (GitHub 예약 작업)",
+    where: "GitHub · POS 메인 PC 실행기 nice-pos",
+    code: "Report apps/collector · apps/weather · .github/workflows",
+    status: "운영",
+  },
+  AGENT: {
+    name: "POS 상주 전송기 (마감 전 영업정보)",
+    where: "카페 POS 메인 · 키즈 POS 에 상주",
+    code: "계획",
+    status: "계획",
+  },
 };
 
 /** Firebase 무료(Spark) 하루 한도 · 저장 한도 */
-export const SPARK = { readsPerDay: 50_000, writesPerDay: 20_000, deletesPerDay: 20_000, storedGiB: 1 } as const;
+export const SPARK = {
+  readsPerDay: 50_000,
+  writesPerDay: 20_000,
+  deletesPerDay: 20_000,
+  storedGiB: 1,
+} as const;
 
 export interface PortWriter {
   system: SystemId;
@@ -146,9 +186,36 @@ export const PORTS: Port[] = [
     readsPerDay: 30,
     note: "B 가 쓰는 상품명 분류표 — E-1 레시피 화면이 판매 상품 목록으로 씀",
   },
-  { id: "weather", path: "weather/{날짜}", writers: [{ system: "GH", fields: ["*"], via: "actions" }], readers: ["B", "D", "GH"], access: "public-read", status: "운영", writesPerDay: 48, readsPerDay: 300 },
-  { id: "settings", path: "settings/main", writers: [{ system: "A", fields: ["json"], via: "browser" }], readers: ["B", "D", "GH"], access: "public-read", status: "운영", writesPerDay: 1, readsPerDay: 100 },
-  { id: "bakery.plan", path: "plans/{날짜}", writers: [{ system: "GH", fields: ["json"], via: "actions" }], readers: ["D", "B"], access: "public-read", status: "운영", writesPerDay: 8, readsPerDay: 200 },
+  {
+    id: "weather",
+    path: "weather/{날짜}",
+    writers: [{ system: "GH", fields: ["*"], via: "actions" }],
+    readers: ["B", "D", "GH"],
+    access: "public-read",
+    status: "운영",
+    writesPerDay: 48,
+    readsPerDay: 300,
+  },
+  {
+    id: "settings",
+    path: "settings/main",
+    writers: [{ system: "A", fields: ["json"], via: "browser" }],
+    readers: ["B", "D", "GH"],
+    access: "public-read",
+    status: "운영",
+    writesPerDay: 1,
+    readsPerDay: 100,
+  },
+  {
+    id: "bakery.plan",
+    path: "plans/{날짜}",
+    writers: [{ system: "GH", fields: ["json"], via: "actions" }],
+    readers: ["D", "B"],
+    access: "public-read",
+    status: "운영",
+    writesPerDay: 8,
+    readsPerDay: 200,
+  },
   {
     id: "bakery.order",
     path: "orders/{날짜}",
@@ -160,9 +227,38 @@ export const PORTS: Port[] = [
     readsPerDay: 200,
     note: "D 가 확정한 생산량 — B 의 오늘(마감 전 영업정보) 베이커리 칸 · E 의 베이커리 원재료 차감",
   },
-  { id: "bakery.floor", path: "floor/{키 번호}/days/{날짜}", writers: [{ system: "D", fields: ["json"], via: "browser" }], readers: ["D-1"], access: "public-read", status: "운영", writesPerDay: 10, readsPerDay: 300, note: "D-1 은 수량 · 상태 복사본만" },
-  { id: "naver.ask", path: "config/naverAsk", writers: [{ system: "A", fields: ["json"], via: "browser" }], readers: ["GH"], access: "sender", status: "운영", writesPerDay: 2, readsPerDay: 0 },
-  { id: "naver.result", path: "config/naverResult", writers: [{ system: "GH", fields: ["json"], via: "actions" }], readers: ["A"], access: "sender", status: "운영", writesPerDay: 4, readsPerDay: 400, note: "읽기는 naver-ask.yml 5분마다 · A" },
+  {
+    id: "bakery.floor",
+    path: "floor/{키 번호}/days/{날짜}",
+    writers: [{ system: "D", fields: ["json"], via: "browser" }],
+    readers: ["D-1"],
+    access: "public-read",
+    status: "운영",
+    writesPerDay: 10,
+    readsPerDay: 300,
+    note: "D-1 은 수량 · 상태 복사본만",
+  },
+  {
+    id: "naver.ask",
+    path: "config/naverAsk",
+    writers: [{ system: "A", fields: ["json"], via: "browser" }],
+    readers: ["GH"],
+    access: "sender",
+    status: "운영",
+    writesPerDay: 2,
+    readsPerDay: 0,
+  },
+  {
+    id: "naver.result",
+    path: "config/naverResult",
+    writers: [{ system: "GH", fields: ["json"], via: "actions" }],
+    readers: ["A"],
+    access: "sender",
+    status: "운영",
+    writesPerDay: 4,
+    readsPerDay: 400,
+    note: "읽기는 naver-ask.yml 5분마다 · A",
+  },
 
   /* ---------- Ver.2 새 통로 ---------- */
   {
@@ -187,7 +283,7 @@ export const PORTS: Port[] = [
     newRule: "live.cafe 와 같은 문서 · 다른 칸",
     writesPerDay: 72,
     readsPerDay: 0,
-    note: "C 가 집계한 오늘 30분 칸별 입장 · 네이버/현장/이벤트 (숫자만 — live.ts DeskLive · checkDeskLive)",
+    note: "C 가 10분마다 그날 desk-state 를 desk.ts deskFromState 로 숫자만(30분 칸별 네이버 입장 · 신규 · 현장) 만들어 보냄 — 검사 live.ts checkDeskLive",
   },
   {
     id: "kids.backup",
@@ -199,12 +295,18 @@ export const PORTS: Port[] = [
     status: "계획",
     writesPerDay: 0,
     readsPerDay: 0,
-    note: "C 를 지우고 다시 깔아도 남도록 설치 폴더 밖(예: D:\\AstanaKids\\data)에 날짜별로",
+    note: "지금 C 는 %APPDATA%\\아스타나키즈 입장 데스크\\desk-state\\{날짜}.json (앱을 다시 깔아도 남음). 디스크 · 윈도 재설치에도 남게 다른 디스크 폴더에 날마다 복사본",
   },
   {
     id: "kids.customers",
     path: "local:고객 대장 엑셀 (비밀번호 보호)",
-    writers: [{ system: "C", fields: ["성명", "전화번호", "방문횟수", "평균 방문 간격일", "블랙컨슈머"], via: "local" }],
+    writers: [
+      {
+        system: "C",
+        fields: ["성명", "전화번호", "방문횟수", "평균 방문 간격일", "블랙컨슈머"],
+        via: "local",
+      },
+    ],
     readers: ["C"],
     access: "local-only",
     personal: true,
@@ -308,7 +410,10 @@ export const PORTS: Port[] = [
 
 /** 하루 읽기 · 쓰기 합 */
 export function portBudget(ports: Port[]): { reads: number; writes: number } {
-  return ports.reduce((a, p) => ({ reads: a.reads + p.readsPerDay, writes: a.writes + p.writesPerDay }), { reads: 0, writes: 0 });
+  return ports.reduce((a, p) => ({ reads: a.reads + p.readsPerDay, writes: a.writes + p.writesPerDay }), {
+    reads: 0,
+    writes: 0,
+  });
 }
 
 /* ---------- 마감 전 영업정보 — 오늘(현재일)은 다음 날 확정 ---------- */
