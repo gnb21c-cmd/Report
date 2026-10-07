@@ -22,6 +22,7 @@ export class NaverBook {
   private date = "";
   private told = false;
   private toldLost = false;
+  private toldMiss = false;
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -196,11 +197,19 @@ export class NaverBook {
       cell = p.locator(`[data-nv="${key}"]`).first();
       if (!(await cell.count())) throw new Error("칸을 다시 못 찾음");
     }
-    await cell.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-    // 보통 누르기 → 안 되면(무언가 가림) 화면 안에서 직접 누름
-    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click(), undefined, { timeout: 3000 }));
-    // 오른쪽에 '완료 N' 이 나올 때까지
-    for (let t = 0; t < 16 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+    await this.pressCell(key);
+    if (!(await this.panelCount())) {
+      // 목록이 안 열렸으면 (다른 화면으로 넘어감 등) 화면 모양을 한 번 기록하고, 예약현황으로 다시 들어가 한 번 더
+      if (!this.toldMiss) {
+        this.toldMiss = true;
+        say(`  목록이 안 열린 칸 — ${mask(p.url().replace(/\?.*$/, ""))} · 오른쪽 글 모양: ${mask(await this.rightShapes())}`);
+      }
+      await this.closePanel();
+      await this.enter(this.biz);
+      await this.gotoDate(this.date);
+      await this.readCells();
+      await this.pressCell(key);
+    }
     if (!this.told) {
       // 처음 한 번만: 누른 뒤 화면이 어떻게 됐는지 (주소 모양 · 표 · 목록 글 수)
       this.told = true;
@@ -254,6 +263,35 @@ export class NaverBook {
     }
     await this.closePanel();
     return [...seen.values()];
+  }
+
+  /** 칸 누르기 — 보통 누르기, 안 되면(무언가 가림) 화면 안에서 직접. 오른쪽에 '완료 N' 이 나올 때까지 기다림 */
+  private async pressCell(key: number) {
+    const p = this.page;
+    const cell = p.locator(`[data-nv="${key}"]`).first();
+    if (!(await cell.count())) throw new Error("칸을 다시 못 찾음");
+    await cell.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click(), undefined, { timeout: 3000 }));
+    for (let t = 0; t < 16 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+  }
+
+  /** 화면 오른쪽 절반의 짧은 글 모양 — 숫자가 든 글 · 정해 둔 낱말만, 숫자는 9 로 (이름 · 전화 · 금액 없음) */
+  private rightShapes(): Promise<string> {
+    return this.page.evaluate(`(() => {
+      const KEY = /완료|방문|이용|회차|예약|확정|취소|노쇼|상태|횟수/;
+      const f = {};
+      for (const el of document.querySelectorAll("body *")) {
+        if (el.children.length) continue;
+        const t = (el.innerText || "").trim();
+        const r = el.getBoundingClientRect();
+        if (!t || t.length > 14 || !r.width || r.left < window.innerWidth * 0.45) continue;
+        if (!/\\d/.test(t) && !KEY.test(t)) continue;
+        if (/\\d/.test(t) && !KEY.test(t) && !/^[\\d\\s:./~-]+$/.test(t)) continue;
+        const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " ");
+        f[k] = (f[k] || 0) + 1;
+      }
+      return Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, n]) => k + "×" + n).join(" | ") || "없음";
+    })()`) as Promise<string>;
   }
 
   /** 보이는 'N회차' 글 수 (예약현황 표가 있나) */

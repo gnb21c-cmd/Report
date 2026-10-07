@@ -144,6 +144,9 @@ async function main() {
             say(`  새 방식 - 손 입력: ${dir.length ? dir.join(",") : "모두 같음"}`);
           }
         }
+        // 어제 신규방문자를 다 못 읽었으면 판매입장권은 올리되 실패로 끝냄 → 10분 뒤 · 10시대 다시 하기가 돎
+        // (어제 온 손님이 다음 날 아침에 또 오는 일은 없어서 문 연 뒤에 다시 읽어도 '완료 N' 이 그대로)
+        if (date === yesterday && r.part.noNew) problems.push(`${md(date)}: 신규방문자를 다 못 읽음 (완료자 목록 ${listFail}칸) — 다시 하기에서 읽음`);
         if (!naverAutoWritable(old)) {
           say(`  ${md(date)}: 사람이 A 에서 넣은 칸이라 그대로`);
           continue;
