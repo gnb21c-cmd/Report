@@ -23,6 +23,7 @@ export class NaverBook {
   private told = false;
   private toldLost = false;
   private toldMiss = false;
+  private toldQuery = false;
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -210,6 +211,17 @@ export class NaverBook {
       await this.gotoDate(this.date);
       await this.readCells();
       await this.pressCell(key);
+    }
+    if (!this.toldQuery) {
+      // 목록 주소의 조건 이름 · 값 모양 (값은 숫자 9 · 글자 a 로) — 1건 칸의 목록을 주소로 열 수 있는지 보려고
+      const u = new URL(p.url().replace("#/", ""));
+      const h = p.url().split("#")[1] || "";
+      const q = new URLSearchParams(h.includes("?") ? h.split("?")[1] : u.search);
+      const keys = [...q.entries()].map(([k, v]) => `${k}=${v.replace(/\d/g, "9").replace(/[a-zA-Z]/g, "a").slice(0, 24)}`).join("&");
+      if (await this.panelCount()) {
+        this.toldQuery = true;
+        say(`  목록 주소 조건: ${keys || "없음"} · 해시 ${h.replace(/\?.*$/, "").replace(/\d+/g, "#")}`);
+      }
     }
     if (!this.told) {
       // 처음 한 번만: 누른 뒤 화면이 어떻게 됐는지 (주소 모양 · 표 · 목록 글 수)
