@@ -206,15 +206,17 @@ export class NaverBook {
     await this.pressCell(key);
     // 예약이 1건뿐인 칸 → 그 예약 상세가 열림. 같은 상품의 목록 주소(상품번호 · 이용완료 조건)를 알면 시각만 바꿔 목록을 바로 엶
     if (!(await this.panelCount()) && /\/bookings\/\d+/.test(p.url())) {
-      const q = this.listQuery.get(product);
-      if (!q || !hm) throw new Error("예약 1건 칸 — 같은 상품 목록 주소를 아직 모름");
+      // 같은 상품 번호를 모르면 (그 상품이 모두 1건 칸) 상품번호 없이 그 시각 이용완료 목록 — 두 상품은 시간이 겹치지 않음
+      const q = this.listQuery.get(product) || [...this.listQuery.values()].map((x) => ({ ...x, item: "" }))[0];
+      if (!q || !hm) throw new Error("예약 1건 칸 — 목록 주소를 아직 모름");
       const u = new URL(q.base);
-      u.searchParams.set("bizItemId", q.item);
+      if (q.item) u.searchParams.set("bizItemId", q.item);
       u.searchParams.set("date", `${this.date}T${hm}:00+09:00`);
       u.searchParams.set("status", q.status);
       await p.goto(u.toString(), { waitUntil: "domcontentloaded", timeout: 30000 });
       for (let t = 0; t < 20 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
-      if (!(await this.panelCount())) throw new Error("예약 1건 칸 — 목록 주소로도 안 열림");
+      if (!(await this.panelCount())) throw new Error(`예약 1건 칸 — 목록 주소로도 안 열림${q.item ? "" : " (상품번호 없이)"}`);
+      if (!q.item) say("  예약 1건 칸 — 상품번호 없이 그 시각 목록으로 엶");
     }
     if (!(await this.panelCount())) {
       // 목록이 안 열렸으면 (다른 화면으로 넘어감 등) 화면 모양을 한 번 기록하고, 예약현황으로 다시 들어가 한 번 더
