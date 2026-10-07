@@ -16,3 +16,4 @@ apps/view/dist-demo
 apps/entry/dist*
 firebase/public
 apps/bakery/dist-demo
+apps/stock/dist-demo
