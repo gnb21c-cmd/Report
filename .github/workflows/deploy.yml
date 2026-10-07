@@ -31,6 +31,10 @@ jobs:
         env:
           VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          # 발주app(F) 푸시 — Firebase 콘솔 → 프로젝트 설정 → 일반(웹 앱) · 클라우드 메시징(웹 푸시 인증서). 없으면 F 는 푸시 없이 알림 목록만
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.FIREBASE_VAPID_KEY }}
       - name: 올리기
         if: steps.check.outputs.ok == '1'
         working-directory: firebase

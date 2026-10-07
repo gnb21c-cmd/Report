@@ -565,3 +565,21 @@ export function countAlert(date: string, res: CountResult[], at = new Date().toI
     readAt: null,
   };
 }
+
+/* ---------- 사용량 쌓아 두기 (invUse/{YYYY-MM} = { 날짜: { 원재료: 공급단위 } }) — E 가 지난 날을 다시 읽지 않게 ---------- */
+export type UseCache = Record<string, Record<string, number>>;
+/** 레시피 사용 줄 → 날짜 · 원재료별 합 */
+export function sumUsage(rows: Pick<UsageRow, "date" | "materialId" | "packs">[]): UseCache {
+  const out: UseCache = {};
+  for (const r of rows) {
+    const d = (out[r.date] ||= {});
+    d[r.materialId] = Math.round(((d[r.materialId] || 0) + r.packs) * 1e6) / 1e6;
+  }
+  return out;
+}
+/** 쌓아 둔 합 → 장부 계산용 사용 줄 */
+export function usageFromCache(cache: UseCache): UsageRow[] {
+  const out: UsageRow[] = [];
+  for (const [date, m] of Object.entries(cache)) for (const [materialId, packs] of Object.entries(m)) out.push({ date, materialId, product: "", part: "기타", packs, basis: "판매" });
+  return out;
+}

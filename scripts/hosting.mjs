@@ -25,4 +25,6 @@ for (const dir of ["e1", "f"]) {
   mkdirSync(join(out, dir), { recursive: true });
   copyFileSync(e, join(out, dir, "index.html"));
 }
+// F 푸시 받기(서비스 워커) · 설치 정보 · 아이콘
+for (const f of ["firebase-messaging-sw.js", "manifest.webmanifest", "icon.svg"]) copyFileSync(join(root, "apps/stock/dist", f), join(out, "f", f));
 console.log("firebase/public ← B(…/b/<열쇠>/) + A(…/a/) + D(…/d/) · D-1(…/d1/<열쇠>/) + E-1(…/e1/) · F(…/f/)");

@@ -228,3 +228,56 @@ export async function writeLive(fb: Fb, date: string, by: string, parts: { kind:
     body: JSON.stringify({ fields }),
   });
 }
+
+/* ---------- 재고 (통합 Ver.2.0 — E 매일 계산) ---------- */
+/** boards/{열쇠}/{경로} 의 json 칸 (없으면 null) */
+export async function readJson<T>(fb: Fb, path: string): Promise<T | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/${path}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    const v = doc.fields?.json?.stringValue;
+    return v ? (JSON.parse(v) as T) : null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+/** json 칸 쓰기 (+ 더 쓸 칸) */
+export async function writeJson(fb: Fb, path: string, json: unknown, extra: Record<string, unknown> = {}): Promise<void> {
+  const fields: Record<string, unknown> = { json: str(JSON.stringify(json)), at: { timestampValue: new Date().toISOString() }, ...extra };
+  const mask = Object.keys(fields).map((k) => `updateMask.fieldPaths=${k}`).join("&");
+  await http(`${base(fb)}/boards/${fb.board}/${path}?${mask}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ fields }) });
+}
+/** 모음의 문서들 (json 칸 + 문서 이름) */
+export async function listJson<T>(fb: Fb, coll: string): Promise<{ id: string; json: T; fields: any }[]> {
+  const out: { id: string; json: T; fields: any }[] = [];
+  let page = "";
+  for (let i = 0; i < 20; i++) {
+    const r = await http(`${base(fb)}/boards/${fb.board}/${coll}?pageSize=300${page ? `&pageToken=${encodeURIComponent(page)}` : ""}`, { headers: { Authorization: `Bearer ${fb.id}` } }).catch((e) => {
+      if (/클라우드 오류 404/.test(String((e as Error).message))) return {};
+      throw e;
+    });
+    for (const d of r.documents || []) {
+      try {
+        out.push({ id: String(d.name).split("/").pop()!, json: JSON.parse(d.fields?.json?.stringValue || "null"), fields: d.fields || {} });
+      } catch {
+        /* 깨진 문서는 건너뜀 */
+      }
+    }
+    if (!r.nextPageToken) break;
+    page = r.nextPageToken;
+  }
+  return out;
+}
+/** 아직 푸시 안 보낸 알림 (pushed == false) — 없으면 읽기 1번 */
+export async function unpushedAlerts(fb: Fb): Promise<{ id: string; json: any }[]> {
+  const query = { structuredQuery: { from: [{ collectionId: "alerts" }], where: { fieldFilter: { field: { fieldPath: "pushed" }, op: "EQUAL", value: { booleanValue: false } } }, limit: 50 } };
+  const r = await http(`${base(fb)}/boards/${fb.board}:runQuery`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify(query) });
+  return (Array.isArray(r) ? r : [])
+    .map((x: any) => x.document)
+    .filter(Boolean)
+    .map((d: any) => ({ id: String(d.name).split("/").pop()!, json: JSON.parse(d.fields?.json?.stringValue || "null") }));
+}
+/** 문서 하나 지움 */
+export async function removeDoc(fb: Fb, path: string): Promise<void> {
+  await http(`${base(fb)}/boards/${fb.board}/${path}`, { method: "DELETE", headers: { Authorization: `Bearer ${fb.id}` } }).catch(() => {});
+}

@@ -15,7 +15,8 @@
     "naver": "tsx src/naver.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests",
-    "live": "tsx src/live.ts"
+    "live": "tsx src/live.ts",
+    "stock": "tsx src/stock.ts"
   },
   "dependencies": {
     "@report/core": "workspace:*",

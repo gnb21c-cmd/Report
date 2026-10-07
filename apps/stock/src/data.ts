@@ -36,6 +36,8 @@ export interface Api {
   saveCount(c: StockCount): Promise<void>;
   alerts(): Promise<StockAlert[]>;
   saveAlert(a: StockAlert): Promise<void>;
+  /** 이 폰을 발주app 푸시 받는 폰으로 */
+  savePushToken(token: string): Promise<void>;
 }
 
 const env = { apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string };
@@ -190,7 +192,9 @@ export function cloudApi(): Api {
     async alerts() {
       return (await list<StockAlert>("alerts")).sort((a, b) => b.at.localeCompare(a.at));
     },
-    saveAlert: (a) => put(`alerts/${a.id}`, a),
+    // 새로 만든 알림(실셈 확정)은 pushed=false → E 푸시 작업이 폰으로 보냄 · F 의 읽음 표시는 json 칸만
+    saveAlert: (a) => put(`alerts/${a.id}`, a, a.readAt || a.pushedAt ? {} : { pushed: { booleanValue: false } }),
+    savePushToken: (token) => put(`pushTokens/${encodeURIComponent(s().email)}`, { token, name: s().name, ua: navigator.userAgent.slice(0, 120) }),
   };
 }
 
@@ -316,6 +320,9 @@ export function demoApi(): Api {
       const s = demoLoad();
       s.alerts = [...s.alerts.filter((x) => x.id !== a.id), a];
       demoSave(s);
+    },
+    async savePushToken() {
+      /* 체험판: 푸시 없음 */
     },
   };
 }

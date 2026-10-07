@@ -41,7 +41,7 @@ export const SYSTEMS: Record<SystemId, SystemInfo> = {
   },
   E: {
     name: "재고추적관리 시스템",
-    where: "GitHub 예약 작업 (매일 계산)",
+    where: "GitHub 예약 작업 stock.yml (매일 10:40 계산 · 30분마다 푸시) — Firebase 만",
     code: "Report packages/core/src/stock.ts (astana 재고 계산 이식) · apps/collector/src/stock.ts",
     status: "구축 중",
   },
@@ -378,6 +378,17 @@ export const PORTS: Port[] = [
     writesPerDay: 4,
     readsPerDay: 100,
     note: "매일 아침(어제 판매 · 생산 확정 뒤) 레시피 × 판매(베이커리는 D 생산량)로 줄인 현재고 · 소비 속도 · 안전재고",
+  },
+  {
+    id: "inv.use",
+    path: "invUse/{YYYY-MM}",
+    writers: [{ system: "E", fields: ["json"], via: "actions" }],
+    readers: ["E"],
+    access: "sender",
+    status: "구축 중",
+    writesPerDay: 2,
+    readsPerDay: 13,
+    note: "날짜별 레시피 사용량을 달마다 쌓아 둠 — E 가 새 날과 최근 3일만 다시 셈 (지난 영수증을 매일 다시 읽지 않게)",
   },
   {
     id: "order.alert",

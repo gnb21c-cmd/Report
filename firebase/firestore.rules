@@ -90,6 +90,10 @@ service cloud.firestore {
       match /invCount/{date} {
         allow read, write: if isSender(board) && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
       }
+      // E 가 쌓아 두는 날짜별 레시피 사용량 (달마다 한 문서)
+      match /invUse/{month} {
+        allow read, write: if isSender(board) && month.matches("^[0-9]{4}-[0-9]{2}$");
+      }
       // 발주app 알림 — E · E-1 이 만들고 F 가 읽음 표시
       match /alerts/{id} {
         allow read, write: if isSender(board);

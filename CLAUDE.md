@@ -13,6 +13,7 @@
 
 - 지칭: A = 기초 데이터 입력창 · B = 일일 영업 보고 app · C = 아스타나키즈 통합데스크(키즈 입구 POS, `astanakiz`) · D = 베이커리 결정플랫폼 · D-1 = 베이커리 생산지시서 · E = 재고추적관리 시스템 · E-1 = 재고 관리 및 설정 · F = 발주app. 예전 'C(사무실 서버)'는 없앤 구조
 - 시스템끼리는 `packages/core/src/ports.ts` 표에 적은 통로(Firestore 문서 · 그 PC 안 파일)로만 주고받는다. 통로를 만들거나 바꾸면 표를 먼저 고치고 `ports.test.ts`(충돌 · 개인정보 · 무료 한도 · 보안 규칙 자리)를 돌린다
+- 재고(E · E-1 · F): 계산은 `packages/core/src/stock.ts` 한 곳(astana 재고 계산 이식 + 안전재고 · 발주량 · 실셈), 화면 `apps/stock`(…/e1/ · …/e1/#in · …/f/), 매일 계산 `apps/collector/src/stock.ts`(`stock.yml`). 공급 단가 · 원가는 로그인한 직원만 읽는 곳(inv · invIn · invCount · invUse · alerts)에만
 - 무료 판(Spark)이라 Cloud Functions 를 쓰지 않는다. 계산은 화면 · GitHub 예약 작업 · POS 상주 전송기에서
 - 지금 운영 중인 웹 주소 · POS 설치 위치는 바꾸지 않는다. 기존 시스템 · 작동 로직을 지우거나 바꿀 때는 먼저 사용자에게 장단점과 함께 묻는다 (사용자 지시)
 

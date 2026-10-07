@@ -138,10 +138,20 @@
    - 로그인 한 번 → 세션을 이어 쓰며 10분마다 오늘 카페 · 키즈 영수증 → 확정과 같은 계산 → 엑셀 합계 · 검사 통과 칸만 `live/{오늘}`
    - 시험: `feature/v2-live-test` 에 올리면 POS 에서 확인만 (`pos-live.yml`, 아침 08:30 ~ 10:30 은 시작 안 함)
    - 설치(main 뒤): GitHub '마감 전 전송기 설치'가 POS 도구 폴더에 깔고 → 사람이 POS 에서 `pos-live-install.cmd` 를 관리자로 한 번 → 작업 스케줄러(매일 09:50 · PC 켤 때, SYSTEM). 비밀값은 Windows 암호화(이 PC 에서만 풀림)
-4. E-1 기초정보 · 레시피 · 입고 · 실셈 → E 매일 계산 → F 푸시
+4. 재고 ✅ (브랜치, 체험판 확인)
+   - 계산 `packages/core/src/stock.ts` — astana 재고 계산(단위 · PKG · 부가세 · 레시피 이력 · 장부)을 옮기고 더함: AI 안전재고(하루 평균 × 리드타임 + 1.65 × 흔들림 × √리드타임), 발주 필요량(안전재고 + 다음 발주까지 쓸 양 − 재고 → PKG 올림 · MOQ · 수량 할인은 더 사는 양이 14일치 안일 때만), 실셈 차이(− 과사용 → 레시피 재검증 · 안전재고 아래면 추가 발주 / + 절약 코드로 자산 다시 올림), 공급처 최소 주문금액 모자람 알림
+   - E-1 `apps/stock` (…/e1/, 창고 입구 …/e1/#in): 재고 현황 · 원재료(공급처 · 공급기준 · 공급단가 · 면세 · MOQ · 수량 할인 · AI/관리자 안전재고 · 최초 실셈) · 공급처(리드타임 · 발주 요일 · 최소 주문금액) · 레시피(B 판매 상품에서 고름, 고치면 그 전 날은 예전 양) · 입고(PKG + 낱개) · 실셈 확정 → F 알림
+   - E `apps/collector/src/stock.ts` (`stock.yml`, 매일 10:40 · 11:20, GitHub 쪽 — Firebase 만): 베이커리 = D 확정 · 자동 생산량(`orderRows`), 그 밖 = B 영수증 줄 × 레시피 → 장부(어제 끝) → `inv/ledger` · 알림 `alerts` → 푸시(FCM). 날짜별 사용량은 `invUse/{달}` 에 쌓고 새 날 · 최근 3일만 다시 셈. 30분마다 푸시만(실셈 알림)
+   - F (…/f/): 알림 목록 · 누르면 읽음 · 안 읽은 수 = 앱 아이콘 숫자 · '알림 켜기'(FCM 웹 푸시, 누를 때까지 남는 알림)
 5. 각 단계 체험판 확인 → "main에 올릴까요?"
 
 ## 7-1. 사용자가 해 줄 것
 - ~~`astanakiz` 열람 허락~~ ✅ · ~~정할 것 ① ~ ④~~ ✅
 - (main 에 올린 뒤) POS 메인 PC 에서 `pos-live-install.cmd` 를 관리자로 한 번 실행
-- (main 에 올린 뒤) Firebase 콘솔 규칙 탭에 `firebase/firestore.rules` 다시 붙여 넣기 (live 칸)
+- (main 에 올린 뒤) Firebase 콘솔 규칙 탭에 `firebase/firestore.rules` 다시 붙여 넣기 (live · inv · invIn · invCount · invUse · alerts · pushTokens)
+- **발주app 푸시 준비** (main 에 올리기 전에): Firebase 콘솔 → 프로젝트 설정
+  1. 일반 → 내 앱(웹)의 `messagingSenderId` · `appId` → GitHub Variables `FIREBASE_MESSAGING_SENDER_ID` · `FIREBASE_APP_ID`
+  2. 클라우드 메시징 → 웹 푸시 인증서 → 키 쌍 생성 → 공개 키를 GitHub Variables `FIREBASE_VAPID_KEY`
+  3. 보내기는 이미 있는 Secret `FIREBASE_SERVICE_ACCOUNT` (화면 올리기와 같은 계정)
+  4. 관리자 폰: …/f/ 를 열어 '홈 화면에 추가'(iPhone 은 iOS 16.4 이상, Safari) → 그 앱에서 '알림 켜기'
+- (처음 쓸 때) E-1 에서 공급처 · 원재료 · 최초 실셈 · 레시피를 넣음 — 그다음 날 아침부터 E 가 계산

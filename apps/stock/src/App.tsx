@@ -34,6 +34,7 @@ import {
   type Supplier,
 } from "@report/core";
 import { api, login, logout, session } from "./data";
+import { enablePush, pushOn, pushReady } from "./push";
 
 const todayKst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
@@ -756,6 +757,8 @@ function OrderApp() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [load]);
   const unread = (alerts || []).filter((a) => !a.readAt).length;
+  const [push, setPush] = useState(pushOn());
+  const [pushMsg, setPushMsg] = useState("");
   // 앱 아이콘 숫자 = 안 읽은 알림 수 (설치한 웹앱 · 지원하는 폰)
   useEffect(() => {
     const n = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
@@ -783,6 +786,31 @@ function OrderApp() {
       </header>
       {err && <div className="msg bad">{err}</div>}
       <main className="content">
+        {!push && (
+          <div className="card push">
+            <b>🔔 발주 알림을 폰으로 받기</b>
+            <p className="muted">안전재고 아래로 내려가거나 실셈에서 과사용이 나오면 폰 위쪽에 알림이 뜨고, 확인할 때까지 남습니다. 앱 아이콘에는 안 읽은 수가 보입니다.</p>
+            {pushReady() ? (
+              <p className="muted">{pushReady()}</p>
+            ) : (
+              <button
+                className="primary"
+                onClick={async () => {
+                  setPushMsg("");
+                  try {
+                    await enablePush();
+                    setPush(true);
+                  } catch (e) {
+                    setPushMsg((e as Error).message);
+                  }
+                }}
+              >
+                알림 켜기
+              </button>
+            )}
+            {pushMsg && <p className="bad">{pushMsg}</p>}
+          </div>
+        )}
         {!alerts ? (
           <p className="muted">불러오는 중…</p>
         ) : !alerts.length ? (

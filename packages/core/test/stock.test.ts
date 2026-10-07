@@ -237,3 +237,15 @@ describe("E 가 쓰는 재고 장부 문서 · F 알림", () => {
     expect(a.lines.join("\n")).toMatch(/원두 \+1 · 절약 코드로 30,000원 자산 다시 올림/);
   });
 });
+
+describe("사용량 쌓아 두기 (E 가 지난 날을 다시 읽지 않게)", () => {
+  it("날짜 · 원재료별 합 → 다시 장부 계산에 써도 같은 결과", async () => {
+    const { sumUsage, usageFromCache } = await import("../src");
+    const rows = recipeUsage({ recipes, materials, sold: [{ date: "2026-09-02", name: "카페라떼", qty: 10 }, { date: "2026-09-03", name: "카페라떼", qty: 5 }] });
+    const cache = sumUsage(rows);
+    expect(cache["2026-09-02"].milk).toBeCloseTo(2);
+    const a = stockLedger({ materials, usage: rows, upTo: "2026-09-05" });
+    const b = stockLedger({ materials, usage: usageFromCache(cache), upTo: "2026-09-05" });
+    expect(b.map((r) => r.book)).toEqual(a.map((r) => r.book));
+  });
+});

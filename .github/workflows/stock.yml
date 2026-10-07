@@ -1,0 +1,47 @@
+# E 재고추적관리 — 매일 아침 어제 끝 기준 장부 · 안전재고 · 발주 필요 → 발주app(F) 알림 · 푸시 (통합 Ver.2.0, apps/collector/src/stock.ts)
+# 10:40 한국: 아침 수집(OKPOS 09:12 · 네이버 09:15 ~ 10:12)이 끝난 뒤 — 어제 영수증 줄 · D 확정 생산량으로
+# 30분마다(10 ~ 22시): 계산 없이 아직 안 보낸 알림만 푸시 (E-1 실셈 확정 알림)
+# Firebase 만 읽고 쓰므로 GitHub 쪽에서 돎 (베이커리 계획과 같음 — 국내 사이트 접속 없음)
+# 필요한 값: Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID, Secrets REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD · FIREBASE_SERVICE_ACCOUNT(푸시)
+# 공개 저장소라 기록에는 원재료 수 · 날 수 · 알림 수만
+name: 재고 계산 · 발주 알림
+on:
+  schedule:
+    - cron: "40 1 * * *" # 01:40 UTC = 10:40 한국 — 장부 계산
+    - cron: "20 2 * * *" # 02:20 UTC = 11:20 한국 — GitHub 이 건너뛴 날을 위해 한 번 더 (같은 자료면 같은 결과)
+    - cron: "10,40 1-13 * * *" # 10:10 ~ 22:40 한국 30분마다 — 푸시만
+  workflow_dispatch:
+    inputs:
+      upto:
+        description: "기준일 (YYYY-MM-DD, 비우면 어제)"
+        required: false
+      dry:
+        description: "확인만 (쓰지 않음)"
+        type: boolean
+        default: false
+concurrency:
+  group: stock
+  cancel-in-progress: false
+jobs:
+  stock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector stock
+        env:
+          STOCK_PUSH_ONLY: ${{ github.event_name == 'schedule' && github.event.schedule == '10,40 1-13 * * *' && '1' || '' }}
+          STOCK_UPTO: ${{ inputs.upto }}
+          STOCK_DRY: ${{ inputs.dry == true && '1' || '' }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
