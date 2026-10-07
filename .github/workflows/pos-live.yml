@@ -1,0 +1,53 @@
+# POS 상주 전송기(마감 전 영업정보) 시험 — 작업 브랜치에 올리면 확인만 (올리지 않음)
+# 실제로는 카페 POS 메인 PC 의 작업 스케줄러가 apps/collector/src/live.ts 를 하루 내내 켜 둠 (docs/V2_INTEGRATION.md 3단계)
+# 시험: 어제 날짜로 2분마다 3번 — 로그인을 한 번만 하고 세션을 이어 쓰는지 · 엑셀 합계 · 검사 통과 / 오늘 날짜로 1번 — 영수증이 없을 때
+# 지금은 새벽에 POS 가 꺼져 있을 수 있어(줄 서 있다가 아침 수집을 밀어냄) GitHub 쪽에서 돌림 — OKPOS 아침 수집도 GitHub 쪽에서 돎
+# 공개 저장소라 기록에는 줄 수 · 일치 여부 · 로그인 횟수만
+name: POS 전송기 시험
+on:
+  push:
+    branches: ["feature/v2-integration"]
+    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "packages/core/src/live.ts", ".github/workflows/pos-live.yml"]
+concurrency:
+  group: pos-collect
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector exec playwright install --with-deps chromium
+      - name: 어제 날짜로 2분마다 3번 (확인만)
+        run: |
+          export LIVE_DATE=$(TZ=Asia/Seoul date -d yesterday +%F)
+          pnpm --filter @report/collector live
+        env:
+          COLLECT_DRY: "1"
+          LIVE_CYCLES: "3"
+          LIVE_EVERY: "2"
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+      - name: 오늘 날짜로 1번 (확인만 — 새벽이면 영수증 없음)
+        run: pnpm --filter @report/collector live
+        env:
+          COLLECT_DRY: "1"
+          LIVE_CYCLES: "1"
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}

@@ -214,3 +214,17 @@ export async function writeConfigJson(fb: Fb, doc: string, value: unknown): Prom
     body: JSON.stringify({ fields: { json: str(JSON.stringify(value)), at: { timestampValue: new Date().toISOString() } } }),
   });
 }
+
+/** 마감 전 영업정보 — live/{날짜} 의 cafe · kids 칸만 바꿔 씀 (desk 칸은 통합데스크(C) 것이라 건드리지 않음) */
+export async function writeLive(fb: Fb, date: string, by: string, parts: { kind: "cafe" | "kids"; part: unknown }[]): Promise<void> {
+  if (!parts.length) return;
+  const now = new Date().toISOString();
+  const fields: Record<string, any> = { date: str(date), at: { timestampValue: now } };
+  for (const p of parts) fields[p.kind] = str(JSON.stringify({ p: p.part, by, at: now }));
+  const mask = Object.keys(fields).map((k) => `updateMask.fieldPaths=${k}`).join("&");
+  await http(`${base(fb)}/boards/${fb.board}/live/${date}?${mask}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields }),
+  });
+}
