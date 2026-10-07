@@ -22,3 +22,4 @@ export * from "./bakery";
 export * from "./ports";
 export * from "./live";
 export * from "./desk";
+export * from "./stock";
