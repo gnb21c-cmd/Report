@@ -77,6 +77,29 @@ service cloud.firestore {
           && piece("json");
       }
 
+      // 재고 (통합 Ver.2.0 — E 재고추적 · E-1 재고 관리 및 설정 · F 발주app). 공급 단가 · 원가가 있어 로그인한 직원만 (B 처럼 누구나 읽지 않음)
+      //   inv/master = 공급처 · 원재료 · 레시피 (운영자만 씀) · inv/ledger = E 가 매일 계산한 장부
+      match /inv/{doc} {
+        allow read: if isSender(board);
+        allow write: if isSender(board) && (doc != "master" || isAdmin(board)) && request.resource.data.keys().hasOnly(["json", "at"]) && piece("json");
+      }
+      // 입고(창고 입구) · 실셈 — 문서 이름 = 날짜
+      match /invIn/{date} {
+        allow read, write: if isSender(board) && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
+      }
+      match /invCount/{date} {
+        allow read, write: if isSender(board) && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
+      }
+      // 발주app 알림 — E · E-1 이 만들고 F 가 읽음 표시
+      match /alerts/{id} {
+        allow read, write: if isSender(board);
+      }
+      // 발주app 푸시 받을 폰 — 자기 이메일 문서만
+      match /pushTokens/{em} {
+        allow read: if isSender(board);
+        allow write: if isSender(board) && email() == em;
+      }
+
       // 상품 분류표 · 정리한 영수증 줄 — 입력 계정만 (폰은 안 읽음)
       // 상품 분류표 등 — 입력 계정. 단 태블릿 키 번호(config/floor)는 운영자만 씀
       // 네이버 [신규 다시 확인] 요청(config/naverAsk)은 정해진 계정만 (packages/core/src/naverAuto.ts NAVER_ASK_EMAIL)

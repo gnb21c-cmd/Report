@@ -291,7 +291,7 @@ export function safetyStock(daily: number[], leadDays: number, z = 1.65): { mean
   const sd = n ? Math.sqrt(daily.reduce((a, b) => a + (b - mean) ** 2, 0) / n) : 0;
   if (n < 7) return { mean, sd, ai: null };
   const L = Math.max(1, toNum(leadDays) || 1);
-  return { mean, sd, ai: Math.ceil(mean * L + z * sd * Math.sqrt(L) - EPS) };
+  return { mean, sd, ai: Math.max(0, Math.ceil(mean * L + z * sd * Math.sqrt(L) - EPS)) };
 }
 /** 다음 발주부터 그다음 발주까지 날 수 (발주 요일이 없으면 7일) */
 export function orderCycleDays(s: Supplier | null | undefined, today: string): number {
@@ -436,4 +436,132 @@ export function stockReport(o: { master: StockMaster; ins: StockIn[]; counts: St
     const order = safety == null ? null : orderPlan({ material: m, supplier: sup, onHand: r.onHand, mean: s.mean, safety, cycleDays: orderCycleDays(sup, plusDays(o.upTo, 1)) });
     return { ...r, mean: s.mean, ai: s.ai, manual, safety, order, negative: r.book < -EPS };
   });
+}
+
+/** B 보고의 상품 줄([이름, 분류, 수량, 매출]) → 레시피에 고를 판매 상품 목록 (많이 팔린 순, 띄어쓰기만 다른 이름은 하나로) */
+export function productList(parts: { products: [string, string, number, number][] }[]): { name: string; sector: string; qty: number }[] {
+  const m = new Map<string, { name: string; sector: string; qty: number }>();
+  for (const p of parts)
+    for (const [name, sector, qty] of p?.products || []) {
+      const k = productKey(name);
+      if (!k) continue;
+      const x = m.get(k) || { name, sector: String(sector), qty: 0 };
+      x.qty += toNum(qty);
+      m.set(k, x);
+    }
+  return [...m.values()].sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
+}
+
+/* ---------- E 가 쓰는 장부 문서 (inv/ledger) · F 알림 (alerts/{id}) ---------- */
+export interface LedgerRow {
+  id: string;
+  name: string;
+  supplierId: string | null;
+  /** 공급단위 표시 (1L) · 세는 말 */
+  unit: string;
+  word: string;
+  onHand: number;
+  book: number;
+  opened: boolean;
+  value: number;
+  /** 하루 평균 소비 (공급단위) */
+  mean: number;
+  ai: number | null;
+  manual: number | null;
+  safety: number | null;
+  negative: boolean;
+}
+export interface LedgerDoc {
+  v: 1;
+  /** 계산한 시각 · 기준일(그날 끝) */
+  at: string;
+  upTo: string;
+  rows: LedgerRow[];
+  orders: BuyLine[];
+  /** 레시피에 고를 B 판매 상품 */
+  products: { name: string; sector: string; qty: number }[];
+}
+export function ledgerDoc(rep: StockReportRow[], products: LedgerDoc["products"], upTo: string, at: string): LedgerDoc {
+  const r1 = (n: number) => Math.round(n * 1000) / 1000;
+  return {
+    v: 1,
+    at,
+    upTo,
+    rows: rep.map((r) => ({
+      id: r.material.id,
+      name: r.material.name,
+      supplierId: r.material.supplierId || null,
+      unit: packLabel(r.material),
+      word: countWordOf(r.material),
+      onHand: r.onHand,
+      book: r1(r.book),
+      opened: r.opened,
+      value: Math.round(r.value),
+      mean: r1(r.mean),
+      ai: r.ai,
+      manual: r.manual,
+      safety: r.safety,
+      negative: r.negative,
+    })),
+    orders: rep.map((r) => r.order).filter((o): o is BuyLine => !!o),
+    products,
+  };
+}
+
+export interface StockAlert {
+  /** order-날짜 · negative-날짜 · count-날짜 (같은 날 두 번 만들지 않음) */
+  id: string;
+  at: string;
+  kind: "order" | "negative" | "count";
+  title: string;
+  lines: string[];
+  orders?: BuyLine[];
+  /** F 에서 읽은 시각 (안 읽었으면 null) · 푸시 보낸 시각 */
+  readAt?: string | null;
+  pushedAt?: string | null;
+}
+const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
+/** 장부 문서 → 새 알림 (이미 있는 id 는 빼고): 발주 필요 · 장부 − (레시피 재검증) */
+export function alertsFor(doc: LedgerDoc, suppliers: Supplier[], existing: string[]): StockAlert[] {
+  const out: StockAlert[] = [];
+  if (doc.orders.length)
+    out.push({
+      id: `order-${doc.upTo}`,
+      at: doc.at,
+      kind: "order",
+      title: `발주 필요 ${doc.orders.length}건`,
+      lines: ordersBySupplier(doc.orders, suppliers).flatMap((g) => [
+        `${g.supplier?.name || "공급처 미지정"} — ${won(g.total)}${g.short > 0 ? ` (최소 주문금액까지 ${won(g.short)} 모자람)` : ""}`,
+        ...g.lines.map((l) => `· ${l.name} ${l.pkgs}PKG (${num(l.qty)}개) ${won(l.cost)} — ${l.why}`),
+      ]),
+      orders: doc.orders,
+      readAt: null,
+    });
+  const neg = doc.rows.filter((r) => r.negative);
+  if (neg.length)
+    out.push({
+      id: `negative-${doc.upTo}`,
+      at: doc.at,
+      kind: "negative",
+      title: `장부 재고가 − 인 원재료 ${neg.length}개 — 레시피 재검증`,
+      lines: neg.map((r) => `· ${r.name}: 레시피보다 더 쓰였거나 입고 기록이 빠졌을 수 있음 → 레시피 · 입고 확인, 필요하면 실셈`),
+      readAt: null,
+    });
+  return out.filter((a) => !existing.includes(a.id));
+}
+/** 실셈 확정 → 알림 (과사용: 레시피 재검증 · 추가 발주 / 절약: 절약 코드로 자산 다시 올림) */
+export function countAlert(date: string, res: CountResult[], at = new Date().toISOString()): StockAlert {
+  const over = res.filter((r) => r.kind === "과사용");
+  const saved = res.filter((r) => r.kind === "절약");
+  return {
+    id: `count-${date}`,
+    at,
+    kind: "count",
+    title: `실셈 ${date} — 과사용 ${over.length} · 절약 ${saved.length}`,
+    lines: [
+      ...over.map((r) => `${r.name} −${num(-r.diff)} · 레시피 재검증${r.needOrder ? " · 추가 발주 필요" : ""} (${won(-r.amount)})`),
+      ...saved.map((r) => `${r.name} +${num(r.diff)} · 절약 코드로 ${won(r.amount)} 자산 다시 올림`),
+    ],
+    readAt: null,
+  };
 }

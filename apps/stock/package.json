@@ -1,0 +1,24 @@
+{
+  "name": "@report/stock",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "E-1 재고 관리 및 설정 (…/e1/, 창고 입구 …/e1/#in) · F 발주app (…/f/) — 통합 Ver.2.0",
+  "scripts": {
+    "dev": "vite --port 5194 --strictPort --host",
+    "build": "vite build",
+    "build:demo": "vite build --mode demo",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@report/core": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^6.4.3",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

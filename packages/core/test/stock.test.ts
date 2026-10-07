@@ -194,3 +194,46 @@ describe("하루 재고 보고 — 장부 · 안전재고(관리자 값이 이�
     expect(neg.find((r) => r.material.id === "milk")!.negative).toBe(true);
   });
 });
+
+describe("레시피에 고를 판매 상품 — B 보고의 상품 줄에서", () => {
+  it("이름 하나로 · 많이 팔린 순 · 분류(섹터) 같이", async () => {
+    const { productList } = await import("../src");
+    const l = productList([
+      { products: [["카페라떼", "바리스타", 10, 50000], ["크루아상", "베이커리", 3, 12000]] },
+      { products: [["카페 라떼", "바리스타", 5, 25000]] },
+    ]);
+    expect(l[0]).toEqual({ name: "카페라떼", sector: "바리스타", qty: 15 });
+    expect(l[1].sector).toBe("베이커리");
+  });
+});
+
+describe("E 가 쓰는 재고 장부 문서 · F 알림", () => {
+  it("장부 문서: 원재료마다 숫자만 · 발주 줄 · 상품 목록", async () => {
+    const { ledgerDoc, stockReport } = await import("../src");
+    const rep = stockReport({ master: { suppliers, materials, recipes }, ins: [], counts: [], usage: [], upTo: "2026-09-10" });
+    const d = ledgerDoc(rep, [{ name: "카페라떼", sector: "바리스타", qty: 3 }], "2026-09-10", "2026-09-11T01:00:00Z");
+    expect(d.rows.find((r) => r.id === "milk")).toMatchObject({ onHand: 13, unit: "1L", safety: 0 });
+    expect(d.products[0].name).toBe("카페라떼");
+  });
+  it("하루 한 번 발주 알림 (같은 날 두 번 만들지 않음) · 장부 − 알림", async () => {
+    const { alertsFor } = await import("../src");
+    const order = { materialId: "milk", name: "우유", supplierId: "s-milk", need: 17, pkgs: 2, qty: 24, pkgPrice: 24000, cost: 48000, vat: 4800, why: "안전재고" };
+    const doc = { v: 1 as const, at: "t", upTo: "2026-09-10", rows: [{ id: "egg", name: "계란", negative: true } as any], orders: [order], products: [] };
+    const a = alertsFor(doc, suppliers, []);
+    expect(a.map((x) => x.id)).toEqual(["order-2026-09-10", "negative-2026-09-10"]);
+    expect(a[0].title).toBe("발주 필요 1건");
+    expect(a[0].lines[0]).toMatch(/우유 거래처/);
+    expect(a[1].lines[0]).toMatch(/계란/);
+    expect(alertsFor(doc, suppliers, ["order-2026-09-10", "negative-2026-09-10"])).toEqual([]);
+  });
+  it("실셈 알림: 과사용(레시피 재검증 · 추가 발주) · 절약", async () => {
+    const { countAlert } = await import("../src");
+    const a = countAlert("2026-09-10", [
+      { materialId: "milk", name: "우유", diff: -4, amount: -8000, kind: "과사용", recheckRecipe: true, needOrder: true, code: null },
+      { materialId: "bean", name: "원두", diff: 1, amount: 30000, kind: "절약", recheckRecipe: false, needOrder: false, code: "절약" },
+    ]);
+    expect(a.id).toBe("count-2026-09-10");
+    expect(a.lines.join("\n")).toMatch(/우유 −4 · 레시피 재검증 · 추가 발주 필요/);
+    expect(a.lines.join("\n")).toMatch(/원두 \+1 · 절약 코드로 30,000원 자산 다시 올림/);
+  });
+});
