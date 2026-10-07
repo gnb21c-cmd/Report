@@ -203,6 +203,7 @@ export class NaverBook {
       if (!this.toldMiss) {
         this.toldMiss = true;
         say(`  목록이 안 열린 칸 — ${mask(p.url().replace(/\?.*$/, ""))} · 오른쪽 글 모양: ${mask(await this.rightShapes())}`);
+        say(`  '완료' 앞뒤 글 모양: ${mask(await this.aroundDone())}`);
       }
       await this.closePanel();
       await this.enter(this.biz);
@@ -291,6 +292,18 @@ export class NaverBook {
         f[k] = (f[k] || 0) + 1;
       }
       return Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, n]) => k + "×" + n).join(" | ") || "없음";
+    })()`) as Promise<string>;
+  }
+
+  /** 오른쪽 '완료' 글마다 앞 3 · 뒤 3 글 모양 — 숫자만인 글 · 정해 둔 낱말만 그대로(숫자는 9), 나머지는 '글' (이름 · 전화 없음) */
+  private aroundDone(): Promise<string> {
+    return this.page.evaluate(`(() => {
+      const KEY = /^(완료|이용완료|방문|회|건|번|노쇼|취소|확정|신청|예약번호|예약자|이용일시|예약상태|결제상태|방문횟수|이용횟수|총|누적)$/;
+      const leaves = [...document.querySelectorAll("body *")].filter((el) => !el.children.length && (el.innerText || "").trim() && el.getBoundingClientRect().width && el.getBoundingClientRect().left >= window.innerWidth * 0.45);
+      const shape = (el) => { const t = (el.innerText || "").trim().replace(/\\s+/g, " "); if (/^[\\d\\s,.:()회건번]+$/.test(t) || KEY.test(t)) return t.replace(/\\d/g, "9"); if (/^(완료|노쇼|취소)\\s*\\d+$/.test(t)) return t.replace(/\\d/g, "9"); return "글"; };
+      const out = [];
+      leaves.forEach((el, i) => { if (/완료/.test((el.innerText || "").trim())) out.push(leaves.slice(Math.max(0, i - 3), i + 4).map(shape).join(" ")); });
+      return out.slice(0, 4).join(" / ") || "없음";
     })()`) as Promise<string>;
   }
 
