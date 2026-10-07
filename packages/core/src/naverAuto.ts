@@ -162,7 +162,7 @@ export function naverDiff(a: NaverPart, b: NaverPart): { tickets: string[]; newV
 }
 
 /* ---------- A [신규 다시 확인] — 이 계정만 누를 수 있음 (보안 규칙 firebase/firestore.rules 에도 같은 이메일) ---------- */
-export const NAVER_ASK_EMAIL = "mssong@aphavision.co.kr";
+export const NAVER_ASK_EMAIL = "mssong@alphavision.co.kr";
 
 /** 요청 — config/naverAsk.json */
 export interface NaverAsk {
