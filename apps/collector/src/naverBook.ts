@@ -23,7 +23,8 @@ export class NaverBook {
   private told = false;
   private toldLost = false;
   private toldMiss = false;
-  private toldQuery = false;
+  /** 상품 이름 → 완료자 목록 주소 (상품번호 · 이용완료 조건) */
+  private listQuery = new Map<string, { base: string; item: string; status: string }>();
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -176,7 +177,7 @@ export class NaverBook {
 
   /** 이용완료 칸을 눌러 오른쪽 완료자 목록을 읽음 — 줄(예약 1건)마다 손님 표시 · '완료 N' · 예약번호
    *  손님 표시는 이름 · 전화 뒷자리를 이번 실행에서만 쓰는 무작위 값과 섞어 바꾼 것 (원래 글은 바로 버림) */
-  async readList(key: number): Promise<{ who: string; n: number; id: string; hasName: boolean; hasTel: boolean }[]> {
+  async readList(key: number, product = "", hm = ""): Promise<{ who: string; n: number; id: string; hasName: boolean; hasTel: boolean }[]> {
     const p = this.page;
     await this.closePanel();
     // 앞 칸을 누른 뒤 화면이 새로 그려지면 칸 표시(data-nv)가 사라짐 → 표가 없으면 되돌아가고, 표시를 다시 붙임
@@ -193,12 +194,28 @@ export class NaverBook {
       if (!(await this.gridRows())) {
         await this.enter(this.biz);
         await this.gotoDate(this.date);
-      } else await this.closePanel();
+      } else {
+        // 목록 주소로 바로 연 뒤엔 표가 다른 날일 수 있어 날짜를 다시 맞춤
+        await this.closePanel();
+        await this.gotoDate(this.date);
+      }
       await this.readCells();
       cell = p.locator(`[data-nv="${key}"]`).first();
       if (!(await cell.count())) throw new Error("칸을 다시 못 찾음");
     }
     await this.pressCell(key);
+    // 예약이 1건뿐인 칸 → 그 예약 상세가 열림. 같은 상품의 목록 주소(상품번호 · 이용완료 조건)를 알면 시각만 바꿔 목록을 바로 엶
+    if (!(await this.panelCount()) && /\/bookings\/\d+/.test(p.url())) {
+      const q = this.listQuery.get(product);
+      if (!q || !hm) throw new Error("예약 1건 칸 — 같은 상품 목록 주소를 아직 모름");
+      const u = new URL(q.base);
+      u.searchParams.set("bizItemId", q.item);
+      u.searchParams.set("date", `${this.date}T${hm}:00+09:00`);
+      u.searchParams.set("status", q.status);
+      await p.goto(u.toString(), { waitUntil: "domcontentloaded", timeout: 30000 });
+      for (let t = 0; t < 20 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+      if (!(await this.panelCount())) throw new Error("예약 1건 칸 — 목록 주소로도 안 열림");
+    }
     if (!(await this.panelCount())) {
       // 목록이 안 열렸으면 (다른 화면으로 넘어감 등) 화면 모양을 한 번 기록하고, 예약현황으로 다시 들어가 한 번 더
       if (!this.toldMiss) {
@@ -212,15 +229,15 @@ export class NaverBook {
       await this.readCells();
       await this.pressCell(key);
     }
-    if (!this.toldQuery) {
-      // 목록 주소의 조건 이름 · 값 모양 (값은 숫자 9 · 글자 a 로) — 1건 칸의 목록을 주소로 열 수 있는지 보려고
-      const u = new URL(p.url().replace("#/", ""));
-      const h = p.url().split("#")[1] || "";
-      const q = new URLSearchParams(h.includes("?") ? h.split("?")[1] : u.search);
-      const keys = [...q.entries()].map(([k, v]) => `${k}=${v.replace(/\d/g, "9").replace(/[a-zA-Z]/g, "a").slice(0, 24)}`).join("&");
-      if (await this.panelCount()) {
-        this.toldQuery = true;
-        say(`  목록 주소 조건: ${keys || "없음"} · 해시 ${h.replace(/\?.*$/, "").replace(/\d+/g, "#")}`);
+    // 목록 주소의 상품번호 · 이용완료 조건을 상품별로 알아 둠 (1건 칸에 씀)
+    if (await this.panelCount()) {
+      try {
+        const u = new URL(p.url());
+        const item = u.searchParams.get("bizItemId");
+        const status = u.searchParams.get("status");
+        if (item && status && product) this.listQuery.set(product, { base: `${u.origin}${u.pathname}`, item, status });
+      } catch {
+        /* 주소 모양이 다르면 건너뜀 */
       }
     }
     if (!this.told) {

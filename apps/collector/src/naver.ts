@@ -92,22 +92,28 @@ async function main() {
         const visits: (NaverVisit & { hasName?: boolean; hasTel?: boolean })[] = [];
         let listOk = 0;
         let listFail = 0;
-        for (const c of cells) {
-          let first: number | null = 0;
-          // '완료 N' 은 그 손님의 지금까지 누적 이용완료 예약 건수 — 다음 날 아침(다시 오기 전)에 본 어제만 신규방문자가 맞음
-          // 그 전 날짜는 그 뒤에 다시 온 손님이 바뀌어 있으니 신규방문자는 '모름'(noNew)
-          // 어제는 이용완료가 있는 칸을 상품 가리지 않고 모두 열어 봄 (다른 상품 예약도 그 손님의 '완료 N' 에 들어가니까)
-          if (date !== yesterday) first = null;
-          else if (c.done > 0) {
-            try {
-              for (const x of await nb.readList(c.key)) visits.push({ ...x, time: c.time, product: c.product });
-              listOk++;
-            } catch (e) {
-              listFail++;
-              if (isNaverTicketProduct(c.product)) first = null;
-              say(`  ${md(date)} 완료자 목록을 못 읽은 칸 하나 (${mask((e as Error).message).split("\n")[0].slice(0, 60)})`);
-            }
+        // '완료 N' 은 그 손님의 지금까지 누적 이용완료 예약 건수 — 다음 날 아침에 본 어제만 신규방문자가 맞음 (그 전 날짜는 '모름')
+        // 어제는 이용완료가 있는 칸을 상품 가리지 않고 모두 열어 봄 (다른 상품 예약도 그 손님의 '완료 N' 에 들어가니까)
+        // 예약이 1건뿐인 칸은 누르면 목록 대신 그 예약 상세가 열림 → 같은 상품의 다른 칸 목록 주소로 알아 둔 상품번호로 목록 주소를 바로 엶
+        //   그래서 한 번 돌고, 못 읽은 칸은 끝에 한 번 더
+        const failed = new Set<number>();
+        const tryCell = async (c: (typeof cells)[number], last: boolean) => {
+          try {
+            for (const x of await nb.readList(c.key, c.product, naverTime(c.time) || "")) visits.push({ ...x, time: c.time, product: c.product });
+            listOk++;
+            failed.delete(c.key);
+          } catch (e) {
+            failed.add(c.key);
+            if (last) say(`  ${md(date)} 완료자 목록을 못 읽은 칸 하나 (${mask((e as Error).message).split("\n")[0].slice(0, 60)})`);
           }
+        };
+        if (date === yesterday) {
+          for (const c of cells) if (c.done > 0) await tryCell(c, false);
+          for (const c of cells) if (failed.has(c.key)) await tryCell(c, true);
+        }
+        listFail = failed.size;
+        for (const c of cells) {
+          const first: number | null = date !== yesterday || (failed.has(c.key) && isNaverTicketProduct(c.product)) ? null : 0;
           reads.push({ product: c.product, time: c.time, done: c.done, first });
         }
         const r = naverPartFrom(date, reads, date === yesterday ? visits : undefined);
