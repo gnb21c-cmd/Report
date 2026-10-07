@@ -22,6 +22,9 @@ export class NaverBook {
   private date = "";
   private told = false;
   private toldLost = false;
+  private toldMiss = false;
+  /** 상품 이름 → 완료자 목록 주소 (상품번호 · 이용완료 조건) */
+  private listQuery = new Map<string, { base: string; item: string; status: string }>();
   private constructor(
     private browser: Browser,
     private ctx: BrowserContext,
@@ -174,7 +177,7 @@ export class NaverBook {
 
   /** 이용완료 칸을 눌러 오른쪽 완료자 목록을 읽음 — 줄(예약 1건)마다 손님 표시 · '완료 N' · 예약번호
    *  손님 표시는 이름 · 전화 뒷자리를 이번 실행에서만 쓰는 무작위 값과 섞어 바꾼 것 (원래 글은 바로 버림) */
-  async readList(key: number): Promise<{ who: string; n: number; id: string; hasName: boolean; hasTel: boolean }[]> {
+  async readList(key: number, product = "", hm = ""): Promise<{ who: string; n: number; id: string; hasName: boolean; hasTel: boolean }[]> {
     const p = this.page;
     await this.closePanel();
     // 앞 칸을 누른 뒤 화면이 새로 그려지면 칸 표시(data-nv)가 사라짐 → 표가 없으면 되돌아가고, 표시를 다시 붙임
@@ -191,16 +194,54 @@ export class NaverBook {
       if (!(await this.gridRows())) {
         await this.enter(this.biz);
         await this.gotoDate(this.date);
-      } else await this.closePanel();
+      } else {
+        // 목록 주소로 바로 연 뒤엔 표가 다른 날일 수 있어 날짜를 다시 맞춤
+        await this.closePanel();
+        await this.gotoDate(this.date);
+      }
       await this.readCells();
       cell = p.locator(`[data-nv="${key}"]`).first();
       if (!(await cell.count())) throw new Error("칸을 다시 못 찾음");
     }
-    await cell.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-    // 보통 누르기 → 안 되면(무언가 가림) 화면 안에서 직접 누름
-    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click(), undefined, { timeout: 3000 }));
-    // 오른쪽에 '완료 N' 이 나올 때까지
-    for (let t = 0; t < 16 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+    await this.pressCell(key);
+    // 예약이 1건뿐인 칸 → 그 예약 상세가 열림. 같은 상품의 목록 주소(상품번호 · 이용완료 조건)를 알면 시각만 바꿔 목록을 바로 엶
+    if (!(await this.panelCount()) && /\/bookings\/\d+/.test(p.url())) {
+      // 같은 상품 번호를 모르면 (그 상품이 모두 1건 칸) 상품번호 없이 그 시각 이용완료 목록 — 두 상품은 시간이 겹치지 않음
+      const q = this.listQuery.get(product) || [...this.listQuery.values()].map((x) => ({ ...x, item: "" }))[0];
+      if (!q || !hm) throw new Error("예약 1건 칸 — 목록 주소를 아직 모름");
+      const u = new URL(q.base);
+      if (q.item) u.searchParams.set("bizItemId", q.item);
+      u.searchParams.set("date", `${this.date}T${hm}:00+09:00`);
+      u.searchParams.set("status", q.status);
+      await p.goto(u.toString(), { waitUntil: "domcontentloaded", timeout: 30000 });
+      for (let t = 0; t < 20 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+      if (!(await this.panelCount())) throw new Error(`예약 1건 칸 — 목록 주소로도 안 열림${q.item ? "" : " (상품번호 없이)"}`);
+      if (!q.item) say("  예약 1건 칸 — 상품번호 없이 그 시각 목록으로 엶");
+    }
+    if (!(await this.panelCount())) {
+      // 목록이 안 열렸으면 (다른 화면으로 넘어감 등) 화면 모양을 한 번 기록하고, 예약현황으로 다시 들어가 한 번 더
+      if (!this.toldMiss) {
+        this.toldMiss = true;
+        say(`  목록이 안 열린 칸 — ${mask(p.url().replace(/\?.*$/, ""))} · 오른쪽 글 모양: ${mask(await this.rightShapes())}`);
+        say(`  '완료' 앞뒤 글 모양: ${mask(await this.aroundDone())}`);
+      }
+      await this.closePanel();
+      await this.enter(this.biz);
+      await this.gotoDate(this.date);
+      await this.readCells();
+      await this.pressCell(key);
+    }
+    // 목록 주소의 상품번호 · 이용완료 조건을 상품별로 알아 둠 (1건 칸에 씀)
+    if (await this.panelCount()) {
+      try {
+        const u = new URL(p.url());
+        const item = u.searchParams.get("bizItemId");
+        const status = u.searchParams.get("status");
+        if (item && status && product) this.listQuery.set(product, { base: `${u.origin}${u.pathname}`, item, status });
+      } catch {
+        /* 주소 모양이 다르면 건너뜀 */
+      }
+    }
     if (!this.told) {
       // 처음 한 번만: 누른 뒤 화면이 어떻게 됐는지 (주소 모양 · 표 · 목록 글 수)
       this.told = true;
@@ -217,7 +258,7 @@ export class NaverBook {
         const out = [];
         for (const el of document.querySelectorAll("body *")) {
           if (!leaf(el)) continue;
-          const m = txt(el).match(/^완료\\s*(\\d+)$/);
+          const m = txt(el).match(/^완료\\s*(\\d+)(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/);
           if (!m || el.closest("[role=tab], [role=tablist]")) continue;
           const r = el.getBoundingClientRect();
           if (!r.width || r.left < window.innerWidth * 0.45) continue;
@@ -256,6 +297,47 @@ export class NaverBook {
     return [...seen.values()];
   }
 
+  /** 칸 누르기 — 보통 누르기, 안 되면(무언가 가림) 화면 안에서 직접. 오른쪽에 '완료 N' 이 나올 때까지 기다림 */
+  private async pressCell(key: number) {
+    const p = this.page;
+    const cell = p.locator(`[data-nv="${key}"]`).first();
+    if (!(await cell.count())) throw new Error("칸을 다시 못 찾음");
+    await cell.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+    await cell.click({ timeout: 4000 }).catch(() => cell.evaluate((el) => ((el.closest("button") || el) as HTMLElement).click(), undefined, { timeout: 3000 }));
+    for (let t = 0; t < 16 && !(await this.panelCount()); t++) await p.waitForTimeout(500);
+  }
+
+  /** 화면 오른쪽 절반의 짧은 글 모양 — 숫자가 든 글 · 정해 둔 낱말만, 숫자는 9 로 (이름 · 전화 · 금액 없음) */
+  private rightShapes(): Promise<string> {
+    return this.page.evaluate(`(() => {
+      const KEY = /완료|방문|이용|회차|예약|확정|취소|노쇼|상태|횟수/;
+      const f = {};
+      for (const el of document.querySelectorAll("body *")) {
+        if (el.children.length) continue;
+        const t = (el.innerText || "").trim();
+        const r = el.getBoundingClientRect();
+        if (!t || t.length > 14 || !r.width || r.left < window.innerWidth * 0.45) continue;
+        if (!/\\d/.test(t) && !KEY.test(t)) continue;
+        if (/\\d/.test(t) && !KEY.test(t) && !/^[\\d\\s:./~-]+$/.test(t)) continue;
+        const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " ");
+        f[k] = (f[k] || 0) + 1;
+      }
+      return Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, n]) => k + "×" + n).join(" | ") || "없음";
+    })()`) as Promise<string>;
+  }
+
+  /** 오른쪽 '완료' 글마다 앞 3 · 뒤 3 글 모양 — 숫자만인 글 · 정해 둔 낱말만 그대로(숫자는 9), 나머지는 '글' (이름 · 전화 없음) */
+  private aroundDone(): Promise<string> {
+    return this.page.evaluate(`(() => {
+      const KEY = /^(완료|이용완료|방문|회|건|번|노쇼|취소|확정|신청|예약번호|예약자|이용일시|예약상태|결제상태|방문횟수|이용횟수|총|누적)$/;
+      const leaves = [...document.querySelectorAll("body *")].filter((el) => !el.children.length && (el.innerText || "").trim() && el.getBoundingClientRect().width && el.getBoundingClientRect().left >= window.innerWidth * 0.45);
+      const shape = (el) => { const t = (el.innerText || "").trim().replace(/\\s+/g, " "); if (/^[\\d\\s,.:()회건번]+$/.test(t) || KEY.test(t)) return t.replace(/\\d/g, "9"); if (/^(완료|노쇼|취소)\\s*\\d+$/.test(t)) return t.replace(/\\d/g, "9"); return "글"; };
+      const out = [];
+      leaves.forEach((el, i) => { if (/완료/.test((el.innerText || "").trim())) out.push(leaves.slice(Math.max(0, i - 3), i + 4).map(shape).join(" ")); });
+      return out.slice(0, 4).join(" / ") || "없음";
+    })()`) as Promise<string>;
+  }
+
   /** 보이는 'N회차' 글 수 (예약현황 표가 있나) */
   private gridRows(): Promise<number> {
     return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^\\d+회차$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
@@ -263,7 +345,7 @@ export class NaverBook {
 
   /** 오른쪽에 보이는 '완료 N' 글 수 (목록이 열려 있나) */
   private panelCount(): Promise<number> {
-    return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^완료\\s*\\d+$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().left > window.innerWidth * 0.45 && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
+    return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^완료\\s*\\d+(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().left > window.innerWidth * 0.45 && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
   }
 
   /** 완료자 목록 닫기 — Esc · 닫기 단추 · 목록 오른쪽 위의 작은 단추 차례로, 닫힐 때까지 */
@@ -300,7 +382,7 @@ export class NaverBook {
       for (const el of leafs) { const t = txt(el); if (t.length <= 12 && /\\d/.test(t)) { const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " "); freq[k] = (freq[k] || 0) + 1; } }
       window.__cells = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + "×" + n).join(" | ");
       window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음");
-      return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+$/), buttons: document.querySelectorAll("button").length };
+      return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/), buttons: document.querySelectorAll("button").length };
     })()`)) as Record<string, number>;
     say(`  글 모양 — ${mask(String(await p.evaluate("window.__shape").catch(() => "")))}`);
     say(`  숫자 든 글 — ${mask(String(await p.evaluate("window.__cells").catch(() => "")))}`);
