@@ -22,9 +22,9 @@
 
 | 묶음 | 저장소 | 도는 방식 | 자료 |
 |---|---|---|---|
-| A · B · D · D-1 + 자동 수집 | `Report` (공개) | 화면은 Firebase Hosting, 계산은 각 화면 안. 자동 수집은 **GitHub 예약 작업(cron)** → POS 메인 PC 의 실행기 `nice-pos` 에서 OKPOS 점주 웹 · 나이스 · 네이버를 화면으로 읽음 | Firebase Firestore (무료 판) |
+| A · B · D · D-1 + 자동 수집 | `Report` (공개) | 화면은 Firebase Hosting, 계산은 각 화면 안. 자동 수집은 **GitHub 예약 작업(cron)** — 나이스 · 네이버는 POS 메인 PC 의 실행기 `nice-pos` 에서(나이스가 해외 접속을 막음), OKPOS 아침 수집(`pos-collect.yml`)은 지금 GitHub 클라우드에서 돌고 성공 중 (바꾸지 않음) | Firebase Firestore (무료 판) |
 | 재고(E 의 바탕) · 근무자 POS · 고객 앱 | `astana` (비공개) | NestJS 서버 + PostgreSQL + Electron POS 앱 (서버를 띄울 유료 클라우드가 필요, 아직 운영 서버 없음) | PostgreSQL `Doc` 표 |
-| C 아스타나키즈 통합데스크 | `astanakiz` (공개) | **이 작업 환경에서 열람 권한이 막혀 아직 못 읽음** | — |
+| C 아스타나키즈 통합데스크 | `astanakiz` (공개) | 키즈 POS 에 설치하는 Electron 앱 (ver.1.26). 네이버 · 아마노를 숨은 창으로 조작 | 그 PC 의 `%APPDATA%` 파일 (6-2장) |
 
 → 사용자 말씀대로 **두 체계가 다르다** (Report = 서버 없는 Firebase + 예약 작업 / astana = 상시 서버 + DB).
 
@@ -134,10 +134,14 @@
 ## 7. 순서 (정한 뒤)
 1. 이름 · 통로 표 · 검사 시험 · 마감 전 숫자 검사(`live.ts`) ✅ (브랜치에 있음)
 2. B 오늘 화면 "마감 전 영업정보" + D 생산량 ✅ (체험판 확인 — 오늘 · 확정 전 날은 비교 · 4주 추세 · 분석을 숨기고 누계는 어제까지, 베이커리 '폐기' 대신 '남음')
-3. POS 상주 전송기 (카페 메인) · C 와 맞춤 (`astanakiz` 권한 필요)
+3. POS 상주 전송기 (카페 메인) — `apps/collector/src/live.ts` 만듦. **POS 메인 PC 에서만** 돌림 (GitHub 클라우드 배제 — 사용자 지시 10/8)
+   - 로그인 한 번 → 세션을 이어 쓰며 10분마다 오늘 카페 · 키즈 영수증 → 확정과 같은 계산 → 엑셀 합계 · 검사 통과 칸만 `live/{오늘}`
+   - 시험: `feature/v2-live-test` 에 올리면 POS 에서 확인만 (`pos-live.yml`, 아침 08:30 ~ 10:30 은 시작 안 함)
+   - 설치(main 뒤): GitHub '마감 전 전송기 설치'가 POS 도구 폴더에 깔고 → 사람이 POS 에서 `pos-live-install.cmd` 를 관리자로 한 번 → 작업 스케줄러(매일 09:50 · PC 켤 때, SYSTEM). 비밀값은 Windows 암호화(이 PC 에서만 풀림)
 4. E-1 기초정보 · 레시피 · 입고 · 실셈 → E 매일 계산 → F 푸시
 5. 각 단계 체험판 확인 → "main에 올릴까요?"
 
 ## 7-1. 사용자가 해 줄 것
-- `astanakiz` 저장소를 이 작업에서 읽을 수 있게 허락 (작업 환경의 저장소 권한)
-- 정할 것 ① ~ ④ 선택
+- ~~`astanakiz` 열람 허락~~ ✅ · ~~정할 것 ① ~ ④~~ ✅
+- (main 에 올린 뒤) POS 메인 PC 에서 `pos-live-install.cmd` 를 관리자로 한 번 실행
+- (main 에 올린 뒤) Firebase 콘솔 규칙 탭에 `firebase/firestore.rules` 다시 붙여 넣기 (live 칸)
