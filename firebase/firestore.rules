@@ -72,7 +72,7 @@ service cloud.firestore {
       // 네이버 [신규 다시 확인] 요청(config/naverAsk)은 정해진 계정만 (packages/core/src/naverAuto.ts NAVER_ASK_EMAIL)
       match /config/{doc} {
         allow read: if isSender(board);
-        allow write: if isSender(board) && (doc != "floor" || isAdmin(board)) && (doc != "naverAsk" || email() == "mssong@aphavision.co.kr");
+        allow write: if isSender(board) && (doc != "floor" || isAdmin(board)) && (doc != "naverAsk" || email() == "mssong@alphavision.co.kr");
       }
       match /lines/{id} {
         allow read, write: if isSender(board);
