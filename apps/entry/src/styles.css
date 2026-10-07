@@ -1364,3 +1364,35 @@ table.detail {
 .weight-cell { white-space: nowrap; text-align: right; }
 .weight-cell input { width: 4.5em; text-align: right; }
 .weight-cell span { margin-left: 4px; }
+/* 네이버 [신규 다시 확인] (정해진 계정만) */
+.naver-check {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line, #ddd);
+  padding-top: 8px;
+  font-size: 14px;
+}
+.nc-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.nc-state {
+  color: var(--muted, #666);
+}
+.nc-result {
+  margin-top: 6px;
+}
+.nc-table {
+  margin-top: 4px;
+  border-collapse: collapse;
+}
+.nc-table th,
+.nc-table td {
+  border: 1px solid var(--line, #ddd);
+  padding: 2px 8px;
+  text-align: center;
+}
+.nc-none {
+  color: var(--muted, #666);
+}

@@ -1,0 +1,53 @@
+# A [신규 다시 확인] 요청 보기 — 5분마다(한국 09시 ~ 24시) 클라우드의 요청(config/naverAsk)을 보고, 아직 안 한 요청이면 네이버 수집(naver-collect.yml)을 시작시킴
+# 요청은 정해진 계정만 남길 수 있음 (packages/core/src/naverAuto.ts NAVER_ASK_EMAIL · firebase/firestore.rules)
+# 결과는 수집이 config/naverResult 에 씀 → A 가 읽어 보여 줌. 공개 저장소라 기록에는 '요청 있음/없음'만
+name: 네이버 신규 다시 확인 요청 보기
+on:
+  schedule:
+    - cron: "*/5 0-14 * * *" # 00:00 ~ 14:55 UTC = 09:00 ~ 23:55 한국
+  workflow_dispatch:
+concurrency:
+  group: naver-ask
+  cancel-in-progress: false
+jobs:
+  look:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+        with:
+          script: |
+            const e = process.env;
+            const j = async (url, init) => {
+              const r = await fetch(url, init);
+              const b = await r.json().catch(() => ({}));
+              if (!r.ok && r.status !== 404) throw new Error(`클라우드 오류 ${r.status}`);
+              return r.ok ? b : null;
+            };
+            const login = await j(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${e.FIREBASE_API_KEY}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: e.WEATHER_EMAIL, password: e.WEATHER_PASSWORD, returnSecureToken: true }),
+            });
+            const auth = { Authorization: `Bearer ${login.idToken}` };
+            const doc = (d) => `https://firestore.googleapis.com/v1/projects/${e.FIREBASE_PROJECT_ID}/databases/(default)/documents/boards/${e.REPORT_BOARD_KEY}/config/${d}`;
+            const json = (d) => { try { return JSON.parse(d?.fields?.json?.stringValue || "null"); } catch { return null; } };
+            const ask = json(await j(doc("naverAsk"), { headers: auth }));
+            const res = json(await j(doc("naverResult"), { headers: auth }));
+            if (!ask?.at) return core.info("요청 없음");
+            if (res?.ask === ask.at) return core.info("이미 맡긴 요청");
+            if (Date.now() - Date.parse(ask.at) > 6 * 3600e3) return core.info("6시간 넘은 요청 — 건너뜀");
+            // 먼저 '하는 중'을 써 두어 다음 5분에 또 시작시키지 않게
+            const now = new Date().toISOString();
+            await j(doc("naverResult"), {
+              method: "PATCH", headers: { ...auth, "Content-Type": "application/json" },
+              body: JSON.stringify({ fields: { json: { stringValue: JSON.stringify({ ask: ask.at, state: "run", at: now }) }, at: { timestampValue: now } } }),
+            });
+            await github.rest.actions.createWorkflowDispatch({ ...context.repo, workflow_id: "naver-collect.yml", ref: "main", inputs: { ask: ask.at } });
+            core.info("요청 있음 — 네이버 수집을 시작시킴");

@@ -205,3 +205,12 @@ export async function writePiecesOf(fb: Fb, field: "naver", by: string, file: st
   });
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
 }
+
+/** 설정 문서 하나를 JSON 한 칸으로 씀 — config/{문서} = { json, at } (네이버 다시 확인 결과 등) */
+export async function writeConfigJson(fb: Fb, doc: string, value: unknown): Promise<void> {
+  await http(`${base(fb)}/boards/${fb.board}/config/${doc}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields: { json: str(JSON.stringify(value)), at: { timestampValue: new Date().toISOString() } } }),
+  });
+}

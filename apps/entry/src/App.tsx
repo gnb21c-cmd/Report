@@ -39,6 +39,7 @@ import {
 } from "@report/core";
 import { api, ApiError, loadMe, mergeReport, saveMe, type DayInfo, type Info, type Me, type SubmitBody } from "./api";
 import { compute, loadFile, newProducts, type Loaded } from "./load";
+import { NaverCheck } from "./NaverCheck";
 import { NaverGrid } from "./NaverGrid";
 import { FileBox } from "./FileBox";
 import { ExtraBox, loadExtra, type ExtraLoaded } from "./ExtraBox";
@@ -556,6 +557,7 @@ export function App() {
 
         <Sector n="①" title="네이버 예약 — 시간대별 판매입장권 수 · 신규방문자 수" hint="30분마다 · 빈칸은 올릴 때 0 · 엑셀에서 복사해 붙여넣어도 됨" locked={!editing.naver} meta={server?.meta?.naver} actions={buttons("naver")}>
           <NaverGrid tickets={tickets} newVisitors={newVisitors} onChange={onGrid} disabled={!editing.naver} />
+          {info?.email && api.naverAskAllowed() && <NaverCheck by={me.name} onDone={() => void loadDate(date)} />}
         </Sector>
 
         <div className="lower">
