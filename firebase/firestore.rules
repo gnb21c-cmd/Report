@@ -69,9 +69,10 @@ service cloud.firestore {
 
       // 상품 분류표 · 정리한 영수증 줄 — 입력 계정만 (폰은 안 읽음)
       // 상품 분류표 등 — 입력 계정. 단 태블릿 키 번호(config/floor)는 운영자만 씀
+      // 네이버 [신규 다시 확인] 요청(config/naverAsk)은 정해진 계정만 (packages/core/src/naverAuto.ts NAVER_ASK_EMAIL)
       match /config/{doc} {
         allow read: if isSender(board);
-        allow write: if isSender(board) && (doc != "floor" || isAdmin(board));
+        allow write: if isSender(board) && (doc != "floor" || isAdmin(board)) && (doc != "naverAsk" || email() == "mssong@aphavision.co.kr");
       }
       match /lines/{id} {
         allow read, write: if isSender(board);

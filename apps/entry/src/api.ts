@@ -2,8 +2,8 @@
    A 가 자료를 주고받는 곳 — 클라우드 보관함(Firebase, cloud.ts)에 직접
    - 체험판: 클라우드 없이 이 브라우저 저장소(localStorage)에 흉내
    ============================================================ */
-import { addDays, applyExtra, cleanSettings, mergeNaverPast, type ReportSettings, type CashPart, type ExtraPart, type ExtraUpdate, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
-import { addProducts, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readProducts, readSettings, sessionEmail, writePieces, writeSettings, type Piece } from "./cloud";
+import { addDays, applyExtra, cleanSettings, mergeNaverPast, NAVER_ASK_EMAIL, type NaverAsk, type NaverAskResult, type ReportSettings, type CashPart, type ExtraPart, type ExtraUpdate, type DayReport, type DayWeather, type NaverPart, type ReceiptLine, type StorePart } from "@report/core";
+import { addProducts, askNaverCheck, cloudConfig, CloudError, login, logout, PARTS, readDay, readDays, readNaverCheck, readProducts, readSettings, sessionEmail, writePieces, writeSettings, type Piece } from "./cloud";
 
 export const APP_VERSION = "0.4.0";
 
@@ -142,6 +142,10 @@ const real = {
   async saveSettings(st: ReportSettings): Promise<void> {
     await writeSettings(cfg(), st);
   },
+  /** 네이버 [신규 다시 확인] — 누를 수 있는 계정인지 · 요청 · 결과 */
+  naverAskAllowed: () => sessionEmail() === NAVER_ASK_EMAIL,
+  naverCheck: () => readNaverCheck(cfg()),
+  naverAsk: (by: string) => askNaverCheck(cfg(), by),
   /** 자판기 · 인생네컷 · 주차 (나이스 엑셀) — 파일에 든 종류만 그날 값으로 바꿈 */
   async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
     const have = await readDays(cfg(), body.updates.map((u) => u.date));
@@ -187,6 +191,8 @@ export function mergeReport(prev: DayReport | null, date: string, by: string, pa
   }
   return r;
 }
+let demoAsk: NaverAsk | null = null;
+
 const demo = {
   async info(): Promise<Info> {
     return { name: "체험판", version: "체험판", email: "체험판" };
@@ -265,6 +271,23 @@ const demo = {
     } catch {
       /* 체험판 */
     }
+  },
+  // 체험판: 누르면 20초 뒤 결과가 온 것처럼 (어제 · 오늘 같은 손님 2명, 그중 1명은 완료 2 → 어제 신규)
+  naverAskAllowed: () => true,
+  async naverCheck(): Promise<{ ask: NaverAsk | null; result: NaverAskResult | null }> {
+    const ask = demoAsk;
+    if (!ask) return { ask: null, result: null };
+    const run = Date.now() - Date.parse(ask.at) < 20000;
+    return {
+      ask,
+      result: run
+        ? { ask: ask.at, state: "run", at: ask.at }
+        : { ask: ask.at, state: "done", at: new Date().toISOString(), date: addDays(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), -1), tickets: 136, newPeople: 41, todayCells: 6, todayFail: 0, repeaters: [{ yesterday: 1, today: 1, done: 2, isNew: true }, { yesterday: 1, today: 1, done: 5, isNew: false }] },
+    };
+  },
+  async naverAsk(by: string): Promise<NaverAsk> {
+    demoAsk = { at: new Date().toISOString(), by };
+    return demoAsk;
   },
   async importExtra(body: { by: string; updates: ExtraUpdate[]; file?: string }) {
     const s = demoLoad();

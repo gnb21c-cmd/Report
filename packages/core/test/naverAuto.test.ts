@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNaverTicketProduct, NAVER_AUTO_BY, NAVER_SLOTS, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverTime, type NaverVisit } from "../src";
+import { isNaverTicketProduct, NAVER_AUTO_BY, NAVER_SLOTS, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverRepeaters, naverTime, type NaverVisit } from "../src";
 
 const slot = (t: string) => NAVER_SLOTS.indexOf(t);
 
@@ -123,6 +123,40 @@ describe("네이버 예약 자동 수집 — 읽은 칸 → A 네이버 칸", ()
       expect(r.part.newVisitors[slot("10:00")]).toBe(2);
       expect(r.part.newVisitors[slot("10:30")]).toBe(0);
       expect(r.part.noNew).toBeUndefined();
+    });
+
+    describe("문 연 뒤 다시 읽을 때 — 오늘 이용완료 목록에 나온 같은 손님 줄은 '완료 N' 에서 뺌", () => {
+      it("어제 1줄 · 오늘 1줄 · 완료 2 → 어제 신규", () => {
+        const r = naverNewVisitors([v("오전10:00", "a", 2, "1")], [v("오전10:30", "a", 2, "9")]);
+        expect(r.bySlot[slot("10:00")]).toBe(1);
+        expect(r.people).toBe(1);
+      });
+
+      it("어제 1줄 · 오늘 1줄 · 완료 3 → 예전에 온 손님", () => {
+        expect(naverNewVisitors([v("오전10:00", "a", 3, "1")], [v("오전10:30", "a", 3, "9")]).people).toBe(0);
+      });
+
+      it("오늘 목록에 없는 손님은 예전 그대로 (완료 1 이면 신규)", () => {
+        const r = naverNewVisitors([v("오전10:00", "a", 1, "1"), v("오전11:00", "b", 2, "2")], [v("오전10:30", "c", 1, "9")]);
+        expect(r.people).toBe(1);
+      });
+
+      it("같은 예약번호가 오늘 목록에도 나오면 한 번만", () => {
+        expect(naverNewVisitors([v("오전10:00", "a", 1, "1")], [v("오전10:30", "a", 1, "1")]).people).toBe(1);
+      });
+
+      it("어제 · 오늘 모두 온 손님 — 줄 수와 '완료 N' 만 (이름 없이)", () => {
+        const r = naverRepeaters([v("오전10:00", "a", 2, "1"), v("오전10:00", "b", 4, "2"), v("오전11:00", "c", 1, "3")], [v("오전10:30", "a", 2, "9"), v("오후1:00", "b", 4, "8")]);
+        expect(r).toEqual([
+          { yesterday: 1, today: 1, done: 2, isNew: true },
+          { yesterday: 1, today: 1, done: 4, isNew: false },
+        ]);
+      });
+
+      it("네이버 칸에도 오늘 목록을 반영", () => {
+        const r = naverPartFrom("2026-10-06", [{ product: P, time: "오전10:00", done: 1, first: 0 }], [v("오전10:00", "a", 2, "1")], [v("오전10:30", "a", 2, "9")]);
+        expect(r.part.newVisitors[slot("10:00")]).toBe(1);
+      });
     });
   });
 });

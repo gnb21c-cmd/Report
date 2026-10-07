@@ -5,6 +5,8 @@
    - 어제 + 지난 7일 중 네이버 칸이 빈 날 (PC가 꺼져 있던 날) · 사람이 A 에서 넣은 칸은 그대로
    - 로그인은 사람이 POS 메인 PC에서 한 번 해 둔 상태(state.json) — 없거나 풀렸으면 실패로 끝나고 다시 로그인하라고 알림
      로그인 창(naver-login.cmd)은 이 수집이 실행기 폴더에 깔아 둠
+   - 문 연 뒤(10시대 다시 하기 · A [신규 다시 확인])에 읽으면 오늘 이용완료 목록도 같이 읽어, 어제 손님이 오늘 또 왔으면 그 줄 수만큼 '완료 N' 에서 빼고 견줌
+   - NAVER_ASK = A [신규 다시 확인] 요청 시각 → 끝나면 결과(어제 판매입장권 · 신규 · 어제오늘 같은 손님의 줄 수와 '완료 N', 이름 없이)를 config/naverResult 에 씀
    - COLLECT_DRY=1 이면 올리지 않고, 사람이 넣은 날과 칸마다 같은지만 견줌 (NAVER_COMPARE_DAYS 일)
    공개 저장소라 기록에는 칸 수 · 같음/다름만 남김 (인원 숫자 · 이름 없음)
    ============================================================ */
@@ -12,8 +14,8 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addDays, dayRange, isNaverTicketProduct, NAVER_SLOTS, naverTime, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
-import { fbLogin, readPiece, writePiecesOf } from "./firebase";
+import { addDays, dayRange, isNaverTicketProduct, NAVER_SLOTS, naverTime, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverRepeaters, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
+import { fbLogin, readPiece, writeConfigJson, writePiecesOf } from "./firebase";
 import { NaverBook } from "./naverBook";
 import { mask, say } from "./okpos";
 
@@ -42,6 +44,8 @@ function installLoginHelper(stateDir: string) {
   }
 }
 
+let fbRef: Awaited<ReturnType<typeof fbLogin>> | null = null;
+
 async function main() {
   const stateDir = env("NAVER_STATE_DIR") || join(process.cwd(), ".naver");
   const statePath = join(stateDir, "state.json");
@@ -53,9 +57,9 @@ async function main() {
     process.exit(1);
   }
 
-  const fb = env("WEATHER_EMAIL")
+  const fb = (fbRef = env("WEATHER_EMAIL")
     ? await fbLogin({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY"), email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") })
-    : null;
+    : null);
 
   // 받을 날: 정해 주면 그대로 · 아니면 어제 + 지난 7일 중 네이버 칸이 빈 날 (확인만이면 사람이 넣은 최근 며칠과 견줌)
   const today = todayKst();
@@ -75,6 +79,8 @@ async function main() {
   const nb = await NaverBook.open(statePath);
   const problems: string[] = [];
   const items: { date: string; part: NaverPart }[] = [];
+  // A [신규 다시 확인] 결과 (어제만)
+  let summary: { date: string; tickets: number; newPeople: number | null; todayCells: number; todayFail: number; repeaters: ReturnType<typeof naverRepeaters> } | null = null;
   try {
     try {
       await nb.enter(env("NAVER_BIZ_ID"));
@@ -112,12 +118,42 @@ async function main() {
           for (const c of cells) if (failed.has(c.key)) await tryCell(c, true);
         }
         listFail = failed.size;
+        // 오늘 이미 이용완료가 있으면(문 연 뒤 다시 읽을 때) 오늘 목록도 읽음 — 어제 손님이 오늘 또 왔으면 '완료 N' 에 오늘 줄이 들어 있어서
+        const later: NaverVisit[] = [];
+        let todayCells = 0;
+        let todayFail = 0;
+        if (date === yesterday) {
+          await nb.gotoDate(today);
+          const t = await nb.readCells();
+          const done = t.cells.filter((c) => c.done > 0);
+          todayCells = done.length;
+          const bad = new Set<number>();
+          for (const pass of [0, 1])
+            for (const c of done) {
+              if (pass && !bad.has(c.key)) continue;
+              try {
+                for (const x of await nb.readList(c.key, c.product, naverTime(c.time) || "")) later.push({ ...x, time: c.time, product: c.product });
+                bad.delete(c.key);
+              } catch {
+                bad.add(c.key);
+              }
+            }
+          todayFail = bad.size;
+          if (todayCells) say(`  오늘 이용완료 칸 ${todayCells}개 · 목록 ${todayCells - todayFail}칸 읽음 (어제 손님이 오늘 또 왔는지 보려고)`);
+          // 오늘 목록을 다 못 읽으면 어제 신규를 믿을 수 없음 → 모름 · 다시 하기
+          if (todayFail) for (const c of cells) if (c.done > 0 && isNaverTicketProduct(c.product)) failed.add(c.key);
+        }
         for (const c of cells) {
           const first: number | null = date !== yesterday || (failed.has(c.key) && isNaverTicketProduct(c.product)) ? null : 0;
           reads.push({ product: c.product, time: c.time, done: c.done, first });
         }
-        const r = naverPartFrom(date, reads, date === yesterday ? visits : undefined);
-        const nv = date === yesterday ? naverNewVisitors(visits) : null;
+        const r = naverPartFrom(date, reads, date === yesterday ? visits : undefined, later);
+        const nv = date === yesterday ? naverNewVisitors(visits, later) : null;
+        if (date === yesterday) {
+          const rep = naverRepeaters(visits, later);
+          if (later.length) say(`  어제 · 오늘 모두 온 손님 ${rep.length ? `${rep.length}명 (그중 어제 신규 ${rep.filter((x) => x.isNew).length}명)` : "없음"}`);
+          summary = { date, tickets: r.part.tickets.reduce((a, b) => a + b, 0), newPeople: r.part.noNew ? null : r.part.newVisitors.reduce((a, b) => a + b, 0), todayCells, todayFail, repeaters: rep };
+        }
         const ticketCells = reads.filter((x) => x.done > 0 && isNaverTicketProduct(x.product)).length;
         say(
           `${md(date)}: 회차 ${rows}줄 · 상품 열 ${headers.length}개 · 이용완료 칸 ${cells.length}개(판매입장권 ${ticketCells}칸)${date === yesterday ? ` · 완료자 목록 ${listOk}칸 읽음${listFail ? ` · 못 읽음 ${listFail}칸` : ""}${nv ? (nv.unknown ? ` · 손님을 못 알아본 줄 ${nv.unknown}개('완료 1' 로만 셈)` : " · 손님 모두 알아봄") : ""}` : ""}${r.skipped.length ? ` · 19:30 넘는 회차 ${r.skipped.length}개 뺌` : ""}${r.overlap.length ? ` · 겹침 ${r.overlap.join(",")}` : ""}${r.part.noNew ? " · 신규방문자 모름" : ""}`,
@@ -172,13 +208,19 @@ async function main() {
     await writePiecesOf(fb, "naver", NAVER_AUTO_BY, "네이버 예약현황 자동 수집", items);
     say(`클라우드에 올림: ${items.length}일`);
   } else if (!dry) say("클라우드에 올릴 날 없음");
+  if (fb && env("NAVER_ASK")) {
+    await writeConfigJson(fb, "naverResult", { ask: env("NAVER_ASK"), state: problems.length ? "fail" : "done", at: new Date().toISOString(), dry, ...(summary || {}), problems: problems.length });
+    say("A [신규 다시 확인] 결과를 씀");
+  }
   if (problems.length) {
     for (const p of problems) say(`문제 — ${p}`);
     process.exit(1);
   }
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   say(`멈춤: ${mask((e as Error).message).split("\n")[0].slice(0, 200)}`);
+  // A [신규 다시 확인] 이었으면 멈췄다고 알림 (A 가 '하는 중'에 머물지 않게)
+  if (fbRef && env("NAVER_ASK")) await writeConfigJson(fbRef, "naverResult", { ask: env("NAVER_ASK"), state: "fail", at: new Date().toISOString(), stopped: true }).catch(() => {});
   process.exit(1);
 });

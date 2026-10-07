@@ -8,7 +8,7 @@
    - 날씨: boards/{열쇠}/weather/{날짜} (GitHub 가 1시간마다 기상청에서 받아 넣음 — apps/weather)
    B 가 읽는 쪽: apps/view/src/data/firebase.ts toReport
    ============================================================ */
-import { cleanSettings, type CashPart, type DayReport, type DayWeather, type ExtraPart, type NaverPart, type ReportSettings, type StorePart } from "@report/core";
+import { cleanSettings, NAVER_ASK_EMAIL, type CashPart, type NaverAsk, type NaverAskResult, type DayReport, type DayWeather, type ExtraPart, type NaverPart, type ReportSettings, type StorePart } from "@report/core";
 
 export interface CloudConfig {
   apiKey: string;
@@ -257,4 +257,30 @@ export async function writeSettings(cfg: CloudConfig, s: ReportSettings): Promis
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${t.id}` },
     body: JSON.stringify({ fields: { json: str(JSON.stringify(cleanSettings(s))), at: { timestampValue: new Date().toISOString() } } }),
   });
+}
+
+/* ---------- 네이버 [신규 다시 확인] — config/naverAsk(요청, 정해진 계정만) · config/naverResult(POS 메인 PC 결과) ---------- */
+const jsonOf = <T>(f: Record<string, any> | null): T | null => {
+  try {
+    return f?.json ? (JSON.parse(f.json) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+export async function readNaverCheck(cfg: CloudConfig): Promise<{ ask: NaverAsk | null; result: NaverAskResult | null }> {
+  const [a, r] = await Promise.all([get(cfg, "config/naverAsk"), get(cfg, "config/naverResult")]);
+  return { ask: jsonOf<NaverAsk>(a), result: jsonOf<NaverAskResult>(r) };
+}
+
+export async function askNaverCheck(cfg: CloudConfig, by: string): Promise<NaverAsk> {
+  if (sessionEmail() !== NAVER_ASK_EMAIL) throw new CloudError("이 계정으로는 누를 수 없습니다.", 403);
+  const t = await idToken(cfg);
+  const ask: NaverAsk = { at: new Date().toISOString(), by };
+  await http(`${docsBase(cfg)}/boards/${t.board}/config/naverAsk`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${t.id}` },
+    body: JSON.stringify({ fields: { json: str(JSON.stringify(ask)), at: { timestampValue: ask.at } } }),
+  });
+  return ask;
 }

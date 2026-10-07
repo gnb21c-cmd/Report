@@ -14,7 +14,7 @@ on:
     - cron: "12 1 * * *" # 01:12 UTC = 10:12 한국
   # 작업 브랜치에 올리면 POS 메인 PC에서 최근 며칠을 읽어 사람이 넣은 값과 견주기만 (올리지 않음)
   push:
-    branches: ["feature/naver-collect", "feature/naver-retry"]
+    branches: ["feature/naver-collect", "feature/naver-retry", "feature/naver-ask"]
     paths: ["apps/collector/**", "packages/core/src/naverAuto.ts", ".github/workflows/naver-collect.yml"]
   workflow_dispatch:
     inputs:
@@ -28,6 +28,9 @@ on:
         description: "확인만 (올리지 않음, 사람이 넣은 값과 견줌)"
         type: boolean
         default: false
+      ask:
+        description: "A [신규 다시 확인] 요청 시각 (naver-ask.yml 이 넣음 — 사람은 비워 둠)"
+        required: false
 concurrency:
   group: naver-collect
   cancel-in-progress: false
@@ -81,6 +84,7 @@ jobs:
           NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
           NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
           COLLECT_FROM: ${{ inputs.date }}
+          NAVER_ASK: ${{ inputs.ask }}
           COLLECT_TO: ${{ inputs.to }}
           COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
           NAVER_PROBE: ${{ github.event_name == 'push' && '1' || '' }}
