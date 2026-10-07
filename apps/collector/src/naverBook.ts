@@ -256,7 +256,7 @@ export class NaverBook {
         const out = [];
         for (const el of document.querySelectorAll("body *")) {
           if (!leaf(el)) continue;
-          const m = txt(el).match(/^완료\\s*(\\d+)$/);
+          const m = txt(el).match(/^완료\\s*(\\d+)(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/);
           if (!m || el.closest("[role=tab], [role=tablist]")) continue;
           const r = el.getBoundingClientRect();
           if (!r.width || r.left < window.innerWidth * 0.45) continue;
@@ -343,7 +343,7 @@ export class NaverBook {
 
   /** 오른쪽에 보이는 '완료 N' 글 수 (목록이 열려 있나) */
   private panelCount(): Promise<number> {
-    return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^완료\\s*\\d+$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().left > window.innerWidth * 0.45 && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
+    return this.page.evaluate(`[...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^완료\\s*\\d+(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/.test((el.innerText || "").trim()) && el.getBoundingClientRect().left > window.innerWidth * 0.45 && el.getBoundingClientRect().width > 0).length`) as Promise<number>;
   }
 
   /** 완료자 목록 닫기 — Esc · 닫기 단추 · 목록 오른쪽 위의 작은 단추 차례로, 닫힐 때까지 */
@@ -380,7 +380,7 @@ export class NaverBook {
       for (const el of leafs) { const t = txt(el); if (t.length <= 12 && /\\d/.test(t)) { const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " "); freq[k] = (freq[k] || 0) + 1; } }
       window.__cells = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + "×" + n).join(" | ");
       window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음");
-      return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+$/), buttons: document.querySelectorAll("button").length };
+      return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/), buttons: document.querySelectorAll("button").length };
     })()`)) as Record<string, number>;
     say(`  글 모양 — ${mask(String(await p.evaluate("window.__shape").catch(() => "")))}`);
     say(`  숫자 든 글 — ${mask(String(await p.evaluate("window.__cells").catch(() => "")))}`);
