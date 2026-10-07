@@ -1,53 +1,70 @@
-# POS 상주 전송기(마감 전 영업정보) 시험 — 작업 브랜치에 올리면 확인만 (올리지 않음)
-# 실제로는 카페 POS 메인 PC 의 작업 스케줄러가 apps/collector/src/live.ts 를 하루 내내 켜 둠 (docs/V2_INTEGRATION.md 3단계)
-# 시험: 어제 날짜로 2분마다 3번 — 로그인을 한 번만 하고 세션을 이어 쓰는지 · 엑셀 합계 · 검사 통과 / 오늘 날짜로 1번 — 영수증이 없을 때
-# 지금은 새벽에 POS 가 꺼져 있을 수 있어(줄 서 있다가 아침 수집을 밀어냄) GitHub 쪽에서 돌림 — OKPOS 아침 수집도 GitHub 쪽에서 돎
+# POS 상주 전송기(마감 전 영업정보) 시험 — POS 메인 PC(실행기 nice-pos)에서만, 확인만 (올리지 않음)
+# GitHub 클라우드에서는 돌리지 않음 (해외 접속 차단 — 사용자 지시 10/8). POS 는 아침 9시쯤 켜짐
+# 시험용 브랜치(feature/v2-live-test)에 올릴 때만 돎 — 작업 브랜치(feature/v2-integration)에 올려도 돌지 않음
+# 아침 수집 시간(08:30 ~ 10:30)에는 POS 실행기를 차지하지 않게 시작하지 않음
+# 시험: 오늘 날짜로 3분마다 3번 — 로그인을 한 번만 하고 세션을 이어 쓰는지 · 엑셀 합계 · 검사 / 어제 날짜로 1번 — 하루 전체 엑셀
+# 실제 설치는 작업 스케줄러(apps/collector/pos-live, 마감 전 전송기 설치) — main 에 올린 뒤
 # 공개 저장소라 기록에는 줄 수 · 일치 여부 · 로그인 횟수만
 name: POS 전송기 시험
 on:
   push:
-    branches: ["feature/v2-integration"]
-    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "packages/core/src/live.ts", ".github/workflows/pos-live.yml"]
+    branches: ["feature/v2-live-test"]
 concurrency:
-  group: pos-collect
+  group: naver-collect
   cancel-in-progress: false
 jobs:
-  live:
+  when:
     runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.t.outputs.ok }}
+    steps:
+      - id: t
+        run: |
+          hm=$(TZ=Asia/Seoul date +%H%M)
+          if [ "$hm" -ge 0830 ] && [ "$hm" -lt 1030 ]; then echo "아침 수집 시간이라 시작하지 않음"; echo "ok=" >> "$GITHUB_OUTPUT"; else echo "ok=1" >> "$GITHUB_OUTPUT"; fi
+  live:
+    needs: when
+    if: needs.when.outputs.ok == '1'
+    runs-on: [self-hosted, Windows, nice-pos]
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    env:
+      COLLECT_DRY: "1"
+      OKPOS_ID: ${{ secrets.OKPOS_ID }}
+      OKPOS_PW: ${{ secrets.OKPOS_PW }}
+      FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+      WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+      WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.tool_cache }}\setup-pnpm
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @report/collector exec playwright install --with-deps chromium
-      - name: 어제 날짜로 2분마다 3번 (확인만)
-        run: |
-          export LIVE_DATE=$(TZ=Asia/Seoul date -d yesterday +%F)
-          pnpm --filter @report/collector live
+      - run: pnpm --filter @report/collector exec playwright install chromium
         env:
-          COLLECT_DRY: "1"
-          LIVE_CYCLES: "3"
-          LIVE_EVERY: "2"
-          OKPOS_ID: ${{ secrets.OKPOS_ID }}
-          OKPOS_PW: ${{ secrets.OKPOS_PW }}
-          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
-          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
-          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
-      - name: 오늘 날짜로 1번 (확인만 — 새벽이면 영수증 없음)
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+      - name: 오늘 날짜로 3분마다 3번 (확인만)
         run: pnpm --filter @report/collector live
         env:
-          COLLECT_DRY: "1"
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          LIVE_CYCLES: "3"
+          LIVE_EVERY: "3"
+      - name: 어제 날짜로 1번 (확인만 — 하루 전체 엑셀)
+        run: |
+          $env:LIVE_DATE = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+          pnpm --filter @report/collector live
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
           LIVE_CYCLES: "1"
-          OKPOS_ID: ${{ secrets.OKPOS_ID }}
-          OKPOS_PW: ${{ secrets.OKPOS_PW }}
-          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
-          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
-          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
