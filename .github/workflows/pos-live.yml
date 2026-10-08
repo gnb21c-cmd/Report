@@ -27,9 +27,10 @@ jobs:
     if: needs.when.outputs.ok == '1'
     runs-on: [self-hosted, Windows, nice-pos]
     timeout-minutes: 30
+    # POS PC 는 PowerShell 스크립트가 막혀 있어(실행 정책) 네이버 수집처럼 cmd 로
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     env:
       COLLECT_DRY: "1"
       OKPOS_ID: ${{ secrets.OKPOS_ID }}
@@ -60,10 +61,9 @@ jobs:
           LIVE_CYCLES: "3"
           LIVE_EVERY: "3"
       - name: 어제 날짜로 1번 (확인만 — 하루 전체 엑셀)
-        run: |
-          $env:LIVE_DATE = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
-          pnpm --filter @report/collector live
+        run: pnpm --filter @report/collector live
         env:
+          LIVE_DATE: yesterday
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}

@@ -6,7 +6,7 @@
    - 올리기 전 검사: 엑셀 합계 = 계산(partCheck) · live.ts checkLivePiece. 틀리면 올리지 않음 (B 에 틀린 숫자가 안 가게)
    - 확정 칸(reports)은 건드리지 않음 — 다음 날 아침 수집 그대로
    환경: OKPOS_ID · OKPOS_PW · FIREBASE_API_KEY · FIREBASE_PROJECT_ID · REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD
-         LIVE_START(10:00) · LIVE_END(22:30) · LIVE_EVERY(분, 10) · LIVE_CYCLES(시험: 몇 번 돌고 끝) · LIVE_DATE(시험: 그 날짜) · COLLECT_DRY=1(올리지 않음)
+         LIVE_START(10:00) · LIVE_END(22:30) · LIVE_EVERY(분, 10) · LIVE_CYCLES(시험: 몇 번 돌고 끝) · LIVE_DATE(시험: 그 날짜 · yesterday = 어제) · COLLECT_DRY=1(올리지 않음)
    공개 저장소라 기록에는 줄 수 · 일치 여부 · 로그인 횟수만 (매출 숫자 · 매장 이름 없음)
    ============================================================ */
 import { buildStorePart, checkLivePiece, parseReceiptSheet, partCheck, sectorLookup, SheetError } from "@report/core";
@@ -77,7 +77,7 @@ async function main() {
       }
       const t0 = Date.now();
       n++;
-      const date = env("LIVE_DATE") || today();
+      const date = env("LIVE_DATE") === "yesterday" ? new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10) : env("LIVE_DATE") || today();
       try {
         if (!mf) await login();
         if (fb && Date.now() - fbAt > 50 * 60_000) {

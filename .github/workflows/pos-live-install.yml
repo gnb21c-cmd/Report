@@ -13,9 +13,10 @@ jobs:
   stage:
     runs-on: [self-hosted, Windows, nice-pos]
     timeout-minutes: 30
+    # POS PC 는 PowerShell 스크립트가 막혀 있어(실행 정책) cmd 로, 깔기 스크립트만 이번 실행에서 정책을 건너뜀
     defaults:
       run:
-        shell: powershell
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -38,20 +39,4 @@ jobs:
           REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
           WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
           WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force -Path "$env:DEST\app" | Out-Null
-          robocopy . "$env:DEST\app" /MIR /XD .git /NFL /NDL /NJH /NJS /NP | Out-Null
-          if ($LASTEXITCODE -ge 8) { throw "복사 실패" }
-          $global:LASTEXITCODE = 0  # robocopy 는 복사했으면 1 을 돌려줌 (실패 아님)
-          Copy-Item apps\collector\pos-live\*.ps1 $env:DEST -Force
-          (Get-Command node).Source | Set-Content "$env:DEST\node-path.txt"
-          Add-Type -AssemblyName System.Security
-          $cfg = @{ OKPOS_ID = $env:OKPOS_ID; OKPOS_PW = $env:OKPOS_PW; FIREBASE_API_KEY = $env:FIREBASE_API_KEY; FIREBASE_PROJECT_ID = $env:FIREBASE_PROJECT_ID; REPORT_BOARD_KEY = $env:REPORT_BOARD_KEY; WEATHER_EMAIL = $env:WEATHER_EMAIL; WEATHER_PASSWORD = $env:WEATHER_PASSWORD } | ConvertTo-Json -Compress
-          $enc = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($cfg), $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
-          [IO.File]::WriteAllBytes("$env:DEST\secrets.bin", $enc)
-          $cmd = "@echo off`r`nchcp 65001 >nul`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"$env:DEST\install.ps1`"`r`npause`r`n"
-          Set-Content -Path "$env:DEST\pos-live-install.cmd" -Value $cmd -Encoding ascii
-          $root = Resolve-Path "$env:RUNNER_TOOL_CACHE\..\.."
-          try { Set-Content -Path "$root\pos-live-install.cmd" -Value $cmd -Encoding ascii } catch { }
-          Write-Host "깔기 끝 — POS 에서 pos-live-install.cmd 를 관리자로 한 번 실행하면 작업 스케줄러에 등록됨"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps\collector\pos-live\stage.ps1
