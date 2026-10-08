@@ -1,6 +1,7 @@
 /* ============================================================
    베이커리 작업지시 — 계획(plans) · 확정(orders) 문서와 그 규칙 (D 매니저 앱 · D-1 현장 태블릿 · 15시 예약 작업이 함께 씀)
-   [주간] 매주 목요일 15시: 다음 주 월 ~ 일 7일치 계획(주간 잠정안) → 매니저가 목요일에 잠정 확정
+   [주간] 매주 목요일 아침 6시: 다음 주 월 ~ 일 7일치 계획(주간 잠정안) → 매니저가 목요일 18시 전에 잠정 확정
+          (새벽 04:47 · 05:23 에 미리 계산해 두고 매니저 앱에는 6시부터 보임 — 그때는 수요일 실적이 아직 안 들어와 화요일까지 실적으로 셈)
    [최종] 매일 15시: 3일 뒤 수량을 다시 셈(아침 09:10 수집한 어제까지 실적의 오차 보정 · 잠정 확정 수량 ±10% 안) → 매니저가 그날 18시 전에 최종 확정
           금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
    마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
@@ -14,8 +15,10 @@ import type { Board } from "./metrics";
 import { NOT_BREAD } from "./rules";
 import type { WeatherMap } from "./weather";
 
-/** 계획을 세는 시각 (한국 시간) — 예약 작업은 조금 일찍 걸어 둠 */
+/** 최종안을 세는 시각 (한국 시간, 매일) — 예약 작업은 조금 일찍 걸어 둠 */
 export const PLAN_TIME = "15:00";
+/** 주간 잠정안이 매니저 앱에 열리는 시각 (목요일, 한국 시간) — 계산은 새벽에 미리 */
+export const WEEK_PLAN_TIME = "06:00";
 /** 주간 계획을 세는 요일 (목) */
 export const WEEK_PLAN_WEEKDAY = 4;
 /** 최종 확정 = 3일 뒤 */
@@ -83,7 +86,7 @@ export interface Outlook {
 export interface PlanDoc {
   v: 2;
   date: string;
-  /** 주간 잠정안 (그 주 앞 목요일 15시) */
+  /** 주간 잠정안 (그 주 앞 목요일 아침 6시) */
   week?: PlanStep;
   /** 최종안 (3일 전 15시) */
   final?: PlanStep;
@@ -138,6 +141,18 @@ export function weekPlanDay(date: string): string {
 export function weekDates(thursday: string): string[] {
   return Array.from({ length: 7 }, (_, i) => addDays(thursday, 4 + i));
 }
+/** 주간 잠정안을 매니저에게 보여 줄지 — 계산한 목요일 아침 6시부터 (새벽에 미리 계산돼 있어도 6시 전에는 숨김) */
+export function weekPlanOpen(plan: PlanDoc | null | undefined, now: { date: string; time: string }): boolean {
+  const made = plan?.week?.madeOn;
+  if (!made) return false;
+  return now.date > made || (now.date === made && now.time >= WEEK_PLAN_TIME);
+}
+/** 매니저 앱이 보는 계획 — 6시 전이면 새벽에 미리 계산한 주간 잠정안 · 1~4주 전망을 숨김 (최종안은 그대로) */
+export function visiblePlan(plan: PlanDoc | null, now: { date: string; time: string }): PlanDoc | null {
+  if (!plan?.week || weekPlanOpen(plan, now)) return plan;
+  const { week: _w, outlook: _o, ...rest } = plan;
+  return rest;
+}
 /** 최종 확정하는 날 (3일 전) */
 export const finalDay = (date: string) => addDays(date, -FINAL_LEAD);
 
@@ -162,7 +177,7 @@ function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: strin
   return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 
-/** 목요일 15시 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌) */
+/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌) */
 export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, corr: Record<string, number> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
   const dates = weekDates(thursday);
   return dates.map((date, i) => ({

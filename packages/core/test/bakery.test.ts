@@ -23,6 +23,10 @@ import {
   orderText,
   weekDates,
   weekPlanDay,
+  weekPlanOpen,
+  visiblePlan,
+  WEEK_PLAN_TIME,
+  CONFIRM_DEADLINE,
   type BreadResult,
   type DayReport,
   type OrderDoc,
@@ -68,7 +72,37 @@ describe("날짜 — 목요일 주간 · 3일 전 최종 · 아침 6시", () => 
   });
 });
 
-describe("주간 잠정안 (목 15시)", () => {
+describe("주간 잠정안은 목요일 아침 6시에 열림 (나머지 시각은 그대로)", () => {
+  const plan: PlanDoc = { v: 2, date: "2026-10-19", week: { madeOn: "2026-10-15", asOf: "2026-10-13", kind: "평일", visitors: 0, weather: "", total: 0, items: [] } };
+  it("6시", () => expect(WEEK_PLAN_TIME).toBe("06:00"));
+  it("목요일 새벽에 미리 계산해 둬도 6시 전에는 안 보이고, 6시부터 보임", () => {
+    expect(weekPlanOpen(plan, T("2026-10-15", "05:10"))).toBe(false);
+    expect(weekPlanOpen(plan, T("2026-10-15", "06:00"))).toBe(true);
+    expect(weekPlanOpen(plan, T("2026-10-16", "01:00"))).toBe(true);
+  });
+  it("계획이 없으면 안 보임", () => {
+    expect(weekPlanOpen({ v: 2, date: "2026-10-19" }, T("2026-10-15", "07:00"))).toBe(false);
+  });
+  it("매니저 앱은 6시 전에 주간안 · 전망을 못 봄 — 6시부터 그대로 (숫자는 바꾸지 않음)", () => {
+    const withOutlook: PlanDoc = { ...plan, outlook: [{ week: 1, from: "2026-10-19", to: "2026-10-25", weekday: 100, holiday: 150 }] };
+    const early = visiblePlan(withOutlook, T("2026-10-15", "05:59"))!;
+    expect(early.week).toBeUndefined();
+    expect(early.outlook).toBeUndefined();
+    expect(early.date).toBe("2026-10-19");
+    expect(visiblePlan(withOutlook, T("2026-10-15", "06:00"))).toBe(withOutlook);
+    expect(visiblePlan(null, T("2026-10-15", "05:00"))).toBeNull();
+  });
+  it("최종안은 시각과 관계없이 그대로 (최종안이 있는 날의 주간안은 이미 지난 목요일 것)", () => {
+    const fin: PlanDoc = { ...plan, date: "2026-10-12", week: { ...plan.week!, madeOn: "2026-10-08" }, final: { ...plan.week!, madeOn: "2026-10-09" } };
+    expect(visiblePlan(fin, T("2026-10-09", "05:00"))).toBe(fin);
+  });
+  it("잠정 확정 마감은 그대로 목요일 18시 · 최종은 그대로 3일 전", () => {
+    expect(CONFIRM_DEADLINE).toBe("18:00");
+    expect(finalDay("2026-10-19")).toBe("2026-10-16");
+  });
+});
+
+describe("주간 잠정안 (목 아침)", () => {
   const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07");
   it("7일 · 월요일 문서에만 1~4주 전망 · 딸기잼 · 블루베리잼은 빠짐", () => {
     expect(week.map((w) => w.date)).toEqual(dayRange("2026-10-12", "2026-10-18"));
