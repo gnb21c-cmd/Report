@@ -367,6 +367,33 @@ export class NaverBook {
     }
   }
 
+  /** 시험: 회차 칸 안 글 모양 — '이용완료' 를 품은 칸의 윗 칸 글을 정해 둔 낱말만 그대로, 숫자는 9, 나머지는 '글' (상품 이름 · 인원 없음)
+   *  tab 을 주면 그 상태 단추('확정' 등)를 누른 뒤의 모양 */
+  async probeCells(tab = "") {
+    const p = this.page;
+    if (tab) {
+      await p.getByText(tab, { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
+      await p.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+      await p.waitForTimeout(1500);
+    }
+    const out = (await p.evaluate(`(() => {
+      const KEY = /^(이용완료|완료|확정|신청|취소|노쇼|잔여예약|잔여|예약|예약가능|대기|입금대기|명|건|매|장|\/)$/;
+      const txt = (el) => (el.innerText || "").trim();
+      const shape = (el) => [...el.querySelectorAll("*")].filter((x) => !x.children.length && txt(x)).map((x) => { const t = txt(x).replace(/\s+/g, " "); if (/^[\d\s,./()]+$/.test(t)) return t.replace(/\d+/g, "9"); const w = t.replace(/\d+/g, "").trim(); return KEY.test(w) ? t.replace(/\d+/g, "9") : /\d/.test(t) ? "글9" : "글"; }).join(" ");
+      const labels = [...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^(이용)?완료\s*\d*$|^확정\s*\d*$|^신청\s*\d*$/.test(txt(el)) && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().top > 150);
+      const res = [];
+      for (const el of labels.slice(0, 6)) {
+        let c = el;
+        for (let k = 0; k < 4 && c.parentElement && txt(c.parentElement).length < 80; k++) c = c.parentElement;
+        res.push(shape(c));
+      }
+      const c = (re) => [...document.querySelectorAll("body *")].filter((el) => !el.children.length && re.test(txt(el)) && el.getBoundingClientRect().width > 0).length;
+      return "칸 글: " + (res.join(" / ") || "없음") + " · 확정 글 " + c(/^확정\s*\d*$/) + " · 이용완료 글 " + c(/^(이용)?완료\s*\d*$/) + " · 신청 글 " + c(/^신청\s*\d*$/);
+    })()`)) as string;
+    say(`  칸 모양${tab ? ` ('${tab}' 누른 뒤)` : ""} — ${mask(out)}`);
+    if (tab) await p.getByText("전체", { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
+  }
+
   /** 화면 구조 기록 — 개수 · 정해 둔 낱말만 (이름 · 숫자 없음) */
   async probe(label: string) {
     const p = this.page;

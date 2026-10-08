@@ -106,6 +106,9 @@ async function main() {
       const { cells, rows } = await nb.readCells();
       say(`네이버 예약현황 ${date}: 회차 ${rows}줄 · 이용완료 칸 ${cells.length}개`);
       await nb.probe(date);
+      await nb.probeCells();
+      await nb.probeCells("확정");
+      await nb.probeCells("완료/노쇼");
     } catch (e) {
       say(`네이버: ${mask((e as Error).message)}`);
     } finally {
