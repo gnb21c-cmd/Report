@@ -240,7 +240,8 @@ export function orderRows(plan: PlanDoc | null | undefined, order: OrderDoc | nu
   const conf = order?.final || {};
   const finalPassed = passed(now, finalDay(date));
   const provPassed = passed(now, plan?.week?.madeOn || weekPlanDay(date));
-  const names = [...new Set([...fin.keys(), ...week.keys(), ...Object.keys(prov), ...Object.keys(conf)])];
+  // 베이커리 생산품이 아닌 상품(딸기잼 · 블루베리잼 — rules.ts NOT_BREAD)은 이미 만든 계획 · 확정에 있어도 생산 목록에서 뺌
+  const names = [...new Set([...fin.keys(), ...week.keys(), ...Object.keys(prov), ...Object.keys(conf)])].filter((n) => !NOT_BREAD.has(n));
   const rows = names.map((name): OrderRow => {
     const base = { name, week: week.get(name) ?? null, provisional: prov[name]?.qty ?? null, suggested: fin.get(name) ?? null, confirmed: conf[name]?.qty ?? null };
     if (conf[name]) return { ...base, qty: conf[name].qty, state: "확정" };

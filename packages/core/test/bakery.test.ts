@@ -43,7 +43,7 @@ function day(date: string, cups: number, bread: [string, number][]): DayReport {
 const make = (from: string, to: string, k: (d: string) => number) =>
   dayRange(from, to).map((d) => {
     const cups = Math.round((dayKind(d) === "휴일" ? 200 : 100) * k(d));
-    return day(d, cups, [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)], ["딸기잼", 3]]);
+    return day(d, cups, [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)], ["딸기잼", 3], ["블루베리잼", 2]]);
   });
 const board = new Board([...make("2025-08-01", "2025-12-31", () => 1), ...make("2026-08-01", "2026-10-07", () => 1)]);
 const L = (qty: number, at = "") => ({ qty, by: "매니저", at });
@@ -70,13 +70,14 @@ describe("날짜 — 목요일 주간 · 3일 전 최종 · 아침 6시", () => 
 
 describe("주간 잠정안 (목 15시)", () => {
   const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07");
-  it("7일 · 월요일 문서에만 1~4주 전망 · 딸기잼은 빠짐", () => {
+  it("7일 · 월요일 문서에만 1~4주 전망 · 딸기잼 · 블루베리잼은 빠짐", () => {
     expect(week.map((w) => w.date)).toEqual(dayRange("2026-10-12", "2026-10-18"));
     expect(week[0].outlook).toHaveLength(4);
     expect(week[1].outlook).toBeUndefined();
     for (const w of week) {
       expect(w.week.madeOn).toBe("2026-10-08");
       expect(w.week.items.some((i) => i.name === "딸기잼")).toBe(false);
+      expect(w.week.items.some((i) => i.name === "블루베리잼")).toBe(false);
       const s = w.week.items.find((i) => i.name === "소금빵")!;
       expect(s.base).toBe(s.qty);
     }
@@ -143,6 +144,13 @@ describe("빵별 상태 — 한 주기 따라가기 (월 10-12)", () => {
     expect(madeTotal(before)).toBeNull(); // 최종 전에는 생산을 모름
     expect(orderText(mon.date, after)).toBe("[10월 12일 생산 명령서] 총 96개\n· 소금빵 72개 (자동)\n· 크루아상 24개");
   });
+  it("이미 만들어진 계획에 블루베리잼 · 딸기잼이 있어도 생산 목록 · 합계에서 빠짐 (잠정 확정해 둔 것도)", () => {
+    const old: PlanDoc = { ...plan, week: { ...mon.week, items: [...mon.week.items, { name: "블루베리잼", qty: 1 }, { name: "딸기잼", qty: 2 }] } };
+    const order: OrderDoc = { v: 2, date: mon.date, provisional: { 블루베리잼: L(1) }, final: {} };
+    const rows = orderRows(old, order, T("2026-10-08", "15:19"));
+    expect(rows.some((r) => r.name === "블루베리잼" || r.name === "딸기잼")).toBe(false);
+    expect(rows.length).toBe(mon.week.items.length);
+  });
   it("최종안 계산이 빠진 날 — 마감 뒤에는 잠정(없으면 주간) 수량으로 '자동'", () => {
     const order: OrderDoc = { v: 2, date: mon.date, provisional: { 소금빵: L(70) }, final: {} };
     const rows = orderRows(plan, order, T("2026-10-10", "09:00"));
@@ -162,7 +170,7 @@ describe("빵별 상태 — 한 주기 따라가기 (월 10-12)", () => {
 
 describe("결과 · 오차 → 다음 예측", () => {
   // 10-12: 소금빵 최종 60개(보정 전 60) 만들어 50개 팔림(그중 8개 50% 할인) · 크루아상 20개 만들어 다 팔림 · 딸기잼은 빠짐
-  const r = day("2026-10-12", 100, [["소금빵", 50], ["크루아상", 20], ["딸기잼", 4]]);
+  const r = day("2026-10-12", 100, [["소금빵", 50], ["크루아상", 20], ["딸기잼", 4], ["블루베리잼", 3]]);
   r.cafe!.bakeryHalfBy = { 소금빵: 8 };
   const b = new Board([r]);
   const step = { madeOn: "2026-10-09", asOf: "2026-10-08", kind: "평일" as const, visitors: 100, weather: "모름", total: 80 };
@@ -173,6 +181,7 @@ describe("결과 · 오차 → 다음 예측", () => {
     expect(rows.find((x) => x.name === "소금빵")).toMatchObject({ made: 60, sold: 50, half: 8, full: 42, waste: 10, soldOut: false });
     expect(rows.find((x) => x.name === "크루아상")).toMatchObject({ made: 20, sold: 20, waste: 0, soldOut: true });
     expect(rows.some((x) => x.name === "딸기잼")).toBe(false);
+    expect(rows.some((x) => x.name === "블루베리잼")).toBe(false);
   });
   it("많이 만들면 줄이고, 다 팔리면 조금 올림 (하루뿐이라 1 쪽으로 당김)", () => {
     const c = corrections([{ date: "2026-10-12", rows }], "2026-10-12");
