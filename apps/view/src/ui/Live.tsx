@@ -3,13 +3,15 @@
    - 다음 날 아침 10시(확정) 전에는 어제가 "확정 전" — 작은 글만
    - 하루가 다 안 끝난(또는 확정 전) 숫자를 작년 · 지난주 하루 전체와 견주면 틀린 비교라, 이때 비교(▲▼)는 숨김 */
 import { createContext, useContext } from "react";
-import { LIVE_LABEL, LIVE_FROM, LIVE_STALE_MIN } from "@report/core";
+import { LIVE_LABEL, LIVE_FROM, LIVE_STALE_MIN, type LiveKind } from "@report/core";
 
 export interface LiveState {
   /** 고른 날이 오늘이라 마감 전 */
   today: boolean;
   /** 마감 전 숫자가 들어간 칸 (확정 전) */
-  provisional: ("cafe" | "kids")[];
+  provisional: LiveKind[];
+  /** 오늘인데 네이버 숫자가 아직 없음 → 키즈 입장료에 네이버가 빠짐 */
+  naverMissing?: boolean;
   at: string | null;
   stale: boolean;
   problems: string[];
@@ -21,7 +23,7 @@ export const useLive = () => useContext(LiveCtx);
 export const useNoCompare = () => !!useLive();
 
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" });
-const KIND: Record<string, string> = { cafe: "카페", kids: "키즈" };
+const KIND: Record<string, string> = { cafe: "카페", kids: "키즈", naver: "네이버" };
 
 export function LiveBanner() {
   const l = useLive();
@@ -34,7 +36,7 @@ export function LiveBanner() {
             <span className="live-dot" aria-hidden /> {LIVE_LABEL}
             {l.at && <span className="live-at"> · {hm(l.at)} 기준</span>}
           </div>
-          <div className="live-sub">카페 · 키즈 POS 영수증만 매시 15분 · 45분에 받습니다. 자판기 · 네컷 · 주차 · 네이버 · 현금은 다음 날 아침 확정 때 들어옵니다.</div>
+          <div className="live-sub">카페 · 키즈 POS 영수증과 네이버 예약(이용완료 + 입장예정)을 매시 15분 · 45분에 받습니다. 자판기 · 네컷 · 주차 · 현금은 다음 날 아침 확정 때 들어옵니다.</div>
           <div className="live-sub">하루가 끝나지 않은 숫자라 작년 · 지난주 비교는 숨기고, 누계는 어제까지입니다.</div>
           {!l.provisional.length && !l.problems.length && <div className="live-sub">아직 받은 숫자가 없습니다 (첫 수집 {LIVE_FROM}).</div>}
         </>
@@ -43,6 +45,7 @@ export function LiveBanner() {
           확정 전 숫자 — 아침 10시에 확정됩니다{l.provisional.length > 0 && ` (마감 전 칸: ${l.provisional.map((k) => KIND[k]).join(" · ")})`}. 비교는 확정 뒤에 보입니다.
         </div>
       )}
+      {l.naverMissing && <div className="live-warn">⚠ 네이버 예약 숫자를 아직 받지 못해 키즈 입장료에 네이버가 빠져 있습니다</div>}
       {l.stale && <div className="live-warn">⚠ {LIVE_STALE_MIN}분 넘게 새 숫자가 오지 않았습니다 (POS 메인 PC 가 켜져 있는지 확인)</div>}
       {l.problems.map((p) => (
         <div key={p} className="live-warn">

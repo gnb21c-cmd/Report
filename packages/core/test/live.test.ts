@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Board, buildStorePart, checkLivePiece, dashboard, dayStage, liveReport, liveStale, mergeLive, sampleReports, type ReceiptSheet } from "../src";
+import { Board, buildStorePart, checkLiveNaver, checkLivePiece, dashboard, dayStage, liveNaverPart, liveReport, liveStale, mergeLive, NAVER_SLOTS, sampleReports, type NaverPart, type ReceiptSheet } from "../src";
 
 const sheet: ReceiptSheet = {
   from: "2026-10-08",
@@ -89,5 +89,64 @@ describe("마감 전 날의 누계 — 오늘(하루가 안 끝난 숫자)은 �
     expect(dashboard(board, "2026-10-01", { cumTo: "2026-09-30" }).month.total).toBe(0);
     // 옵션이 없으면 예전과 같음
     expect(full.cumTo).toBe("2026-10-08");
+  });
+});
+
+describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 + 입장예정)", () => {
+  const z = () => NAVER_SLOTS.map(() => 0);
+  const nv = (): NaverPart => {
+    const t = z();
+    t[0] = 3;
+    t[4] = 2;
+    return { v: 1, date: "2026-10-08", tickets: t, newVisitors: z(), noNew: true };
+  };
+  it("이용완료 칸 + 확정(입장예정) 칸 → 30분 칸별 판매입장권 (입장권 상품만, 신규는 모름)", () => {
+    const p = liveNaverPart(
+      "2026-10-08",
+      [
+        { product: "평일 무제한 입장권", time: "오전10:00", done: 3 },
+        { product: "단체 예약", time: "오전10:00", done: 9 },
+      ],
+      [
+        { product: "평일 무제한 입장권", time: "오전10:00", done: 1 },
+        { product: "야간자유 입장권", time: "오후6:00", done: 4 },
+      ],
+    );
+    expect(p.tickets[0]).toBe(4);
+    expect(p.tickets[NAVER_SLOTS.indexOf("18:00")]).toBe(4);
+    expect(p.tickets.reduce((a, b) => a + b, 0)).toBe(8);
+    expect(p.noNew).toBe(true);
+    expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
+  });
+  it("검사 — 30분 칸 20개 · 0 이상 정수 · 정해진 칸만 · 날짜", () => {
+    expect(checkLiveNaver(nv(), "2026-10-08")).toEqual([]);
+    expect(checkLiveNaver({ ...nv(), tickets: [1] }, "2026-10-08").length).toBeGreaterThan(0);
+    expect(checkLiveNaver({ ...nv(), tickets: nv().tickets.map((x, i) => (i ? x : -1)) }, "2026-10-08").length).toBeGreaterThan(0);
+    expect(checkLiveNaver({ ...nv(), name: "홍길동" } as any, "2026-10-08").length).toBeGreaterThan(0);
+    expect(checkLiveNaver(nv(), "2026-10-07").length).toBeGreaterThan(0);
+  });
+  it("live 문서의 네이버 → 그날 보고 · 확정 네이버가 오면 확정이 이김", () => {
+    const r = liveReport({ date: "2026-10-08", at: "t", cafe: { p: cafe(), at: "x" }, naver: { p: nv(), at: "y" } }, "2026-10-08");
+    expect(r.report?.naver?.tickets[0]).toBe(3);
+    const m1 = mergeLive(undefined, r.report);
+    expect(m1.provisional).toEqual(["cafe", "naver"]);
+    const confirmedNaver = { ...nv(), tickets: z(), noNew: undefined };
+    const m2 = mergeLive({ date: "2026-10-08", naver: confirmedNaver }, r.report);
+    expect(m2.naver).toBe(confirmedNaver);
+    expect(m2.provisional).toEqual(["cafe"]);
+  });
+  it("네이버만 있어도 그날 보고가 됨 · 틀린 네이버는 빼고 문제로", () => {
+    expect(liveReport({ date: "2026-10-08", naver: { p: nv() } }, "2026-10-08").report?.naver).toBeTruthy();
+    const bad = liveReport({ date: "2026-10-08", naver: { p: { ...nv(), tickets: [1] } } }, "2026-10-08");
+    expect(bad.report).toBeNull();
+    expect(bad.problems.some((x) => /네이버/.test(x))).toBe(true);
+  });
+  it("B 키즈 입장료 — 네이버(이용완료 + 입장예정) × 그날 단가가 들어감", () => {
+    const base = sampleReports("2026-10-08", "2026-10-08")[0];
+    const t = z();
+    t[0] = 10;
+    const withNaver = new Board([{ ...base, naver: { v: 1, date: "2026-10-08", tickets: t, newVisitors: z(), noNew: true } }]).day("2026-10-08");
+    expect(withNaver.naver).toBe(10);
+    expect(withNaver.fee.naver).toBe(10 * 12000);
   });
 });

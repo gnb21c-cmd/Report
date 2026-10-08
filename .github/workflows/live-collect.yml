@@ -1,5 +1,6 @@
 # 오늘 마감 전 영업정보 — 매시 15분 · 45분(한국 10:15 ~ 22:45) POS 메인 PC(실행기 nice-pos)에서
 # OKPOS 점주 웹의 오늘 카페 · 키즈 영수증별 엑셀 → 확정 보고와 같은 계산 → 클라우드 live/{오늘} → 보고 앱 B '마감 전 영업정보'
+# + 네이버 예약현황(오늘)의 30분 칸별 이용완료 + 확정(입장예정) 장수 → live/{오늘}.naver (키즈 입장료 계산)
 # apps/collector/src/live.ts · 규칙은 packages/core/src/live.ts. 확정 칸(reports)은 그대로 — 다음 날 아침 09:12 확정 수집
 # GitHub 클라우드에서는 돌리지 않음 (사용자 지시 — POS 에서만). POS PC 가 꺼져 있으면 켜질 때까지 기다렸다가 돎(그날 영수증이 없으면 올리지 않음)
 # GitHub 예약 실행은 5 ~ 30분 늦게 시작할 때가 있음 — B 에는 실제로 받은 시각을 보여 줌
@@ -10,8 +11,8 @@ on:
     - cron: "15,45 1-13 * * *" # 01:15 ~ 13:45 UTC = 10:15 ~ 22:45 한국, 30분마다
   # 작업 브랜치에 올리면 POS 메인 PC 에서 오늘 날짜로 확인만 (올리지 않음)
   push:
-    branches: ["feature/live-today", "feature/live-fix"]
-    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "packages/core/src/live.ts", ".github/workflows/live-collect.yml"]
+    branches: ["feature/live-today", "feature/live-fix", "feature/live-naver"]
+    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "apps/collector/src/naverBook.ts", "packages/core/src/live.ts", ".github/workflows/live-collect.yml"]
   workflow_dispatch:
     inputs:
       date:
@@ -57,6 +58,9 @@ jobs:
           TMP: ${{ runner.temp }}
           LIVE_DATE: ${{ inputs.date }}
           COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
+          # 네이버 예약현황 (오늘) — 로그인 상태는 아침 네이버 수집과 같은 곳 (POS 메인 PC 도구 폴더)
+          NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
+          NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
           OKPOS_ID: ${{ secrets.OKPOS_ID }}
           OKPOS_PW: ${{ secrets.OKPOS_PW }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

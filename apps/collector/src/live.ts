@@ -9,12 +9,16 @@
          LIVE_DATE(시험: 그 날짜 · yesterday = 어제) · COLLECT_DRY=1(올리지 않음)
    공개 저장소라 기록에는 줄 수 · 일치 여부만 (매출 숫자 · 매장 이름 없음)
    ============================================================ */
-import { buildStorePart, checkLivePiece, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
+import { buildStorePart, checkLiveNaver, checkLivePiece, isNaverTicketProduct, liveNaverPart, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
 import type { Frame } from "playwright";
 import { fbLogin, readProducts, writeLive } from "./firebase";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { NaverBook } from "./naverBook";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
 
 export const LIVE_BY = "자동 수집 (OKPOS, 마감 전)";
+export const LIVE_BY_NAVER = "자동 수집 (네이버 예약현황, 마감 전 — 이용완료 + 입장예정)";
 const env = (k: string) => process.env[k] || "";
 const kst = (ms = 0) => new Date(Date.now() + 9 * 3600e3 + ms).toISOString();
 const LABEL: Record<Store, string> = { cafe: "카페", kids: "키즈" };
@@ -96,7 +100,43 @@ async function main() {
     await ok.close().catch(() => {});
   }
   if (!dry && parts.length) await writeLive(fb, date, LIVE_BY, parts);
-  say(`${parts.length}칸 ${dry ? "확인" : "올림"} · ${Math.round((Date.now() - t0) / 1000)}초 · 로그인 ${logins}번`);
+  say(`OKPOS ${parts.length}칸 ${dry ? "확인" : "올림"} · ${Math.round((Date.now() - t0) / 1000)}초 · 로그인 ${logins}번`);
+
+  // 네이버 예약현황(오늘) — 30분 칸별 이용완료 + 확정(입장예정) 장수. 로그인은 아침 네이버 수집과 같은 상태(POS 메인 PC)
+  // 따로 올림 — 네이버가 안 돼도(로그인 풀림 등) 카페 · 키즈 숫자는 그대로. 기록에는 칸 개수만 (인원 숫자 없음)
+  const statePath = env("NAVER_STATE_DIR") ? join(env("NAVER_STATE_DIR"), "state.json") : "";
+  if (!statePath || !existsSync(statePath)) say("네이버: 로그인 상태가 없어 건너뜀 (POS 메인 PC 의 naver-login.cmd)");
+  else {
+    const nb = await NaverBook.open(statePath);
+    try {
+      await nb.enter(env("NAVER_BIZ_ID"));
+      await nb.gotoDate(date);
+      const done = await nb.readCells("완료");
+      if (!done.rows) throw new Error("회차 표를 못 찾음");
+      await nb.showStatus("확정");
+      const booked = await nb.readCells("확정");
+      await nb.showStatus("전체").catch(() => {});
+      await nb.saveState(statePath);
+      const part = liveNaverPart(date, done.cells, booked.cells);
+      const bad = checkLiveNaver(part, date);
+      const used = (cs: { product: string }[]) => cs.filter((c) => isNaverTicketProduct(c.product)).length;
+      say(`네이버: 이용완료 칸 ${used(done.cells)}개 · 입장예정 칸 ${used(booked.cells)}개 (입장권 상품) · 검사 ${bad.length ? `걸림 ${bad.length}` : "통과"}`);
+      if (bad.length) throw new Error("검사에 걸려 올리지 않음");
+      if (!dry) {
+        try {
+          await writeLive(fb, date, LIVE_BY_NAVER, [{ kind: "naver", part }]);
+          say("네이버 1칸 올림");
+        } catch (e) {
+          // 보안 규칙에 naver 칸이 아직 없으면 403 — 카페 · 키즈는 이미 올라감
+          problems.push(`네이버 올리기: ${mask((e as Error).message)}${/403/.test(String((e as Error).message)) ? " — Firebase 보안 규칙(live 의 naver 칸) 붙여 넣기 필요" : ""}`);
+        }
+      }
+    } catch (e) {
+      problems.push(`네이버: ${mask((e as Error).message)}`);
+    } finally {
+      await nb.close().catch(() => {});
+    }
+  }
   if (problems.length) {
     for (const p of problems) say(`문제 — ${p}`);
     process.exit(1);

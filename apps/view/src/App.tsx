@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, liveReport, liveStale, mergeLive, settlements, todayKst, type CashPart, type DayReport } from "@report/core";
+import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, liveReport, liveStale, mergeLive, settlements, todayKst, type CashPart, type DayReport, type LiveKind } from "@report/core";
 import { LiveCtx, type LiveState } from "./ui/Live";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
@@ -31,7 +31,7 @@ export function App() {
   const d = useData();
   // 오늘 마감 전 영업정보 — 오늘 · 어제 live 문서를 검사해 통과한 칸만, 확정 칸이 없는 자리에 (폰 저장소에는 쌓지 않음)
   const lives = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof liveReport> & { provisional: ("cafe" | "kids")[]; merged: DayReport }>();
+    const m = new Map<string, ReturnType<typeof liveReport> & { provisional: LiveKind[]; merged: DayReport }>();
     const confirmed = new Map(d.reports.map((r) => [r.date, r]));
     for (const [date, doc] of Object.entries(d.live)) {
       if (!doc) continue;
@@ -111,7 +111,15 @@ export function App() {
   // 오늘은 마감 전 · 어제가 아직 확정 전(아침 10시 전)이면 '확정 전' — 둘 다 비교(▲▼)를 숨김
   const liveState: LiveState | null =
     stage === "live" || date > closed
-      ? { today: stage === "live", provisional: lv?.provisional || [], at: lv?.at || null, stale: stage === "live" && liveStale(lv?.at, new Date(now)), problems: lv?.problems || [] }
+      ? {
+          today: stage === "live",
+          provisional: lv?.provisional || [],
+          at: lv?.at || null,
+          stale: stage === "live" && liveStale(lv?.at, new Date(now)),
+          problems: lv?.problems || [],
+          // 오늘 숫자를 받았는데 네이버만 없음(네이버 로그인 풀림 등) → 키즈 입장료가 모자라다고 알림
+          naverMissing: stage === "live" && !!lv?.report && !board.report(date)?.naver,
+        }
       : null;
   const from = board.first && board.first < addDays(to, -60) ? board.first : addDays(to, -60);
   const nav = { date, minDate: from, maxDate: to, onDate: setDate, onBack: back };
