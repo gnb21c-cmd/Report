@@ -144,6 +144,17 @@ describe("빵별 상태 — 한 주기 따라가기 (월 10-12)", () => {
     expect(madeTotal(before)).toBeNull(); // 최종 전에는 생산을 모름
     expect(orderText(mon.date, after)).toBe("[10월 12일 생산 명령서] 총 96개\n· 소금빵 72개 (자동)\n· 크루아상 24개");
   });
+  it("클라우드에서 읽을 때부터 블루베리잼 · 딸기잼을 뺌 — 매니저 확정 화면 목록 · 합계 · 7일 일괄 확정 · 이미지가 모두 계획을 이렇게 읽음", () => {
+    const raw = { ...plan, week: { ...mon.week, items: [...mon.week.items, { name: "블루베리잼", qty: 1 }], total: mon.week.total + 1 }, final: { ...mon.week, items: [{ name: "소금빵", qty: 60 }, { name: "딸기잼", qty: 2 }], total: 62 } };
+    const p = asPlan(JSON.parse(JSON.stringify(raw)))!;
+    expect(p.week!.items.some((i) => i.name === "블루베리잼")).toBe(false);
+    expect(p.week!.total).toBe(mon.week.total);
+    expect(p.final!.items.map((i) => i.name)).toEqual(["소금빵"]);
+    expect(p.final!.total).toBe(60);
+    const o = asOrder({ v: 2, date: mon.date, provisional: { 블루베리잼: L(1), 소금빵: L(70) }, final: { 딸기잼: L(2) } })!;
+    expect(Object.keys(o.provisional)).toEqual(["소금빵"]);
+    expect(Object.keys(o.final)).toEqual([]);
+  });
   it("이미 만들어진 계획에 블루베리잼 · 딸기잼이 있어도 생산 목록 · 합계에서 빠짐 (잠정 확정해 둔 것도)", () => {
     const old: PlanDoc = { ...plan, week: { ...mon.week, items: [...mon.week.items, { name: "블루베리잼", qty: 1 }, { name: "딸기잼", qty: 2 }] } };
     const order: OrderDoc = { v: 2, date: mon.date, provisional: { 블루베리잼: L(1) }, final: {} };
