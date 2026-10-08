@@ -15,10 +15,8 @@
       작년 · 최근 빵 자료가 없으면 예전처럼 예상 방문객 × 방문객 1명당 개수
    계산은 여기 한 곳 — 작업지시 앱 · GitHub 예약 작업이 같은 식을 씀
    ============================================================ */
-import type { Sector } from "./classify";
 import { addDays, dayRange, weekday } from "./dates";
 import type { Board } from "./metrics";
-import type { DayReport, ProductTuple, StorePart } from "./part";
 import { holidayName, NOT_BREAD } from "./rules";
 import { currentSettings, DEFAULT_BREAD_WEIGHTS, type BreadWeights } from "./settings";
 import { seasonOf, type DayWeather, type WeatherMap } from "./weather";
@@ -61,55 +59,6 @@ export function weatherClass(w?: DayWeather | null): WeatherClass {
   if (w.tempMax != null && w.tempMax <= 3) return "추움";
   if (w.tempMax != null && w.tempMax >= 15 && w.tempMax <= 27) return "쾌적";
   return w.tempMax == null ? "모름" : "보통";
-}
-
-/** 추정으로 채운 하루치 표시 (meta.cafe.by) — 계획 계산에만 쓰고 클라우드에는 쓰지 않음 */
-export const ESTIMATED_BY = "추정 (지난 같은 요일 평균)";
-export const isEstimated = (r: DayReport | null | undefined) => r?.meta?.cafe?.by === ESTIMATED_BY;
-
-/**
- * 아직 실적이 안 들어온 날을 지난 같은 요일 두 번의 평균으로 채운 하루치 (카페만)
- * 목요일 아침 6시 주간안: 수요일 실적은 아침 09:12 에 들어오므로 → 지난주 · 지지난주 수요일 평균으로 채워 셈
- * 같은 요일 · 같은 날 유형(평일 · 금요일 · 휴일)이고 카페 자료가 있는 가장 가까운 두 날 (8주 안, 쉰 날은 건너뜀). 없으면 null
- * 손님(잔 수) · 빵별 개수 · 매출을 평균. 50% 할인 · 폐기 결과는 없음 (보정 계산에 쓰지 않음)
- */
-export function estimateDay(board: Board, date: string, n = 2): DayReport | null {
-  const kind = dayKind(date);
-  const src: StorePart[] = [];
-  for (let k = 1; k <= 8 && src.length < n; k++) {
-    const d = addDays(date, -7 * k);
-    const c = board.report(d)?.cafe;
-    if (c && !isEstimated(board.report(d)) && dayKind(d) === kind) src.push(c);
-  }
-  if (!src.length) return null;
-  const mean = (f: (p: StorePart) => number | undefined) => src.reduce((a, p) => a + (Number(f(p)) || 0), 0) / src.length;
-  const prod = new Map<string, ProductTuple>();
-  for (const p of src)
-    for (const t of p.products) {
-      const key = `${t[0]}|${t[1]}`;
-      const row = prod.get(key) || [t[0], t[1], 0, 0];
-      prod.set(key, [row[0], row[1], row[2] + t[2] / src.length, row[3] + t[3] / src.length]);
-    }
-  const sectors = Object.fromEntries(Object.keys(src[0].sectors).map((k) => [k, mean((p) => p.sectors[k as Sector])])) as Record<Sector, number>;
-  const cafe: StorePart = {
-    v: 1,
-    store: "cafe",
-    date,
-    basis: src[0].basis,
-    file: ESTIMATED_BY,
-    sheetNet: null,
-    posNet: mean((p) => p.posNet),
-    voucher: mean((p) => p.voucher),
-    sectors,
-    cups: mean((p) => p.cups),
-    teams: mean((p) => p.teams),
-    teamSizes: src[0].teamSizes.map((_, i) => mean((p) => p.teamSizes[i])),
-    hourly: null,
-    products: [...prod.values()],
-    refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
-    kids: null,
-  };
-  return { date, cafe, meta: { cafe: { by: ESTIMATED_BY, at: "" } } };
 }
 
 /** 카페 방문객 (카페 자료가 없는 날은 null) */
