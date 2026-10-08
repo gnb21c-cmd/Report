@@ -1,15 +1,16 @@
 /* ============================================================
    작업지시 계획 — GitHub 가 클라우드의 실적 · 날씨 · 설정으로 셈 (packages/core/src/bakery.ts)
    - 목요일 새벽(00:47 ~ 05:17 여러 번, PLAN_MODE=week): 다음 주 월 ~ 일 주간 잠정안 → plans/{날짜}.week
-     매니저 앱에는 아침 6시부터 보임(weekPlanOpen) · 목요일 18시 전에 잠정 확정. 새벽이라 수요일 실적은 아직 없어 화요일까지로 셈
+     매니저 앱에는 아침 6시부터 보임(weekPlanOpen) · 목요일 18시 전에 잠정 확정
+     수요일 확정 실적은 아직 없어(09:12 수집) 수요일 밤 마지막 마감 전 카페 숫자(live/{수요일}, withLiveCafe)로 셈 — 없으면 화요일까지
    - 매일 15시: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
      목요일 15시에는 주간 잠정안을 다시 세지 않음(매니저가 확정하는 중에 숫자가 바뀌지 않게) — 새벽 계산이 빠졌을 때만 그때 만듦
    - 아침 09:10 자동 수집된 어제까지의 실적으로 지난 2주 빵별 결과(생산 대비 정가 판매 · 50% 할인 · 폐기)를 셈 → 보정 배수로 다시 넣음
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, floorCopy, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
-import { fbLogin, readFloorKey, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
+import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
+import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
@@ -47,7 +48,20 @@ async function main() {
     const already = (await load(monday)).week?.madeOn === today;
     if (already) console.log("주간 잠정안: 오늘 이미 셈 — 그대로 둠");
     else {
-      for (const w of makeWeek(board, weather, learned, today, asOf, corr)) {
+      // 수요일(어제) 확정 카페가 아직 없으면(새벽 — 확정 수집은 09:12) 밤 마지막 마감 전 카페 숫자로 셈 (withLiveCafe, 클라우드 live/{어제})
+      // 없거나 검사에 걸리면 화요일까지로. 날씨 배움 · 보정 배수는 확정 자료로
+      const yesterday = addDays(today, -1);
+      let wBoard = board;
+      let wAsOf = asOf;
+      if (!board.report(yesterday)?.cafe) {
+        const w = withLiveCafe(reports, await readLive(fb, yesterday), yesterday);
+        if (w.at) {
+          wBoard = new Board(w.reports);
+          wAsOf = yesterday;
+          console.log(`어제 카페: 마감 전 숫자(${new Date(Date.parse(w.at) + 9 * 3600e3).toISOString().slice(11, 16)} 기준)로 셈`);
+        } else console.log("어제 카페: 마감 전 숫자가 없어 그 전날까지로 셈");
+      }
+      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, corr)) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
       }
