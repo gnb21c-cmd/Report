@@ -1358,3 +1358,65 @@ ul.plain li {
 .bread-tbl td:first-child { word-break: keep-all; }
 .bread-tbl tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
 .bread-tbl td.warn { color: var(--bad); }
+
+/* 오늘 마감 전 영업정보 */
+.live-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff4e5;
+  color: #8a4b00;
+  border: 1px solid #ffd59a;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.live-banner.past {
+  background: #f3f4f6;
+  color: #555;
+  border-color: #e2e4e8;
+}
+.live-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+.live-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f08c00;
+  margin-right: 2px;
+  vertical-align: 1px;
+}
+.live-at {
+  font-weight: 500;
+}
+.live-sub {
+  opacity: 0.9;
+}
+.live-warn {
+  color: #b42318;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .live-banner {
+    background: #3a2a12;
+    color: #ffcf8a;
+    border-color: #5c4318;
+  }
+  :root:not([data-theme="light"]) .live-banner.past {
+    background: #23262b;
+    color: #b8bcc4;
+    border-color: #33373d;
+  }
+}
+:root[data-theme="dark"] .live-banner {
+  background: #3a2a12;
+  color: #ffcf8a;
+  border-color: #5c4318;
+}
+:root[data-theme="dark"] .live-banner.past {
+  background: #23262b;
+  color: #b8bcc4;
+  border-color: #33373d;
+}
