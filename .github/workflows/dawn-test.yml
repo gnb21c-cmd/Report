@@ -1,0 +1,23 @@
+# 시험 (합치지 않음) — 주간 잠정안을 화요일까지 / 수요일까지 실적으로 셀 때 오차 비교. 기록에는 오차 % · 주 수만
+name: 새벽 계획 시험
+on:
+  push:
+    branches: ["feature/bakery-dawn-test"]
+    paths: ["apps/collector/src/dawnTest.ts", ".github/workflows/dawn-test.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector exec tsx src/dawnTest.ts
+        env:
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
