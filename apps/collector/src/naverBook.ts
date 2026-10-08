@@ -377,7 +377,7 @@ export class NaverBook {
       await p.waitForTimeout(1500);
     }
     const out = (await p.evaluate(`(() => {
-      const KEY = /^(이용완료|완료|확정|신청|취소|노쇼|잔여예약|잔여|예약|예약가능|대기|입금대기|명|건|매|장|\/)$/;
+      const KEY = /^(이용완료|완료|확정|신청|취소|노쇼|잔여예약|잔여|예약|예약가능|대기|입금대기|명|건|매|장)$/;
       const txt = (el) => (el.innerText || "").trim();
       const shape = (el) => [...el.querySelectorAll("*")].filter((x) => !x.children.length && txt(x)).map((x) => { const t = txt(x).replace(/\s+/g, " "); if (/^[\d\s,./()]+$/.test(t)) return t.replace(/\d+/g, "9"); const w = t.replace(/\d+/g, "").trim(); return KEY.test(w) ? t.replace(/\d+/g, "9") : /\d/.test(t) ? "글9" : "글"; }).join(" ");
       const labels = [...document.querySelectorAll("body *")].filter((el) => !el.children.length && /^(이용)?완료\s*\d*$|^확정\s*\d*$|^신청\s*\d*$/.test(txt(el)) && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().top > 150);
