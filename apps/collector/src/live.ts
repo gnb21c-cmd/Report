@@ -82,6 +82,10 @@ async function main() {
         const check = partCheck(r.part).ok;
         const bad = checkLivePiece(r.part, store, date);
         say(`  ${LABEL[store]}: 판매 줄 ${sheet.lines.length}개 · ${check ? "엑셀 합계와 일치" : "엑셀 합계와 다름"} · 검사 ${bad.length ? `걸림 ${bad.length}` : "통과"}`);
+        // 장수만 (금액 없음) — 키즈 입장료 계산이 맞는지 보려고
+        const k = r.part.kids;
+        if (k) say(`    키즈 장수: 현장 결제 입장 ${k.walkIn}장 · 0원 입장 발행 ${k.issued}장 · 이벤트 무료 ${k.eventFree}장`);
+        if (store === "cafe") say(`    카페에서 쓴 키즈 사은권 · 교환권: ${(r.part.kidsCoupon || 0) > 0 ? "있음" : "없음"}`);
         if (!check || bad.length) throw new Error("검사에 걸려 올리지 않음"); // 틀린 숫자는 B 에 보내지 않음
         parts.push({ kind: store, part: r.part });
       } catch (e) {

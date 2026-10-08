@@ -31,6 +31,8 @@ const CURSOR = "report.reportCursor";
 const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
 const SETTINGS = "report.settings";
+/** 마지막으로 받은 마감 전 영업정보 (오늘 · 어제) — 다시 열 때 바로 보이게 */
+const LIVE = "report.live";
 /** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
 const DATA_SHAPE = "report.dataShape";
 const SHAPE = "2026-10-extra-2"; // 2: 같은 시각 문서를 건너뛰던 받기 고침 → 한 번 더 처음부터
@@ -50,6 +52,14 @@ function demoLive(today: string): LiveDoc {
   const at = new Date().toISOString();
   const fix = (p?: StorePart) => (p ? { p: { ...p, teams: sum(p.teamSizes) }, by: "체험판", at } : undefined);
   return { date: today, at, cafe: fix(r?.cafe), kids: fix(r?.kids) };
+}
+
+/** 폰에 남긴 마감 전 영업정보 — 오늘 · 어제 것만 */
+function cachedLive(): Record<string, LiveDoc | null> {
+  const today = todayKst();
+  const keep = [today, addDays(today, -1)];
+  const c = local.get<Record<string, LiveDoc | null>>(LIVE) || {};
+  return Object.fromEntries(Object.entries(c).filter(([d]) => keep.includes(d)));
 }
 
 /** 이 화면이 어디서 자료를 받는지 */
@@ -84,7 +94,7 @@ export function useData() {
       return c ? cleanSettings(c) : null;
     })(),
     // 체험판: 첫 수집 시각(10:15) 뒤에만 오늘 마감 전 숫자
-    live: __DEMO__ && new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16) >= LIVE_FROM ? { [todayKst()]: demoLive(todayKst()) } : {},
+    live: __DEMO__ ? (new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16) >= LIVE_FROM ? { [todayKst()]: demoLive(todayKst()) } : {}) : cachedLive(),
   }));
 
   /** 오늘 마감 전 영업정보 — 오늘 · 어제 live 문서 (읽기 2번, 아침 확정 수집 전에는 어제 것도 마감 전으로 보임) */
@@ -93,13 +103,20 @@ export function useData() {
     if (!src) return;
     const today = todayKst();
     const days = [today, addDays(today, -1)];
-    const got = await Promise.all(days.map((d) => src.live(d).catch(() => null)));
-    set((p) => ({ ...p, live: Object.fromEntries(days.map((d, i) => [d, got[i]])) }));
+    // 받기에 실패한 날(인터넷 끊김)은 갖고 있던 것을 그대로 — 없는 문서(아직 수집 전)는 null
+    const got = await Promise.all(days.map((d) => src.live(d).then((x) => ({ ok: true, x }), () => ({ ok: false, x: null }))));
+    set((p) => {
+      const live = Object.fromEntries(days.map((d, i) => [d, got[i].ok ? got[i].x : p.live[d] ?? null]));
+      local.set(LIVE, live);
+      return { ...p, live };
+    });
   }, [picked]);
 
   const sync = useCallback(async () => {
     const src = picked.source;
     if (!src) return;
+    // 오늘 마감 전 영업정보는 쌓인 자료를 읽기 전에 먼저 (폰에서 지난 자료 읽기가 몇 초 걸려 오늘이 늦게 보이던 것)
+    void syncLive();
     set((p) => ({ ...p, syncing: true, error: null }));
     if (local.get<string>(DATA_SHAPE) !== SHAPE) {
       local.set(CURSOR, null);
@@ -110,7 +127,6 @@ export function useData() {
     // 폰에 저장된 자료부터 바로 보여 줌
     const cached = await loadCached();
     set((p) => ({ ...p, reports: cached.length ? byDate([...p.reports, ...cached]) : p.reports, phase: "ready" }));
-    void syncLive();
     try {
       const got = await src.reports(local.get<string>(CURSOR));
       await saveCached(got.reports);
