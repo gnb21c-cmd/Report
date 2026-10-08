@@ -10,7 +10,7 @@ on:
     - cron: "15,45 1-13 * * *" # 01:15 ~ 13:45 UTC = 10:15 ~ 22:45 한국, 30분마다
   # 작업 브랜치에 올리면 POS 메인 PC 에서 오늘 날짜로 확인만 (올리지 않음)
   push:
-    branches: ["feature/live-today"]
+    branches: ["feature/live-today", "feature/live-fix"]
     paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "packages/core/src/live.ts", ".github/workflows/live-collect.yml"]
   workflow_dispatch:
     inputs:
