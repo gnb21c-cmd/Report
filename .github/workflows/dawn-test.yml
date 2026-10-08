@@ -3,7 +3,7 @@ name: 새벽 계획 시험
 on:
   push:
     branches: ["feature/bakery-dawn-test"]
-    paths: ["apps/collector/src/dawnTest.ts", ".github/workflows/dawn-test.yml"]
+    paths: ["apps/collector/src/dawnTest.ts", "apps/collector/src/liveCheck.ts", ".github/workflows/dawn-test.yml"]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,8 +16,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @report/collector exec tsx src/dawnTest.ts
+      - run: pnpm --filter @report/collector exec tsx src/liveCheck.ts
         env:
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+          LIVE_CHECK_DATE: "2026-10-08"
