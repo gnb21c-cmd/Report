@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, type DayReport, type DayWeather, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { asOrder, asPlan, cleanSettings, type DayReport, type DayWeather, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import type { Source } from "./source";
 
 export interface FirebaseConfig {
@@ -139,6 +139,7 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
       const { docs, last } = await since(cfg, board, "weather", after);
       return { days: docs.map(weatherOf).filter((w): w is DayWeather => !!w), last };
     },
+    live: (date) => liveDoc(cfg, board, date),
     async status() {
       return null;
     },
@@ -171,4 +172,26 @@ export async function bakeryDay(date: string): Promise<{ plan: PlanDoc | null; o
   };
   const [plan, order] = await Promise.all([one<unknown>("plans"), one<unknown>("orders")]);
   return { plan: asPlan(plan), order: asOrder(order) };
+}
+
+/** 오늘 마감 전 영업정보 — live/{날짜} 한 문서 (없으면 null). 칸 cafe · kids = 조각 JSON {p, by, at} */
+export async function liveDoc(cfg: FirebaseConfig, board: string, date: string): Promise<LiveDoc | null> {
+  try {
+    const res = await fetch(`${base(cfg, board)}/live/${date}?key=${cfg.apiKey}`);
+    if (!res.ok) return null;
+    const f = fieldsOf(await res.json());
+    const doc: LiveDoc = { date, at: f.at || undefined };
+    for (const k of ["cafe", "kids"] as const) {
+      if (!f[k]) continue;
+      try {
+        const x = JSON.parse(f[k]);
+        if (x && x.p) doc[k] = x;
+      } catch {
+        /* 깨진 칸은 검사에서 빠짐 */
+      }
+    }
+    return doc;
+  } catch {
+    return null;
+  }
 }

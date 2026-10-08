@@ -9,6 +9,7 @@
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { HeroBox } from "../ui/WeatherPanel";
+import { LiveBanner, useLive } from "../ui/Live";
 import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
@@ -26,6 +27,9 @@ export type View =
 export type Open = (v: View) => void;
 
 export function Delta({ now, before, label, money = true, missing }: { now: number | null; before: number | null; label: string; money?: boolean; missing?: string }) {
+  // 마감 전(하루가 안 끝난 숫자) · 확정 전은 하루 전체와 견주면 틀린 비교 → 숨김
+  const live = useLive();
+  if (live) return <span className="delta muted">{live.today ? "마감 전 · 비교는 마감 뒤" : "확정 전 · 비교는 확정 뒤"}</span>;
   const p = changePct(now, before);
   if (p == null) return <span className="delta muted">{missing || `${label} 비교 자료 없음`}</span>;
   const cls = p > 0 ? "up" : p < 0 ? "down" : "";
@@ -61,10 +65,12 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
+  const live = useLive();
 
   return (
     <>
-      {nothing ? (
+      <LiveBanner />
+      {live?.today ? null : nothing ? (
         <div className="banner">
           {/* 오늘은 아직 마감 전 — 다음 날 아침 사무실 입력 뒤에 보임 */}
           {d.date === todayKst()
@@ -82,7 +88,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
       <HeroBox
         label={
           <>
-            마감일 총 매출 · {shortLabel(d.date)}
+            {live?.today ? "오늘 매출 (마감 전)" : live ? "마감일 총 매출 (확정 전)" : "마감일 총 매출"} · {shortLabel(d.date)}
             {hol ? ` ${hol}` : ""}
           </>
         }
@@ -180,7 +186,8 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
             당월 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.month.total)}</div>
-          <span className="note period">({span(d.month.from, d.date, true)})</span>
+          {/* 오늘 마감 전이면 누계는 어제까지 (d.cumTo) */}
+          <span className="note period">({d.cumTo < d.month.from ? "오늘 마감 전 · 확정분 없음" : span(d.month.from, d.cumTo, true)})</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
@@ -196,7 +203,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
             {d.date.slice(2, 4)}년 총 매출 합계 <Chevron />
           </div>
           <div className="stat-value">{won(d.year.total)}</div>
-          <span className="note period">({span(`${d.date.slice(0, 4)}-01-01`, d.date, true)})</span>
+          <span className="note period">({d.cumTo < `${d.date.slice(0, 4)}-01-01` ? "오늘 마감 전 · 확정분 없음" : span(`${d.date.slice(0, 4)}-01-01`, d.cumTo, true)})</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "settle" })}>
           <div className="stat-label">
