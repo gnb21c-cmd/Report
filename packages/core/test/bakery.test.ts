@@ -24,6 +24,8 @@ import {
   weekDates,
   weekPlanDay,
   weekPlanOpen,
+  estimateDay,
+  isEstimated,
   visiblePlan,
   WEEK_PLAN_TIME,
   CONFIRM_DEADLINE,
@@ -99,6 +101,35 @@ describe("주간 잠정안은 목요일 아침 6시에 열림 (나머지 시각�
   it("잠정 확정 마감은 그대로 목요일 18시 · 최종은 그대로 3일 전", () => {
     expect(CONFIRM_DEADLINE).toBe("18:00");
     expect(finalDay("2026-10-19")).toBe("2026-10-16");
+  });
+});
+
+describe("목요일 아침 6시 주간안 — 수요일 실적은 아직 없어 지난주 · 지지난주 수요일로 채움", () => {
+  // 화요일(10-13)까지 실적. 수요일 10-07 · 09-30 · 09-23 은 서로 다르게
+  const wed = (d: string, cups: number, bread: [string, number][]) => day(d, cups, bread);
+  const base = make("2026-08-01", "2026-10-13", () => 1).filter((r) => !["2026-10-07", "2026-09-30", "2026-09-23"].includes(r.date));
+  const b = new Board([...base, wed("2026-10-07", 120, [["소금빵", 40]]), wed("2026-09-30", 80, [["소금빵", 20], ["크루아상", 6]]), wed("2026-09-23", 60, [["소금빵", 10]])]);
+  it("지난주(10-07) · 지지난주(09-30) 수요일의 평균 — 손님(잔 수) · 빵별 개수", () => {
+    const e = estimateDay(b, "2026-10-14")!;
+    expect(e.date).toBe("2026-10-14");
+    expect(e.cafe!.cups).toBe(100);
+    const q = Object.fromEntries(e.cafe!.products.map((p) => [p[0], p[2]]));
+    expect(q).toEqual({ 소금빵: 30, 크루아상: 3 });
+    expect(isEstimated(e)).toBe(true);
+    // 50% 할인 · 폐기 결과는 없음 (실제로 판 날이 아니라 보정 계산에 쓰지 않음)
+    expect(e.cafe!.bakeryHalfBy).toBeUndefined();
+  });
+  it("자료가 없는 수요일(쉰 날)은 건너뛰고 그 전 수요일", () => {
+    const b2 = new Board([...base, wed("2026-09-30", 80, [["소금빵", 20], ["크루아상", 6]]), wed("2026-09-23", 60, [["소금빵", 10]])]);
+    const e = estimateDay(b2, "2026-10-14")!;
+    expect(e.cafe!.cups).toBe(70);
+    expect(Object.fromEntries(e.cafe!.products.map((p) => [p[0], p[2]]))).toEqual({ 소금빵: 15, 크루아상: 3 });
+  });
+  it("지난 8주 안에 같은 요일 자료가 없으면 채우지 않음", () => {
+    expect(estimateDay(new Board(make("2026-07-01", "2026-08-15", () => 1)), "2026-10-14")).toBeNull();
+  });
+  it("실제 자료는 추정이 아님", () => {
+    expect(isEstimated(b.report("2026-10-07"))).toBe(false);
   });
 });
 
