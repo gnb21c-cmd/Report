@@ -105,14 +105,25 @@ export interface OrderDoc {
   final: Record<string, OrderLine>;
 }
 
-/** 클라우드 문서 → 계획 (예전 모양 v1 은 버림) */
+/** 베이커리 생산품이 아닌 상품(NOT_BREAD — 딸기잼 · 블루베리잼)을 뺀 계획 단계 (합계도 다시) — 이미 만든 계획을 읽을 때 */
+function breadOnly(st: PlanStep | undefined): PlanStep | undefined {
+  if (!st || !st.items?.some((i) => NOT_BREAD.has(i.name))) return st;
+  const items = st.items.filter((i) => !NOT_BREAD.has(i.name));
+  return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
+}
+const breadLines = (m: Record<string, OrderLine> | undefined) => Object.fromEntries(Object.entries(m || {}).filter(([n]) => !NOT_BREAD.has(n)));
+
+/** 클라우드 문서 → 계획 (예전 모양 v1 은 버림). 생산품이 아닌 상품은 여기서 뺌 — 매니저 앱 · 현장 태블릿 · 보고 앱 · 계획 작업이 모두 이렇게 읽음 */
 export function asPlan(x: unknown): PlanDoc | null {
   const o = x as PlanDoc | null;
-  return o && o.v === 2 && typeof o.date === "string" ? o : null;
+  if (!(o && o.v === 2 && typeof o.date === "string")) return null;
+  const week = breadOnly(o.week);
+  const final = breadOnly(o.final);
+  return week === o.week && final === o.final ? o : { ...o, ...(week ? { week } : {}), ...(final ? { final } : {}) };
 }
 export function asOrder(x: unknown): OrderDoc | null {
   const o = x as OrderDoc | null;
-  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: o.provisional || {}, final: o.final || {} } : null;
+  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: breadLines(o.provisional), final: breadLines(o.final) } : null;
 }
 export const emptyOrder = (date: string): OrderDoc => ({ v: 2, date, provisional: {}, final: {} });
 
