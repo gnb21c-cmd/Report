@@ -142,7 +142,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         <button className="stat tap" onClick={() => open({ name: "naver" })} title={day.newKnown ? "" : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}>
           <div className="stat-label">네이버판매</div>
           <div className="stat-value">{count(day.naver, "장")}</div>
-          <span className="note">{day.newKnown ? `(中 신규 ${count(day.newVisitors, "장")})` : ""}</span>
+          <span className="note">{live?.provisional.includes("naver") ? "(이용완료 + 입장예정)" : day.newKnown ? `(中 신규 ${count(day.newVisitors, "장")})` : ""}</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "kids", key: "walkIn" })}>
           <div className="stat-label">현장판매</div>

@@ -51,7 +51,8 @@ function demoLive(today: string): LiveDoc {
   const r = sampleReports(today, today)[0];
   const at = new Date().toISOString();
   const fix = (p?: StorePart) => (p ? { p: { ...p, teams: sum(p.teamSizes) }, by: "체험판", at } : undefined);
-  return { date: today, at, cafe: fix(r?.cafe), kids: fix(r?.kids) };
+  const naver = r?.naver ? { p: { v: 1 as const, date: today, tickets: r.naver.tickets, newVisitors: r.naver.tickets.map(() => 0), noNew: true }, by: "체험판", at } : undefined;
+  return { date: today, at, cafe: fix(r?.cafe), kids: fix(r?.kids), naver };
 }
 
 /** 폰에 남긴 마감 전 영업정보 — 오늘 · 어제 것만 */

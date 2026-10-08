@@ -174,7 +174,7 @@ export async function bakeryDay(date: string): Promise<{ plan: PlanDoc | null; o
   return { plan: asPlan(plan), order: asOrder(order) };
 }
 
-/** 오늘 마감 전 영업정보 — live/{날짜} 한 문서 (없으면 null). 칸 cafe · kids = 조각 JSON {p, by, at} */
+/** 오늘 마감 전 영업정보 — live/{날짜} 한 문서 (없으면 null). 칸 cafe · kids · naver = 조각 JSON {p, by, at} */
 export async function liveDoc(cfg: FirebaseConfig, board: string, date: string): Promise<LiveDoc | null> {
   // 문서가 없으면(아직 수집 전) null · 인터넷 오류는 throw (갖고 있던 것을 그대로 쓰게)
   const res = await fetch(`${base(cfg, board)}/live/${date}?key=${cfg.apiKey}`, { cache: "no-store" });
@@ -182,11 +182,11 @@ export async function liveDoc(cfg: FirebaseConfig, board: string, date: string):
   if (!res.ok) throw new Error(`마감 전 영업정보 받기 오류 ${res.status}`);
   const f = fieldsOf(await res.json());
   const doc: LiveDoc = { date, at: f.at || undefined };
-  for (const k of ["cafe", "kids"] as const) {
+  for (const k of ["cafe", "kids", "naver"] as const) {
     if (!f[k]) continue;
     try {
       const x = JSON.parse(f[k]);
-      if (x && x.p) doc[k] = x;
+      if (x && x.p) (doc as any)[k] = x;
     } catch {
       /* 깨진 칸은 검사에서 빠짐 */
     }

@@ -66,8 +66,8 @@ export async function writeStores(fb: Fb, by: string, date: string, parts: { kin
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
 }
 
-/** 오늘 마감 전 영업정보 — live/{날짜} 의 cafe · kids 칸 (조각 JSON {p, by, at}). 보낸 칸만 바꿈 (packages/core/src/live.ts) */
-export async function writeLive(fb: Fb, date: string, by: string, parts: { kind: "cafe" | "kids"; part: unknown }[]): Promise<void> {
+/** 오늘 마감 전 영업정보 — live/{날짜} 의 cafe · kids · naver 칸 (조각 JSON {p, by, at}). 보낸 칸만 바꿈 (packages/core/src/live.ts) */
+export async function writeLive(fb: Fb, date: string, by: string, parts: { kind: "cafe" | "kids" | "naver"; part: unknown }[]): Promise<void> {
   if (!parts.length) return;
   const now = new Date().toISOString();
   const fields: Record<string, any> = { date: str(date), at: { timestampValue: now } };
