@@ -12,6 +12,8 @@
 import { buildStorePart, checkLivePiece, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
 import type { Frame } from "playwright";
 import { fbLogin, readProducts, writeLive } from "./firebase";
+import { join } from "node:path";
+import { NaverBook } from "./naverBook";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
 
 export const LIVE_BY = "자동 수집 (OKPOS, 마감 전)";
@@ -94,6 +96,21 @@ async function main() {
     }
   } finally {
     await ok.close().catch(() => {});
+  }
+  // 시험: 네이버 예약현황(오늘) 화면 구조만 기록 (LIVE_NAVER=probe — 글 모양 · 개수만, 이름 · 인원 없음)
+  if (env("LIVE_NAVER") === "probe" && env("NAVER_STATE_DIR")) {
+    const nb = await NaverBook.open(join(env("NAVER_STATE_DIR"), "state.json"));
+    try {
+      await nb.enter(env("NAVER_BIZ_ID"));
+      await nb.gotoDate(date);
+      const { cells, rows } = await nb.readCells();
+      say(`네이버 예약현황 ${date}: 회차 ${rows}줄 · 이용완료 칸 ${cells.length}개`);
+      await nb.probe(date);
+    } catch (e) {
+      say(`네이버: ${mask((e as Error).message)}`);
+    } finally {
+      await nb.close().catch(() => {});
+    }
   }
   if (!dry && parts.length) await writeLive(fb, date, LIVE_BY, parts);
   say(`${parts.length}칸 ${dry ? "확인" : "올림"} · ${Math.round((Date.now() - t0) / 1000)}초 · 로그인 ${logins}번`);

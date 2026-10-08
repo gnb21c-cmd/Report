@@ -10,8 +10,8 @@ on:
     - cron: "15,45 1-13 * * *" # 01:15 ~ 13:45 UTC = 10:15 ~ 22:45 한국, 30분마다
   # 작업 브랜치에 올리면 POS 메인 PC 에서 오늘 날짜로 확인만 (올리지 않음)
   push:
-    branches: ["feature/live-today", "feature/live-fix"]
-    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "packages/core/src/live.ts", ".github/workflows/live-collect.yml"]
+    branches: ["feature/live-today", "feature/live-fix", "feature/live-naver"]
+    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "apps/collector/src/naverBook.ts", "packages/core/src/live.ts", ".github/workflows/live-collect.yml"]
   workflow_dispatch:
     inputs:
       date:
@@ -57,6 +57,10 @@ jobs:
           TMP: ${{ runner.temp }}
           LIVE_DATE: ${{ inputs.date }}
           COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
+          # 네이버 예약현황 (오늘) — 로그인 상태는 아침 네이버 수집과 같은 곳 (POS 메인 PC 도구 폴더)
+          NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
+          NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
+          LIVE_NAVER: ${{ github.event_name == 'push' && 'probe' || '' }}
           OKPOS_ID: ${{ secrets.OKPOS_ID }}
           OKPOS_PW: ${{ secrets.OKPOS_PW }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

@@ -381,7 +381,7 @@ export class NaverBook {
       const freq = {};
       for (const el of leafs) { const t = txt(el); if (t.length <= 12 && /\\d/.test(t)) { const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " "); freq[k] = (freq[k] || 0) + 1; } }
       window.__cells = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + "×" + n).join(" | ");
-      window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음");
+      window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음") + " / 확정: " + (shape("확정") || "없음") + " / 신청: " + (shape("신청") || "없음") + " / 취소: " + (shape("취소") || "없음");
       return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/), buttons: document.querySelectorAll("button").length };
     })()`)) as Record<string, number>;
     say(`  글 모양 — ${mask(String(await p.evaluate("window.__shape").catch(() => "")))}`);
