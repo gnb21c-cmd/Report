@@ -9,7 +9,7 @@
          LIVE_START(10:00) · LIVE_END(22:30) · LIVE_EVERY(분, 10) · LIVE_CYCLES(시험: 몇 번 돌고 끝) · LIVE_DATE(시험: 그 날짜 · yesterday = 어제) · COLLECT_DRY=1(올리지 않음)
    공개 저장소라 기록에는 줄 수 · 일치 여부 · 로그인 횟수만 (매출 숫자 · 매장 이름 없음)
    ============================================================ */
-import { buildStorePart, checkLivePiece, parseReceiptSheet, partCheck, sectorLookup, SheetError } from "@report/core";
+import { buildStorePart, checkLivePiece, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
 import type { Frame } from "playwright";
 import { fbLogin, readProducts, writeLive } from "./firebase";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
@@ -59,12 +59,13 @@ async function main() {
     timeout(
       (async () => {
         await ok.pickShop(mf!, store);
-        return ok.download(mf!, date);
+        return ok.download(mf!, date, { allowEmpty: true });
       })(),
       120_000,
     );
 
   let n = 0;
+  let fresh = false;
   let sentTotal = 0;
   let fails = 0;
   try {
@@ -79,7 +80,9 @@ async function main() {
       n++;
       const date = env("LIVE_DATE") === "yesterday" ? new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10) : env("LIVE_DATE") || today();
       try {
-        if (!mf) await login();
+        if (fresh) await relogin();
+        else if (!mf) await login();
+        fresh = false;
         if (fb && Date.now() - fbAt > 50 * 60_000) {
           fb = await fbLogin(fbEnv);
           fbAt = Date.now();
@@ -95,16 +98,11 @@ async function main() {
             await relogin();
             d = await fetchDay(store, date);
           }
-          let sheet;
-          try {
-            sheet = parseReceiptSheet(readRows(d.buf));
-          } catch (e) {
-            if (e instanceof SheetError && d.rows === 0) {
-              say(`  ${LABEL[store]}: 아직 영수증 없음`);
-              continue;
-            }
-            throw e;
+          if (d.rows === 0) {
+            say(`  ${LABEL[store]}: 아직 영수증 없음`);
+            continue;
           }
+          const sheet = parseReceiptSheet(readRows(d.buf));
           if (sheet.from && sheet.from !== date) throw new Error(`엑셀 조회일자가 다름`);
           const r = buildStorePart({ store, date, file: `OKPOS 마감 전 ${LABEL[store]}`, sheet, sectorOf: sectorLookup(table) });
           const check = partCheck(r.part);
@@ -122,7 +120,7 @@ async function main() {
       } catch (e) {
         fails++;
         say(`${n}회 ${now} · 실패: ${mask((e as Error).message)}`);
-        mf = undefined; // 다음 차례에 다시 로그인
+        fresh = true; // 다음 차례에 새 브라우저로 다시 로그인 (같은 브라우저에서 다시 로그인하면 OKPOS 가 '세션 유지 중'으로 막음)
         if (fails >= 6) throw new Error("6번 잇달아 실패 — 멈춤 (작업 스케줄러가 다음에 다시 켬)");
       }
       if (cycles && n >= cycles) break;

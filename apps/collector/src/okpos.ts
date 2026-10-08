@@ -140,13 +140,14 @@ export class Okpos {
     say(`${store} 매장 고름 (${how || "두 번 누름"})`);
   }
 
-  /** 그 날짜 조회 → 엑셀 받기 */
-  async download(mf: Frame, date: string): Promise<{ buf: Uint8Array; rows: number; name: string }> {
+  /** 그 날짜 조회 → 엑셀 받기 (allowEmpty: 영수증이 0줄이면 엑셀을 누르지 않고 rows 0 으로 — 마감 전 전송기용, OKPOS 가 '출력할 자료가 없습니다'만 띄우고 파일을 안 줌) */
+  async download(mf: Frame, date: string, opts: { allowEmpty?: boolean } = {}): Promise<{ buf: Uint8Array; rows: number; name: string }> {
     await mf.evaluate(`document.getElementById("date1").value = ${JSON.stringify(date)}`);
     await mf.evaluate(`window.__searched = false; (function () { var old = window.mySheet1_OnSearchEnd; window.mySheet1_OnSearchEnd = function () { window.__searched = true; if (old) return old.apply(this, arguments); }; })(); fnSearch();`);
     const done = await until(mf, `window.__searched === true`, 60000);
     const rows = Number(await mf.evaluate("mySheet1.RowCount()"));
     if (!done && !(rows > 0)) throw new Error("조회가 60초 안에 안 끝남");
+    if (opts.allowEmpty && done && rows === 0) return { buf: new Uint8Array(), rows: 0, name: "" };
     const dl = this.page.waitForEvent("download", { timeout: 90000 });
     await mf.evaluate(`doAction("excel", 1)`);
     const d = await dl;
