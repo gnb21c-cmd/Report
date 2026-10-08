@@ -134,6 +134,20 @@ export function mergeLive(confirmed: DayReport | undefined, live: DayReport | nu
   return out;
 }
 
+/**
+ * 아직 확정 카페 칸이 없는 날을 그날 마감 전 숫자(검사를 통과한 카페 칸)로 채운 보고 목록 — 목요일 새벽 주간 계획에서 수요일
+ * 확정 카페가 있으면 그대로 · 마감 전 문서가 없거나 검사에 걸려도 그대로 (그때는 화요일까지로 셈). at = 그 카페 숫자를 받은 시각
+ */
+export function withLiveCafe(reports: DayReport[], doc: LiveDoc | null | undefined, date: string): { reports: DayReport[]; at: string | null } {
+  if (!doc || reports.some((r) => r.date === date && r.cafe)) return { reports, at: null };
+  const lr = liveReport(doc, date);
+  const cafe = lr.report?.cafe;
+  if (!cafe) return { reports, at: null };
+  const had = reports.find((r) => r.date === date);
+  const day: DayReport = { ...(had || { date }), date, cafe, meta: { ...had?.meta, cafe: lr.report!.meta!.cafe } };
+  return { reports: [...reports.filter((r) => r.date !== date), day], at: doc.cafe?.at || lr.at };
+}
+
 const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 
 /** 새 숫자가 늦는지 — 받는 시간(10:15 ~ 22:45) 안에서 LIVE_STALE_MIN 분 넘게 새 숫자가 없으면 (첫 수집 직후 · 마지막 뒤 밤에는 아님) */

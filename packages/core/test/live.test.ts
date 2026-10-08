@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Board, buildStorePart, checkLiveNaver, checkLivePiece, dashboard, dayStage, liveNaverPart, liveReport, liveStale, mergeLive, NAVER_SLOTS, sampleReports, type NaverPart, type ReceiptSheet } from "../src";
+import { Board, buildStorePart, checkLiveNaver, checkLivePiece, dashboard, dayStage, liveNaverPart, liveReport, liveStale, mergeLive, NAVER_SLOTS, sampleReports, withLiveCafe, type NaverPart, type ReceiptSheet } from "../src";
 
 const sheet: ReceiptSheet = {
   from: "2026-10-08",
@@ -148,5 +148,29 @@ describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 + 
     const withNaver = new Board([{ ...base, naver: { v: 1, date: "2026-10-08", tickets: t, newVisitors: z(), noNew: true } }]).day("2026-10-08");
     expect(withNaver.naver).toBe(10);
     expect(withNaver.fee.naver).toBe(10 * 12000);
+  });
+});
+
+describe("목요일 새벽 주간 계획 — 수요일은 밤 마지막 마감 전 카페 숫자로 (확정 전이니까)", () => {
+  const doc = { date: "2026-10-08", at: "2026-10-08T12:38:00Z", cafe: { p: cafe(), at: "2026-10-08T12:38:00Z" } };
+  it("확정 카페가 없으면 검사를 통과한 마감 전 카페로 채움 · 받은 시각", () => {
+    const r = withLiveCafe([{ date: "2026-10-07", cafe: cafe() }], doc, "2026-10-08");
+    expect(r.reports.find((x) => x.date === "2026-10-08")?.cafe?.posNet).toBe(15000);
+    expect(r.at).toBe("2026-10-08T12:38:00Z");
+  });
+  it("그날 다른 칸(키즈 · 현금 등)이 먼저 있으면 그대로 두고 카페만", () => {
+    const kids = { ...cafe(), store: "kids" as const };
+    const r = withLiveCafe([{ date: "2026-10-08", kids, meta: { kids: { by: "A", at: "z" } } }], doc, "2026-10-08");
+    const d = r.reports.find((x) => x.date === "2026-10-08")!;
+    expect(d.kids).toBe(kids);
+    expect(d.cafe?.posNet).toBe(15000);
+  });
+  it("확정 카페가 있거나 · 마감 전 문서가 없거나 · 검사에 걸리면 그대로 (화요일까지로 셈)", () => {
+    const confirmed = [{ date: "2026-10-08", cafe: cafe() }];
+    expect(withLiveCafe(confirmed, doc, "2026-10-08")).toEqual({ reports: confirmed, at: null });
+    expect(withLiveCafe([], null, "2026-10-08").at).toBeNull();
+    const bad = cafe();
+    bad.teams += 2;
+    expect(withLiveCafe([], { ...doc, cafe: { p: bad } }, "2026-10-08").reports).toEqual([]);
   });
 });

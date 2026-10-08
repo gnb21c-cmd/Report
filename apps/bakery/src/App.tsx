@@ -1,6 +1,6 @@
 /* ============================================================
    D  — 베이커리 매니저 작업지시 (…/d/, 매니저 폰)
-        [주간 잠정] 목요일 15시에 나온 다음 주 월 ~ 일 계획을 요일별로 잠정 확정 (목 18시 마감)
+        [주간 잠정] 목요일 아침 6시에 나온 다음 주 월 ~ 일 계획을 요일별로 잠정 확정 (목 18시 마감)
         [최종 확정] 매일 15시에 나온 3일 뒤 최종안을 18시 전에 확정 (금 → 월 … 목 → 일)
         [명령서] 오늘 생산 · 내일 준비 (카톡 보내기) · [결과] 날짜별 생산 · 판매 · 50% · 폐기 · [1~4주] 전망
    D-1 — 현장 태블릿 (…/d1/<열쇠>/, 로그인 없음): 아침 6시부터 오늘 생산 + 내일 준비 두 칸
@@ -27,6 +27,8 @@ import {
   weekDates,
   weekPlanDay,
   WEEKDAY_KO,
+  visiblePlan,
+  WEEK_PLAN_TIME,
   type BreadResult,
   type OrderDoc,
   type OrderRow,
@@ -144,7 +146,7 @@ function useDay(api: Api, date: string) {
     setLoaded(false);
     try {
       const [p, o] = await Promise.all([api.plan(date), api.order(date)]);
-      setPlan(p);
+      setPlan(visiblePlan(p, nowKst()));
       setOrder(o);
       setErr("");
     } catch (e) {
@@ -159,7 +161,7 @@ function useDay(api: Api, date: string) {
   return { plan, order, setOrder, err, loaded, reload: load };
 }
 
-/** 다가오는 주 — 목요일(15시 뒤)부터는 다음 주, 그 전에는 이번 주 계획이 나와 있는 주 */
+/** 다가오는 주 (다음 주 월요일) — 그 주 계획은 목요일 아침 6시부터 보임 */
 function comingMonday(today: string): string {
   const thisMon = addDays(today, -((weekday(today) + 6) % 7));
   return addDays(thisMon, 7);
@@ -223,7 +225,7 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
     setImgBusy(true);
     setImgMsg("");
     try {
-      const docs = await Promise.all(dates.map(async (d) => ({ d, p: await api.plan(d), o: await api.order(d) })));
+      const docs = await Promise.all(dates.map(async (d) => ({ d, p: visiblePlan(await api.plan(d), nowKst()), o: await api.order(d) })));
       if (!docs.some((x) => x.p?.week)) throw new Error("이 주 계획이 아직 없습니다.");
       const tot = new Map<string, number>();
       for (const { p, o } of docs) {
@@ -260,7 +262,7 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
         </button>
       </div>
       <p className="muted center">
-        {shortLabel(thursday)} 15시 계획 · {CONFIRM_DEADLINE} 전에 잠정 확정 (안 하면 계획 수량 그대로 잠정)
+        {shortLabel(thursday)} 아침 {WEEK_PLAN_TIME.replace(/^0/, "")} 계획 · {CONFIRM_DEADLINE} 전에 잠정 확정 (안 하면 계획 수량 그대로 잠정)
       </p>
       <div className="chips">
         {dates.map((d) => (
@@ -328,7 +330,8 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
       let n = 0;
       for (const d of weekDays) {
         if (after(addDays(d, -FINAL_LEAD))) continue;
-        const [p, o] = await Promise.all([api.plan(d), api.order(d)]);
+        const [raw, o] = await Promise.all([api.plan(d), api.order(d)]);
+        const p = visiblePlan(raw, nowKst());
         if (!p?.week) continue;
         const have = o?.provisional || {};
         const lines = Object.fromEntries(p.week.items.filter((i) => !have[i.name]).map((i) => [i.name, d === date ? valueOf(i.name, i.qty) : i.qty]));
@@ -401,7 +404,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
       </section>
       {err && <p className="error box">{err}</p>}
       {loaded && !err && !step && (
-        <p className="empty box">{kind === "final" ? `${shortLabel(date)} 최종안은 ${shortLabel(addDays(date, -FINAL_LEAD))} 15시에 나옵니다 (주간 계획이 있는 날만).` : `이 주 계획은 ${shortLabel(weekPlanDay(date))} 15시에 나옵니다.`}</p>
+        <p className="empty box">{kind === "final" ? `${shortLabel(date)} 최종안은 ${shortLabel(addDays(date, -FINAL_LEAD))} 15시에 나옵니다 (주간 계획이 있는 날만).` : `이 주 계획은 ${shortLabel(weekPlanDay(date))} 아침 6시에 나옵니다.`}</p>
       )}
       {rows.length > 0 && (
         <div className="rows">
@@ -460,9 +463,9 @@ function OutlookView({ api, monday }: { api: Api; monday: string }) {
     <main className="content">
       <section className="card">
         <h2>앞으로 1~4주 하루 생산 개수</h2>
-        <p className="muted">평일 · 휴일 하루 평균 (날씨는 모름으로 셈) — 인원 · 재료 계획용 · 목요일 15시에 새로 셈</p>
+        <p className="muted">평일 · 휴일 하루 평균 (날씨는 모름으로 셈) — 인원 · 재료 계획용 · 목요일 아침 6시에 새로 셈</p>
         {(next.err || cur.err) && <p className="error">{next.err || cur.err}</p>}
-        {next.loaded && cur.loaded && !plan?.outlook && <p className="empty">아직 없습니다 — 목요일 15시 주간 계획과 함께 나옵니다.</p>}
+        {next.loaded && cur.loaded && !plan?.outlook && <p className="empty">아직 없습니다 — 목요일 아침 6시 주간 계획과 함께 나옵니다.</p>}
         {plan?.outlook && (
           <table>
             <thead>
