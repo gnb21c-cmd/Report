@@ -1,6 +1,8 @@
 /* 클라우드(Firebase) 쓰기 — 입력 화면 cloud.ts writePieces 와 같은 모양으로 cafe · kids 칸과 정리한 줄을 올림
    계정: 날씨와 같은 전용 계정(WEATHER_EMAIL) — senders 명단에 있어야 보안 규칙이 쓰기를 허락함 */
 
+import type { LiveDoc } from "@report/core";
+
 export interface Fb {
   apiKey: string;
   projectId: string;
@@ -66,6 +68,16 @@ export async function writeStores(fb: Fb, by: string, date: string, parts: { kin
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
 }
 
+/** 오늘 마감 전 영업정보 — live/{날짜} 의 cafe · kids · naver 칸 (조각 JSON {p, by, at}). 보낸 칸만 바꿈 (packages/core/src/live.ts) */
+export async function writeLive(fb: Fb, date: string, by: string, parts: { kind: "cafe" | "kids" | "naver"; part: unknown }[]): Promise<void> {
+  if (!parts.length) return;
+  const now = new Date().toISOString();
+  const fields: Record<string, any> = { date: str(date), at: { timestampValue: now } };
+  for (const p of parts) fields[p.kind] = str(JSON.stringify({ p: p.part, by, at: now }));
+  const mask = Object.keys(fields).map((k) => `updateMask.fieldPaths=${k}`).join("&");
+  await http(`${base(fb)}/boards/${fb.board}/live/${date}?${mask}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ fields }) });
+}
+
 /** 작업지시 계획 쓰기 — plans/{날짜} = { date, at, json } */
 export async function writePlans(fb: Fb, plans: { date: string; json: string }[]): Promise<void> {
   if (!plans.length) return;
@@ -73,6 +85,28 @@ export async function writePlans(fb: Fb, plans: { date: string; json: string }[]
   const now = new Date().toISOString();
   const writes = plans.map((p) => ({ update: { name: `${root}/plans/${p.date}`, fields: { date: str(p.date), at: { timestampValue: now }, json: str(p.json) } } }));
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
+}
+
+/** 마감 전 영업정보 읽기 — live/{날짜} (없으면 null). 칸 cafe · kids · naver = 조각 JSON {p, by, at} */
+export async function readLive(fb: Fb, date: string): Promise<LiveDoc | null> {
+  let doc: any;
+  try {
+    doc = await http(`${base(fb)}/boards/${fb.board}/live/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+  } catch {
+    return null;
+  }
+  const out: LiveDoc = { date, at: doc.fields?.at?.timestampValue || undefined };
+  for (const k of ["cafe", "kids", "naver"] as const) {
+    const v = doc.fields?.[k]?.stringValue;
+    if (!v) continue;
+    try {
+      const x = JSON.parse(v);
+      if (x && x.p) (out as any)[k] = x;
+    } catch {
+      /* 깨진 칸은 검사에서 빠짐 */
+    }
+  }
+  return out;
 }
 
 /** 작업지시 계획 읽기 (없으면 undefined) */

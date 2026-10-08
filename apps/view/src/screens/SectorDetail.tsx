@@ -35,6 +35,7 @@ import { BarChart } from "../charts/BarChart";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
 import { HeroBox } from "../ui/WeatherPanel";
+import { useLive } from "../ui/Live";
 import { BOX_LABEL, Delta } from "./Home";
 import { DetailHeader, md, Seg, type Nav } from "./parts";
 
@@ -62,6 +63,8 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
   const yMax = Math.max(0, ...(today?.sales || []), ...avg.sales.map((v) => v || 0));
   const unit = kids ? "장" : "명";
   const bread = useBakeryDoc(board, box === "베이커리" ? date : "");
+  // 마감 전 · 확정 전 숫자면 4주 추세 · 분석 글은 틀린 판단이 되므로 숨김
+  const notClosed = !!useLive();
 
   return (
     <>
@@ -119,21 +122,30 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           )}
         </ChartCard>
 
-        <TrendCard trend={trend} />
+        {notClosed ? (
+          <section className="card">
+            <h2>추세 · 분석</h2>
+            <p className="empty">마감 전(확정 전) 숫자라 4주 추세와 분석은 확정(다음 날 아침 10시) 뒤에 보입니다.</p>
+          </section>
+        ) : (
+          <>
+            <TrendCard trend={trend} />
 
-        <section className="card">
-          <h2>분석</h2>
-          {analysis.map((s) => (
-            <div className="analysis-part" key={s.title}>
-              <h3>{s.title}</h3>
-              <ul className="analysis">
-                {s.lines.map((l) => (
-                  <li key={l}>{l}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </section>
+            <section className="card">
+              <h2>분석</h2>
+              {analysis.map((s) => (
+                <div className="analysis-part" key={s.title}>
+                  <h3>{s.title}</h3>
+                  <ul className="analysis">
+                    {s.lines.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          </>
+        )}
 
         {box === "베이커리" && <BreadTable board={board} date={date} doc={bread} />}
       </main>
@@ -296,11 +308,13 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
 function BreadCount({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
   const t = useMemo(() => breadTotals(dayResult(board, date, doc?.plan, doc?.order)), [board, date, doc]);
   const sales = !!board.report(date)?.cafe;
+  // 오늘 마감 전에는 아직 안 팔린 것이라 '폐기'가 아니라 '남음'
+  const open = !!useLive()?.today;
   const cells: [string, number | null][] = [
     ["총 생산", t.made],
     ["정가판매", sales ? t.full : null],
     ["할인판매", sales ? t.half : null],
-    ["폐기", sales ? t.waste : null],
+    [open ? "남음 (마감 전)" : "폐기", sales ? t.waste : null],
   ];
   return (
     <div className="quad" aria-label="베이커리 개수">
@@ -318,6 +332,7 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
 function BreadTable({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
   const rows = useMemo(() => dayResult(board, date, doc?.plan, doc?.order), [board, date, doc]);
   const hasSales = !!board.report(date)?.cafe;
+  const open = !!useLive()?.today;
   const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("ko-KR"));
   const sum = (f: (r: (typeof rows)[number]) => number | null) => (rows.some((r) => f(r) != null) ? rows.reduce((a, r) => a + (f(r) || 0), 0) : null);
   return (
@@ -338,7 +353,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
                 <th className="num">생산</th>
                 <th className="num">정가판매</th>
                 <th className="num">할인판매</th>
-                <th className="num">폐기</th>
+                <th className="num">{open ? "남음" : "폐기"}</th>
               </tr>
             </thead>
             <tbody>
@@ -348,7 +363,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
                   <td className="num">{n(r.made)}</td>
                   <td className="num">{hasSales ? n(r.full) : "—"}</td>
                   <td className="num">{hasSales ? n(r.half) : "—"}</td>
-                  <td className={`num${r.waste ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
+                  <td className={`num${r.waste && !open ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -364,6 +379,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
           </table>
           <p className="note muted">
             생산 = 그날 베이커리 작업지시(D) 확정 수량 · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 다음 날 아침 수집한 영수증 · 폐기 = 생산 − 정가판매 − 할인판매
+            {open && " · 오늘은 마감 전이라 남음 = 생산 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
             {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
           </p>
         </>

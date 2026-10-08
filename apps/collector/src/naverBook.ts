@@ -135,8 +135,9 @@ export class NaverBook {
   }
 
   /** 회차 칸마다 (상품 · 시각 · 이용완료) — 칸 위치로 상품 열과 시각을 찾음. 누를 칸에는 표시(data-nv)를 붙임 */
-  async readCells(): Promise<{ cells: (Omit<NaverCellRead, "first"> & { key: number })[]; rows: number; headers: string[] }> {
+  async readCells(label: "완료" | "확정" = "완료"): Promise<{ cells: (Omit<NaverCellRead, "first"> & { key: number })[]; rows: number; headers: string[] }> {
     const r = (await this.page.evaluate(`(() => {
+      const LABEL = ${JSON.stringify(label)};
       const leaf = (el) => !el.children.length || [...el.children].every((c) => !(c.innerText || "").trim());
       const box = (el) => el.getBoundingClientRect();
       const txt = (el) => (el.innerText || "").trim();
@@ -154,8 +155,8 @@ export class NaverBook {
       const times = timeEls.map((el) => { const pt = el.parentElement ? txt(el.parentElement) : ""; return { b: box(el), t: /(오전|오후)/.test(txt(el)) || !/(오전|오후)/.test(pt) || pt.length > 15 ? txt(el) : pt }; });
       // '이용완료' 를 품은 가장 작은 칸 ('이용완료' 만 · '이용완료 7' · '이용완료7' 모두)
       // 칸이 좁으면 '완료', 넓으면 '이용완료' 로 보임 — 표 안(첫 회차 아래 · 회차 이름 오른쪽)에서만 (칸 줄은 단추일 수 있음)
-      const doneRe = /^(이용)?완료\\s*\\d*$/;
-      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => /완료/.test(txt(c))) && !el.closest("[role=tab], [role=tablist]"); });
+      const doneRe = LABEL === "확정" ? /^확정\\s*\\d*$/ : /^(이용)?완료\\s*\\d*$/;
+      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => (LABEL === "확정" ? /확정/ : /완료/).test(txt(c))) && !el.closest("[role=tab], [role=tablist]"); });
       const cells = [];
       dones.forEach((el, i) => {
         const b = box(el); const cx = b.left + b.width / 2;
@@ -166,7 +167,7 @@ export class NaverBook {
         let p = el.parentElement, n = null;
         const own = txt(el).match(/\\d+/);
         if (own) n = Number(own[0]);
-        for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace(/(이용)?완료/, "").match(/\\d+/); if (m) n = Number(m[0]); }
+        for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace(LABEL === "확정" ? /확정/ : /(이용)?완료/, "").match(/\\d+/); if (m) n = Number(m[0]); }
         el.setAttribute("data-nv", String(i));
         cells.push({ key: i, product: h ? h.t : "", time: tm ? tm.t : "", done: n == null ? 0 : n });
       });
@@ -367,6 +368,14 @@ export class NaverBook {
     }
   }
 
+  /** 예약현황 위 상태 단추 ('전체' · '확정' · '완료/노쇼' 등) 누르고 표가 바뀔 때까지 */
+  async showStatus(tab: string) {
+    const p = this.page;
+    await p.getByText(tab, { exact: true }).first().click({ timeout: 5000 });
+    await p.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+    await p.waitForTimeout(1500);
+  }
+
   /** 화면 구조 기록 — 개수 · 정해 둔 낱말만 (이름 · 숫자 없음) */
   async probe(label: string) {
     const p = this.page;
@@ -381,7 +390,7 @@ export class NaverBook {
       const freq = {};
       for (const el of leafs) { const t = txt(el); if (t.length <= 12 && /\\d/.test(t)) { const k = t.replace(/\\d/g, "9").replace(/\\s+/g, " "); freq[k] = (freq[k] || 0) + 1; } }
       window.__cells = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + "×" + n).join(" | ");
-      window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음");
+      window.__shape = "이용완료: " + (shape("이용완료") || "없음") + " / 잔여예약: " + (shape("잔여예약") || "없음") + " / 확정: " + (shape("확정") || "없음") + " / 신청: " + (shape("신청") || "없음") + " / 취소: " + (shape("취소") || "없음");
       return { rows: c(/^\\d+회차$/), times: c(/^(오전|오후)?\\s*\\d{1,2}:\\d{2}$/), done: c(/^(이용)?완료$/), remain: c(/^잔여예약$/), date: c(/\\d{4}\\.\\s*\\d{1,2}\\.\\s*\\d{1,2}\\./), all: c(/^전체$/), panelDone: c(/^완료\\s*\\d+(?:\\s*[,·]\\s*(?:취소|노쇼)\\s*\\d+)*$/), buttons: document.querySelectorAll("button").length };
     })()`)) as Record<string, number>;
     say(`  글 모양 — ${mask(String(await p.evaluate("window.__shape").catch(() => "")))}`);

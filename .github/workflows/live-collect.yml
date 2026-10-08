@@ -1,0 +1,70 @@
+# 오늘 마감 전 영업정보 — 매시 15분 · 45분(한국 10:15 ~ 22:45) POS 메인 PC(실행기 nice-pos)에서
+# OKPOS 점주 웹의 오늘 카페 · 키즈 영수증별 엑셀 → 확정 보고와 같은 계산 → 클라우드 live/{오늘} → 보고 앱 B '마감 전 영업정보'
+# + 네이버 예약현황(오늘)의 30분 칸별 이용완료 + 확정(입장예정) 장수 → live/{오늘}.naver (키즈 입장료 계산)
+# apps/collector/src/live.ts · 규칙은 packages/core/src/live.ts. 확정 칸(reports)은 그대로 — 다음 날 아침 09:12 확정 수집
+# GitHub 클라우드에서는 돌리지 않음 (사용자 지시 — POS 에서만). POS PC 가 꺼져 있으면 켜질 때까지 기다렸다가 돎(그날 영수증이 없으면 올리지 않음)
+# GitHub 예약 실행은 5 ~ 30분 늦게 시작할 때가 있음 — B 에는 실제로 받은 시각을 보여 줌
+# 공개 저장소라 기록에는 줄 수 · 일치 여부만 (매출 숫자 · 매장 이름 없음)
+name: 오늘 마감 전 영업정보
+on:
+  schedule:
+    - cron: "15,45 1-13 * * *" # 01:15 ~ 13:45 UTC = 10:15 ~ 22:45 한국, 30분마다
+  # 작업 브랜치에 올리면 POS 메인 PC 에서 오늘 날짜로 확인만 (올리지 않음)
+  push:
+    branches: ["feature/live-today", "feature/live-fix", "feature/live-naver"]
+    paths: ["apps/collector/src/live.ts", "apps/collector/src/okpos.ts", "apps/collector/src/naverBook.ts", "packages/core/src/live.ts", ".github/workflows/live-collect.yml"]
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "날짜 (YYYY-MM-DD 또는 yesterday, 비우면 오늘)"
+        required: false
+      dry:
+        description: "확인만 (올리지 않음)"
+        type: boolean
+        default: false
+# 늦게 시작한 실행이 겹치면 하나씩 (기다리는 것은 가장 새것 하나만)
+concurrency:
+  group: live-collect
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: [self-hosted, Windows, nice-pos]
+    timeout-minutes: 15
+    # POS PC 는 PowerShell 스크립트가 막혀 있어(실행 정책) cmd 로
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+      # 실행기 도구 폴더에 설치 — 기본값(사용자 폴더)이면 공개 기록에 PC 사용자 이름이 찍힘
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.tool_cache }}\setup-pnpm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 받은 꾸러미를 실행기 도구 폴더에 쌓아 두고 다시 씀 — 30분마다 도는데 매번 1분 넘게 새로 받으면 영업 중 POS PC 에 부담
+      - run: pnpm install --frozen-lockfile --store-dir "${{ runner.tool_cache }}\pnpm-store"
+      # 크롬은 한 번 받아 두고 다시 씀 (실행기 도구 폴더)
+      - run: pnpm --filter @report/collector exec playwright install chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+      - name: OKPOS 오늘 → 클라우드 live
+        run: pnpm --filter @report/collector live
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}\ms-playwright
+          # 임시 파일도 실행기 폴더에 (오류 글에 사용자 폴더 이름이 찍히지 않게)
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          LIVE_DATE: ${{ inputs.date }}
+          COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
+          # 네이버 예약현황 (오늘) — 로그인 상태는 아침 네이버 수집과 같은 곳 (POS 메인 PC 도구 폴더)
+          NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
+          NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
