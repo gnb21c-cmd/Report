@@ -109,6 +109,13 @@ async function main() {
       await nb.probeCells();
       await nb.probeCells("확정");
       await nb.probeCells("완료/노쇼");
+      // 내일은 모두 입장예정(확정) — '확정' 칸 모양 · 개수 (인원 숫자는 기록하지 않음)
+      const tomorrow = kst(86400e3).slice(0, 10);
+      await nb.gotoDate(tomorrow);
+      await nb.probeCells("확정");
+      await this_click(nb, "확정");
+      const f = await nb.readCells("확정");
+      say(`네이버 ${tomorrow} '확정' 누른 뒤: 확정 칸 ${f.cells.length}개 · 숫자 읽힌 칸 ${f.cells.filter((c) => c.done > 0).length}개`);
     } catch (e) {
       say(`네이버: ${mask((e as Error).message)}`);
     } finally {
@@ -121,6 +128,13 @@ async function main() {
     for (const p of problems) say(`문제 — ${p}`);
     process.exit(1);
   }
+}
+
+/** 시험: 상태 단추 누르기 */
+async function this_click(nb: NaverBook, tab: string) {
+  await nb.page.getByText(tab, { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
+  await nb.page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+  await nb.page.waitForTimeout(1500);
 }
 
 main().catch((e) => {

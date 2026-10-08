@@ -135,8 +135,9 @@ export class NaverBook {
   }
 
   /** 회차 칸마다 (상품 · 시각 · 이용완료) — 칸 위치로 상품 열과 시각을 찾음. 누를 칸에는 표시(data-nv)를 붙임 */
-  async readCells(): Promise<{ cells: (Omit<NaverCellRead, "first"> & { key: number })[]; rows: number; headers: string[] }> {
+  async readCells(label: "완료" | "확정" = "완료"): Promise<{ cells: (Omit<NaverCellRead, "first"> & { key: number })[]; rows: number; headers: string[] }> {
     const r = (await this.page.evaluate(`(() => {
+      const LABEL = ${JSON.stringify(label)};
       const leaf = (el) => !el.children.length || [...el.children].every((c) => !(c.innerText || "").trim());
       const box = (el) => el.getBoundingClientRect();
       const txt = (el) => (el.innerText || "").trim();
@@ -154,8 +155,8 @@ export class NaverBook {
       const times = timeEls.map((el) => { const pt = el.parentElement ? txt(el.parentElement) : ""; return { b: box(el), t: /(오전|오후)/.test(txt(el)) || !/(오전|오후)/.test(pt) || pt.length > 15 ? txt(el) : pt }; });
       // '이용완료' 를 품은 가장 작은 칸 ('이용완료' 만 · '이용완료 7' · '이용완료7' 모두)
       // 칸이 좁으면 '완료', 넓으면 '이용완료' 로 보임 — 표 안(첫 회차 아래 · 회차 이름 오른쪽)에서만 (칸 줄은 단추일 수 있음)
-      const doneRe = /^(이용)?완료\\s*\\d*$/;
-      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => /완료/.test(txt(c))) && !el.closest("[role=tab], [role=tablist]"); });
+      const doneRe = LABEL === "확정" ? /^확정\\s*\\d*$/ : /^(이용)?완료\\s*\\d*$/;
+      const dones = els.filter((el) => { const b = box(el); return b.top >= gridTop - 2 && b.left >= gridLeft - 2 && doneRe.test(txt(el)) && ![...el.children].some((c) => (LABEL === "확정" ? /확정/ : /완료/).test(txt(c))) && !el.closest("[role=tab], [role=tablist]"); });
       const cells = [];
       dones.forEach((el, i) => {
         const b = box(el); const cx = b.left + b.width / 2;
@@ -166,7 +167,7 @@ export class NaverBook {
         let p = el.parentElement, n = null;
         const own = txt(el).match(/\\d+/);
         if (own) n = Number(own[0]);
-        for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace(/(이용)?완료/, "").match(/\\d+/); if (m) n = Number(m[0]); }
+        for (let k = 0; k < 3 && p && n == null; k++, p = p.parentElement) { const m = txt(p).replace(LABEL === "확정" ? /확정/ : /(이용)?완료/, "").match(/\\d+/); if (m) n = Number(m[0]); }
         el.setAttribute("data-nv", String(i));
         cells.push({ key: i, product: h ? h.t : "", time: tm ? tm.t : "", done: n == null ? 0 : n });
       });
