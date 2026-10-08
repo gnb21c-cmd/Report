@@ -42,7 +42,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: pnpm install --frozen-lockfile
+      # 받은 꾸러미를 실행기 도구 폴더에 쌓아 두고 다시 씀 — 30분마다 도는데 매번 1분 넘게 새로 받으면 영업 중 POS PC 에 부담
+      - run: pnpm install --frozen-lockfile --store-dir "${{ runner.tool_cache }}\pnpm-store"
       # 크롬은 한 번 받아 두고 다시 씀 (실행기 도구 폴더)
       - run: pnpm --filter @report/collector exec playwright install chromium
         env:
