@@ -1,14 +1,15 @@
 /* ============================================================
    작업지시 계획 — GitHub 가 클라우드의 실적 · 날씨 · 설정으로 셈 (packages/core/src/bakery.ts)
    - 목요일 새벽(00:47 ~ 05:17 여러 번, PLAN_MODE=week): 다음 주 월 ~ 일 주간 잠정안 → plans/{날짜}.week
-     매니저 앱에는 아침 6시부터 보임(weekPlanOpen) · 목요일 18시 전에 잠정 확정. 새벽이라 수요일 실적은 아직 없어 화요일까지로 셈
+     매니저 앱에는 아침 6시부터 보임(weekPlanOpen) · 목요일 18시 전에 잠정 확정
+     새벽이라 수요일 실적은 아직 없음(정식 수집 09:12) → 화요일까지 실적 + 수요일은 지난주 · 지지난주 수요일 평균으로 채워 셈(estimateDay)
    - 매일 15시: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
      목요일 15시에는 주간 잠정안을 다시 세지 않음(매니저가 확정하는 중에 숫자가 바뀌지 않게) — 새벽 계산이 빠졌을 때만 그때 만듦
    - 아침 09:10 자동 수집된 어제까지의 실적으로 지난 2주 빵별 결과(생산 대비 정가 판매 · 50% 할인 · 폐기)를 셈 → 보정 배수로 다시 넣음
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, floorCopy, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, estimateDay, FINAL_LEAD, floorCopy, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -47,7 +48,21 @@ async function main() {
     const already = (await load(monday)).week?.madeOn === today;
     if (already) console.log("주간 잠정안: 오늘 이미 셈 — 그대로 둠");
     else {
-      for (const w of makeWeek(board, weather, learned, today, asOf, corr)) {
+      // 수요일(어제) 실적이 아직 없으면(새벽 — 정식 수집은 09:12) 지난주 · 지지난주 수요일 평균으로 채워 셈 (estimateDay, 클라우드에는 안 씀)
+      // 날씨 배움 · 보정 배수는 실제 자료(화요일까지)로
+      const yesterday = addDays(today, -1);
+      let wBoard = board;
+      let wAsOf = asOf;
+      if (!board.report(yesterday)?.cafe) {
+        const est = estimateDay(board, yesterday);
+        if (est) {
+          const had = reports.find((r) => r.date === yesterday); // 키즈 · 현금 등 다른 칸이 먼저 들어와 있으면 그대로 두고 카페만 채움
+          wBoard = new Board([...reports.filter((r) => r.date !== yesterday), { ...had, ...est, meta: { ...had?.meta, ...est.meta } }]);
+          wAsOf = yesterday;
+          console.log("수요일 실적이 아직 없어 지난주 · 지지난주 수요일 평균으로 채움");
+        } else console.log("수요일 실적이 아직 없고 지난 수요일 자료도 없어 화요일까지로 셈");
+      }
+      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, corr)) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
       }
