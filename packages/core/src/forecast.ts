@@ -277,6 +277,8 @@ export interface BreadPlan {
 /** 추세를 보는 날 수 · 최근 같은 날 유형 몇 번 · 작년 앞뒤 몇 날 · 빵 비율을 보는 날 수 · 반감 날 수 */
 export const BREAD_TREND_DAYS = 28;
 export const BREAD_RECENT_SAME = 2;
+/** 시험용(합치지 않음) */
+export const RECENT_SAME = { weekday: false };
 export const BREAD_LY_NEAR = 3;
 export const SHARE_DAYS = 14;
 export const SHARE_HALF_LIFE = 7;
@@ -330,7 +332,9 @@ export function forecastBread(board: Board, asOf: string, date: string): BreadFo
   const ly = nearSameKind(board, date, addDays(date, -364), BREAD_LY_NEAR);
   const lyNext = [...ly, ...nearSameKind(board, date, addDays(date, -357), BREAD_LY_NEAR)];
   const recent: string[] = [];
-  for (let d = asOf; recent.length < BREAD_RECENT_SAME && d > addDays(asOf, -60); d = addDays(d, -1)) if (dayKind(d) === dayKind(date) && (breadOn(board, d) || 0) > 0) recent.push(d);
+  // 시험용(합치지 않음): RECENT_SAME.weekday 면 최근 같은 '요일' 두 번 (평일 공휴일 대상은 날 유형만)
+  const sameDow = RECENT_SAME.weekday && !(dayKind(date) === "휴일" && weekday(date) !== 0 && weekday(date) !== 6);
+  for (let d = asOf; recent.length < BREAD_RECENT_SAME && d > addDays(asOf, -60); d = addDays(d, -1)) if (dayKind(d) === dayKind(date) && (!sameDow || weekday(d) === weekday(date)) && (breadOn(board, d) || 0) > 0) recent.push(d);
   const lyV = mean(ly);
   const parts = { ly: lyV == null ? null : lyV * trend, recent: mean(recent), lyNext: ly.length ? mean(lyNext)! * trend : null };
   let w = 0;

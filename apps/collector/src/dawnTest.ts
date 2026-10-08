@@ -1,6 +1,6 @@
 /* 시험 (합치지 않음) — 목요일 주간 잠정안을 '화요일까지' · '화요일 + 수요일 추정(지난 두 수요일 평균)' · '수요일까지(실제)' 로 셀 때 오차 비교
    지난 목요일마다 다음 주 월 ~ 일 계획을 두 가지로 세고 실제 판매와 견줌. 공개 저장소라 기록에는 오차 % · 주 수만 */
-import { addDays, applySettings, Board, dayRange, estimateDay, learnWeather, makeWeek, NOT_BREAD, sampleUntilYesterday, weekday, type DayReport } from "@report/core";
+import { addDays, applySettings, Board, dayRange, estimateDay, learnWeather, RECENT_SAME, makeWeek, NOT_BREAD, sampleUntilYesterday, weekday, type DayReport } from "@report/core";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
@@ -27,13 +27,17 @@ async function main() {
     const W = addDays(T, -1);
     const est = estimateDay(board, W);
     const estBoard = est ? new Board(reports.map((r): DayReport => (r.date === W ? { ...r, cafe: est.cafe, meta: { ...r.meta, ...est.meta } } : r))) : board;
-    for (const [k, asOf, bd, learnTo] of [
-      ["화요일까지", addDays(T, -2), board, addDays(T, -2)],
-      ["화요일 + 수요일 추정", est ? W : addDays(T, -2), estBoard, addDays(T, -2)],
-      ["수요일까지 (실제)", W, board, W],
+    for (const [k, asOf, bd, learnTo, dow] of [
+      ["화요일까지", addDays(T, -2), board, addDays(T, -2), false],
+      ["화요일 + 수요일 추정", est ? W : addDays(T, -2), estBoard, addDays(T, -2), false],
+      ["수요일까지 (실제)", W, board, W, false],
+      ["화요일까지 · 최근은 같은 요일", addDays(T, -2), board, addDays(T, -2), true],
+      ["수요일까지 (실제) · 최근은 같은 요일", W, board, W, true],
     ] as const) {
+      RECENT_SAME.weekday = dow;
       const learned = learnWeather(board, weather, "2025-01-01", learnTo);
       plans[k] = makeWeek(bd, weather, learned, T, asOf);
+      RECENT_SAME.weekday = false;
       const r = (res[k] ||= { tot: [], item: [], out10: [], byLead: [[], [], [], [], [], [], []] });
       plans[k].forEach((w, i) => {
         if (!has(w.date)) return;
