@@ -13,6 +13,7 @@
     "halfoff": "tsx src/halfoff.ts",
     "extra": "tsx src/extra.ts",
     "naver": "tsx src/naver.ts",
+    "live": "tsx src/live.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },

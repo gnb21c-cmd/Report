@@ -35,6 +35,16 @@ service cloud.firestore {
           && piece("cafe") && piece("kids") && piece("naver") && piece("cash") && piece("extra");
       }
 
+      // 오늘 마감 전 영업정보 — 칸 cafe · kids = 조각 JSON (POS 메인 PC 가 매시 15분 · 45분, packages/core/src/live.ts). 보는 폰은 reports 처럼 읽기만
+      match /live/{date} {
+        allow read: if true;
+        allow write: if isSender(board)
+          && date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.date == date
+          && request.resource.data.keys().hasOnly(["date", "at", "cafe", "kids"])
+          && piece("cafe") && piece("kids");
+      }
+
       // 날씨 (기상청 관측 · 오늘 예보) — 문서 이름 = 날짜. GitHub 날씨 계정이 씀
       match /weather/{date} {
         allow read: if true;

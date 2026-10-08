@@ -1,7 +1,7 @@
 /* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 클라우드에서
    → 폰 저장소 → 새로 온 것만 받기 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { cleanSettings, sampleUntilYesterday, todayKst, type DayReport, type ReportSettings, type WeatherKey, type WeatherMap } from "@report/core";
+import { addDays, cleanSettings, LIVE_FROM, sampleReports, sampleUntilYesterday, sum, todayKst, type DayReport, type LiveDoc, type ReportSettings, type StorePart, type WeatherKey, type WeatherMap } from "@report/core";
 import { boardKey, firebaseConfig, firebaseSource } from "./firebase";
 import type { OfficeStatus, Source } from "./source";
 import demoWeatherRaw from "./demoWeather.json";
@@ -22,6 +22,8 @@ export interface DataState {
   source: Source["kind"];
   /** 보고 설정 (기간 스티커 · 휴일) — 계산 전에 applySettings */
   settings: ReportSettings | null;
+  /** 오늘 마감 전 영업정보 — 오늘 · 어제의 live 문서 (폰에 쌓지 않음, 열려 있는 동안 5분마다 확인) */
+  live: Record<string, LiveDoc | null>;
 }
 
 const SYNCED = "report.syncedAt";
@@ -40,6 +42,14 @@ function demoWeather(): WeatherMap {
   for (const [date, [key, tempMax, tempMin, rainMm, src]] of Object.entries(demoWeatherRaw as unknown as Record<string, [WeatherKey, number | null, number | null, number | null, string]>))
     out[date] = { date, key, label: LABEL[key][0], icon: LABEL[key][1], tempMax, tempMin, rainMm, source: src === "o" ? "observed" : "forecast" };
   return out;
+}
+
+/** 체험판: 오늘 가짜 자료를 마감 전 영업정보로 */
+function demoLive(today: string): LiveDoc {
+  const r = sampleReports(today, today)[0];
+  const at = new Date().toISOString();
+  const fix = (p?: StorePart) => (p ? { p: { ...p, teams: sum(p.teamSizes) }, by: "체험판", at } : undefined);
+  return { date: today, at, cafe: fix(r?.cafe), kids: fix(r?.kids) };
 }
 
 /** 이 화면이 어디서 자료를 받는지 */
@@ -73,7 +83,19 @@ export function useData() {
       const c = local.get<ReportSettings>(SETTINGS);
       return c ? cleanSettings(c) : null;
     })(),
+    // 체험판: 첫 수집 시각(10:15) 뒤에만 오늘 마감 전 숫자
+    live: __DEMO__ && new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16) >= LIVE_FROM ? { [todayKst()]: demoLive(todayKst()) } : {},
   }));
+
+  /** 오늘 마감 전 영업정보 — 오늘 · 어제 live 문서 (읽기 2번, 아침 확정 수집 전에는 어제 것도 마감 전으로 보임) */
+  const syncLive = useCallback(async () => {
+    const src = picked.source;
+    if (!src) return;
+    const today = todayKst();
+    const days = [today, addDays(today, -1)];
+    const got = await Promise.all(days.map((d) => src.live(d).catch(() => null)));
+    set((p) => ({ ...p, live: Object.fromEntries(days.map((d, i) => [d, got[i]])) }));
+  }, [picked]);
 
   const sync = useCallback(async () => {
     const src = picked.source;
@@ -88,6 +110,7 @@ export function useData() {
     // 폰에 저장된 자료부터 바로 보여 줌
     const cached = await loadCached();
     set((p) => ({ ...p, reports: cached.length ? byDate([...p.reports, ...cached]) : p.reports, phase: "ready" }));
+    void syncLive();
     try {
       const got = await src.reports(local.get<string>(CURSOR));
       await saveCached(got.reports);
@@ -107,7 +130,7 @@ export function useData() {
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }
-  }, [picked]);
+  }, [picked, syncLive]);
 
   /** 저장된 자료를 지우고 처음부터 다시 받음 */
   const reload = useCallback(async () => {
@@ -124,7 +147,12 @@ export function useData() {
     // 앱을 다시 열 때(폰 화면 켬)마다 새 자료 확인
     const onVis = () => document.visibilityState === "visible" && void sync();
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    // 열려 있는 동안 5분마다 마감 전 영업정보만 (문서 두 개 — 매시 15분 · 45분에 새로 옴)
+    const t = setInterval(() => document.visibilityState === "visible" && void syncLive(), 5 * 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      clearInterval(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
