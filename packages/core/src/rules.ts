@@ -33,7 +33,7 @@ export function isOffDay(date: string): boolean {
 }
 
 /** 베이커리 매대에서 팔아도 베이커리 생산품이 아닌 상품 → 늘 '기타' (작업지시 생산 목록에서도 빠짐) */
-export const NOT_BREAD: ReadonlySet<string> = new Set(["딸기잼"]);
+export const NOT_BREAD: ReadonlySet<string> = new Set(["딸기잼", "블루베리잼"]);
 
 /** 베이커리 마감 할인 — 저녁 8시 30분부터 남은 빵 50% (이 시각 뒤에 팔린 빵 = 인기가 낮거나 많이 만든 빵)
     1~2분 일찍 집어 와 계산하는 손님이 있어 20:25 부터 봄 (매출에 할인 표기가 있는 줄만이라 앞 시간 정가 판매는 섞이지 않음) */
