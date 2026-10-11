@@ -3,8 +3,9 @@
    - 위의 '2026년 10월 ▾' 를 누르면 몇 년 몇 월로 바로 이동
    - 점: 카페·키즈 자료 모두 받음(●) · 하나만 받음(◐) · 없음(빈칸)
    - 일요일·공휴일은 빨강, 토요일은 파랑. 오늘 뒤 날짜는 누를 수 없음
+   - 마지막 날을 고르면 오른쪽이 비므로, 그 자리(마지막 날 뒤 여백)에 note — 오늘(마감 전) 안내
    ============================================================ */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, dayRange, holidayName, weekday, WEEKDAY_KO } from "@report/core";
 
 const CELL = 52;
@@ -20,9 +21,11 @@ export interface StripProps {
   latest: string | null;
   onSelect: (date: string) => void;
   onSettings: () => void;
+  /** 마지막 날 뒤 여백(오른쪽)에 보일 글 — 마지막 날을 골랐을 때만 넘김 */
+  note?: ReactNode;
 }
 
-export function CalendarStrip({ from, to, selected, present, latest, onSelect, onSettings }: StripProps) {
+export function CalendarStrip({ from, to, selected, present, latest, onSelect, onSettings, note }: StripProps) {
   const days = useMemo(() => dayRange(from, to), [from, to]);
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(selected.slice(0, 7));
@@ -106,7 +109,7 @@ export function CalendarStrip({ from, to, selected, present, latest, onSelect, o
             </button>
           );
         })}
-        <span className="strip-pad" aria-hidden />
+        <div className="strip-pad">{note}</div>
       </div>
       {picker && <MonthPicker current={shown} from={from} to={to} present={present} onClose={() => setPicker(false)} onPick={(d) => (setPicker(false), onSelect(d))} />}
     </div>

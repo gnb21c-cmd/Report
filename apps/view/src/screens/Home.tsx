@@ -1,16 +1,19 @@
 /* ============================================================
    대시보드 — 달력에서 고른 마감일의 숫자
-   ① 마감일 총 매출 + 날씨 (상세 없음)
-   ② 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 (한 줄 상자 다섯 개 → 섹터 상세)
+   ① 왼쪽 상자: 날씨 네 칸 + 날짜 · 마감일 매출 · 지난주 같은 요일 비교 (→ 하루 상세)
+   ② 오른쪽: 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 — 왼쪽 상자 높이를 다섯으로 나눈 긴 상자, 금액은 원 단위 (→ 섹터 상세)
+      위치는 마감 전 · 후 모든 날 같게. 글자는 칸에 맞춰(줄 바꿈 · 잘림 없이) 가능한 크게
    ③ 당월 매출 합계 · 전년도 같은 기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
    ⑤ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
-import { HeroBox } from "../ui/WeatherPanel";
-import { LiveBanner, useLive } from "../ui/Live";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, wonMan, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { useRef } from "react";
+import { WeatherPanel } from "../ui/WeatherPanel";
+import { LiveWarn, useLive } from "../ui/Live";
+import { useFit } from "../ui/fit";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -69,7 +72,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
 
   return (
     <>
-      <LiveBanner />
+      <LiveWarn />
       {live?.today ? null : nothing ? (
         <div className="banner">
           {/* 오늘은 아직 마감 전 — 다음 날 아침 사무실 입력 뒤에 보임 */}
@@ -85,32 +88,9 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         )
       )}
 
-      <HeroBox
-        label={
-          <>
-            {live?.today ? "오늘 매출 (마감 전)" : live ? "마감일 총 매출 (확정 전)" : "마감일 총 매출"} · {shortLabel(d.date)}
-            {hol ? ` ${hol}` : ""}
-          </>
-        }
-        value={won(day.total)}
-        date={d.date}
-        w={weather}
-        onClick={() => open({ name: "day" })}
-      >
-        <Delta now={day.total} before={d.prevWeek.m.total} label={`지난주 ${d.weekday}요일`} />
-      </HeroBox>
-
-      {/* 섹터 상자 — 다섯 개가 한 화면 폭에 (금액은 만 단위, 정확한 금액은 눌러서 상세에서) */}
-      <div className="sectors" role="list">
-        {BOXES.map((b) => (
-          <button key={b} role="listitem" className="sector tap" onClick={() => open({ name: "sector", box: b })} aria-label={`${b} ${won(day.box[b])}`}>
-            <span className="sec-label">{BOX_LABEL[b]}</span>
-            <span className="sec-line">
-              <span className="sec-value">{wonMan(day.box[b])}</span>
-              <span className="sec-pct">{day.total > 0 ? `${Math.round((day.box[b] / day.total) * 100)}%` : ""}</span>
-            </span>
-          </button>
-        ))}
+      <div className="day-top">
+        <DayBox d={d} weather={weather} hol={hol} nothing={nothing} onClick={() => open({ name: "day" })} />
+        <SectorBars d={d} open={open} />
       </div>
 
       {/* 그날 정보 — 방문인원 · 1인 평균소비 · 키즈 입장 (하루치라 섹터 바로 아래) */}
@@ -246,4 +226,88 @@ export function span(from: string, to: string, year: boolean): string {
   const nb = "\u00a0";
   const k = (x: string) => `${Number(x.slice(5, 7))}월${nb}${Number(x.slice(8, 10))}일`;
   return `${year ? `${from.slice(2, 4)}년${nb}` : ""}${k(from)} ~ ${from.slice(0, 4) !== to.slice(0, 4) ? `${to.slice(2, 4)}년${nb}` : ""}${k(to)}`;
+}
+
+/** 비교 % — 좁은 칸이라 정수(+12%), 1% 안쪽만 소수 한 자리(+0.4%) */
+function pctWhole(p: number): string {
+  return Math.abs(p) < 1 ? pct(p) : `${p > 0 ? "+" : ""}${Math.round(p)}%`;
+}
+
+/** 왼쪽 상자 — 날씨 네 칸 / 날짜 / 마감일 매출 / 금액 / 지난주 같은 요일 / 그 금액 대비 / 오르내린 금액 (%) */
+function DayBox({ d, weather, hol, nothing, onClick }: { d: Dashboard; weather?: DayWeather; hol?: string | null; nothing: boolean; onClick: () => void }) {
+  const live = useLive();
+  const wxRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLSpanElement>(null);
+  const valueRef = useRef<HTMLSpanElement>(null);
+  const cmpRef = useRef<HTMLSpanElement>(null);
+  const [, m, dd] = d.date.split("-").map(Number);
+  const dateLine = `${m}월 ${dd}일(${d.weekday})${hol ? ` ${hol}` : ""}`;
+  const kind = live?.today ? "마감 전 매출" : live ? "확정 전 매출" : "마감일 매출";
+  const total = d.day.total;
+  const before = d.prevWeek.m.total;
+  const p = nothing ? null : changePct(total, before);
+  // 비교 세 줄 — 마감 전 · 확정 전은 하루 전체와 견주면 틀린 비교라 숨김
+  const cmp: [string, string, JSX.Element | string] = live
+    ? [live.today ? "마감 전 정보라" : "확정 전 정보라", "지난주 비교는", live.today ? "마감 뒤에 보입니다" : "확정 뒤에 보입니다"]
+    : p == null
+      ? [`지난주 ${d.weekday}요일`, "비교 자료 없음", "\u00a0"]
+      : [
+          `지난주 ${d.weekday}요일`,
+          `${won(before)} 대비`,
+          <span className={p > 0 ? "up" : p < 0 ? "down" : ""}>
+            {won(Math.abs(total - before))} {p > 0 ? "상승" : p < 0 ? "하락" : "변동 없음"} ({pctWhole(p)})
+          </span>,
+        ];
+  const key = `${d.date}|${total}|${before}|${live?.today}|${!!live}|${weather?.label}|${weather?.tempMax}|${weather?.tempMin}`;
+  useFit(wxRef, [key]);
+  useFit(headRef, [key]);
+  useFit(valueRef, [key]);
+  useFit(cmpRef, [key]);
+  return (
+    <button className="card day-box tap" onClick={onClick} aria-label={`${dateLine} ${kind} ${won(total)}`}>
+      <WeatherPanel date={d.date} w={weather} innerRef={wxRef} />
+      <span className="db-amount">
+        <span className="db-head" ref={headRef}>
+          <span data-fit className="db-date">
+            {dateLine}
+          </span>
+          <span data-fit className="db-kind">
+            {kind}
+          </span>
+        </span>
+        <span className="db-value-wrap" ref={valueRef}>
+          <span data-fit className="db-value">
+            {won(total)}
+          </span>
+        </span>
+        <span className="db-cmp" ref={cmpRef}>
+          {cmp.map((t, i) => (
+            <span data-fit key={i} className="db-cmp-line">
+              {t}
+            </span>
+          ))}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** 오른쪽 긴 상자 다섯 — "바리스타 3,345,000원 (41%)" · 다섯 줄 글자 크기 같게 */
+function SectorBars({ d, open }: { d: Dashboard; open: Open }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const day = d.day;
+  useFit(ref, [d.date, day.total, ...BOXES.map((b) => day.box[b])]);
+  return (
+    <div className="bars" role="list" ref={ref}>
+      {BOXES.map((b) => (
+        <button key={b} data-fit role="listitem" className="bar tap" onClick={() => open({ name: "sector", box: b })} aria-label={`${b} ${won(day.box[b])}`}>
+          <span className="bar-label">{BOX_LABEL[b]}</span>
+          <span className="bar-amt">
+            {won(day.box[b])}
+            <span className="bar-pct"> ({day.total > 0 ? Math.round((day.box[b] / day.total) * 100) : 0}%)</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 }
