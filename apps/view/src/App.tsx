@@ -2,7 +2,7 @@
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, liveReport, liveStale, mergeLive, settlements, todayKst, type CashPart, type DayReport, type LiveKind } from "@report/core";
-import { LiveCtx, type LiveState } from "./ui/Live";
+import { LiveCtx, LiveNote, type LiveState } from "./ui/Live";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
 import { Home, type View } from "./screens/Home";
@@ -153,7 +153,8 @@ export function App() {
       <div className="app">
         <InstallBanner />
         <header className="top">
-          <CalendarStrip from={from} to={to} selected={date} present={present} latest={latest} onSelect={setDate} onSettings={() => open({ name: "settings" })} />
+          {/* 마지막 날(오늘 마감 전 · 확정 전 어제)을 고르면 날짜 띠 오른쪽 빈자리에 안내 다섯 줄 */}
+          <CalendarStrip from={from} to={to} selected={date} present={present} latest={latest} onSelect={setDate} onSettings={() => open({ name: "settings" })} note={liveState && date === to ? <LiveNote /> : undefined} />
           {d.source === "demo" && <div className="demo-tag">체험판 · 가짜 자료</div>}
           {d.error && <div className="banner">{d.error}</div>}
         </header>

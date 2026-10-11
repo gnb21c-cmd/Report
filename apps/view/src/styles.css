@@ -215,6 +215,28 @@ h3 {
 }
 .strip-pad {
   flex: 0 0 calc(50% - 26px);
+  position: relative;
+}
+/* 마지막 날(오늘 마감 전)을 고르면 오른쪽 빈자리에 다섯 줄 — 같은 글자 크기, 줄 바꿈 · 잘림 없이(넘치면 함께 줄임) */
+.strip-note {
+  position: absolute;
+  inset: 0 4px 0 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: calc(13px * var(--fit, 1));
+  line-height: 1.24;
+  color: var(--text-secondary);
+  letter-spacing: -0.02em;
+  overflow: hidden;
+}
+.strip-note > div {
+  white-space: nowrap;
+  overflow: hidden;
+}
+.strip-note .sn-first {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 .strip::-webkit-scrollbar {
   display: none;
@@ -517,53 +539,142 @@ button.stat {
   margin: 2px 0 2px;
   overflow-wrap: anywhere;
 }
-/* 팀별 섹터 버튼: 다섯 개가 한 줄, 한 화면 폭에 */
-.sectors {
+/* 첫 화면 위 — 왼쪽 상자 [날씨 네 칸 / 날짜 · 마감일 매출 · 금액 · 지난주 비교] | 오른쪽 긴 상자 다섯(왼쪽 높이를 5등분)
+   마감 전 · 후 모든 날 같은 자리. 글자 크기는 em — 칸을 넘치면 묶음째 줄임(ui/fit.ts, --fit) */
+.day-top {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  grid-template-columns: minmax(0, 47fr) minmax(0, 53fr);
+  gap: 6px;
+  align-items: stretch;
 }
-.sector {
+.day-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 8px 10px 10px;
+  overflow: hidden;
+}
+.day-box .wx {
+  font-size: calc(min(17px, 4.4vw) * var(--fit, 1));
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+  gap: 0.55em 0.4em;
+  overflow: hidden;
+}
+.day-box .wx-row {
+  gap: 0.2em;
+}
+.day-box .wx-emoji {
+  font-size: 1.2em;
+  width: 1.2em;
+}
+.day-box .wx-text {
+  font-size: 1em;
+}
+.day-box .wx-text small {
+  font-size: 0.7em;
+}
+.day-box .season {
+  font-size: 0.82em;
+  padding: 0.25em 0.55em;
+}
+@media (max-width: 520px) {
+  .day-box .wx-text .wx-key {
+    display: none;
+  }
+}
+.db-amount {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.db-amount > span,
+.db-amount [data-fit] {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* 줄 높이는 줄이기 전 크기로 고정 — 날마다 글자가 조금 줄어도 상자 높이(오른쪽 다섯 칸 높이)는 그대로 */
+.db-head {
+  --b: min(15.5px, 4.1vw);
+  font-size: calc(var(--b) * var(--fit, 1));
+  color: var(--text-secondary);
+}
+.db-head > span {
+  height: calc(var(--b) * 1.3);
+  line-height: calc(var(--b) * 1.3);
+}
+.db-date {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.db-value-wrap {
+  --b: min(28px, 6.8vw);
+  font-size: calc(var(--b) * var(--fit, 1));
+}
+.db-value {
+  height: calc(var(--b) * 1.2);
+  line-height: calc(var(--b) * 1.2);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.db-cmp {
+  --b: min(14px, 3.6vw);
+  font-size: calc(var(--b) * var(--fit, 1));
+  color: var(--text-secondary);
+  letter-spacing: -0.02em;
+  margin-top: 2px;
+}
+.db-cmp > span {
+  height: calc(var(--b) * 1.35);
+  line-height: calc(var(--b) * 1.35);
+}
+.db-cmp .up {
+  color: var(--good);
+  font-weight: 700;
+}
+.db-cmp .down {
+  color: var(--bad);
+  font-weight: 700;
+}
+.bars {
+  display: grid;
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  font-size: calc(min(16px, 3.9vw) * var(--fit, 1));
+  min-width: 0;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4em;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 0.55em;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text-primary);
-  padding: 8px 2px 8px;
-  display: grid;
-  justify-items: center;
-  gap: 2px;
+  font-size: 1em;
   font-weight: 400;
-  min-width: 0;
+  letter-spacing: -0.02em;
 }
-.sec-label {
+.bar-label {
   font-weight: 700;
-  font-size: min(14px, 3.6vw);
-  white-space: nowrap;
-  letter-spacing: -0.3px;
 }
-.sec-value {
+.bar-amt {
   font-weight: 700;
-  font-size: 17px;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  letter-spacing: -0.3px;
 }
-.sec-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 1px;
-  margin-top: 6px;
-  white-space: nowrap;
-}
-.sec-line .sec-value {
-  font-size: min(17px, 3.05vw);
-  letter-spacing: -0.5px;
-}
-.sec-pct {
-  font-size: min(12.5px, 2.2vw);
+.bar-pct {
+  font-weight: 500;
+  font-size: 0.85em;
   color: var(--muted);
-  letter-spacing: -0.4px;
 }
 .stats {
   display: grid;
@@ -1359,7 +1470,7 @@ ul.plain li {
 .bread-tbl tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
 .bread-tbl td.warn { color: var(--bad); }
 
-/* 오늘 마감 전 영업정보 */
+/* 오늘 마감 전 — 문제가 있을 때만 경고 (안내 다섯 줄은 날짜 띠 오른쪽 .strip-note) */
 .live-banner {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -1369,30 +1480,6 @@ ul.plain li {
   border: 1px solid #ffd59a;
   font-size: 14px;
   line-height: 1.5;
-}
-.live-banner.past {
-  background: #f3f4f6;
-  color: #555;
-  border-color: #e2e4e8;
-}
-.live-title {
-  font-weight: 700;
-  font-size: 16px;
-}
-.live-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #f08c00;
-  margin-right: 2px;
-  vertical-align: 1px;
-}
-.live-at {
-  font-weight: 500;
-}
-.live-sub {
-  opacity: 0.9;
 }
 .live-warn {
   color: #b42318;
@@ -1404,19 +1491,9 @@ ul.plain li {
     color: #ffcf8a;
     border-color: #5c4318;
   }
-  :root:not([data-theme="light"]) .live-banner.past {
-    background: #23262b;
-    color: #b8bcc4;
-    border-color: #33373d;
-  }
 }
 :root[data-theme="dark"] .live-banner {
   background: #3a2a12;
   color: #ffcf8a;
   border-color: #5c4318;
-}
-:root[data-theme="dark"] .live-banner.past {
-  background: #23262b;
-  color: #b8bcc4;
-  border-color: #33373d;
 }

@@ -2,10 +2,10 @@ import type React from "react";
 /* 총 매출 상자 오른쪽 — 2 × 2 칸: [기간 스티커] [날씨] / [최고기온] [최저기온] (지난 날도 쌓인 자료로 그대로) */
 import { seasonOf, temp, WEATHER_SOURCE_TEXT, type DayWeather } from "@report/core";
 
-export function WeatherPanel({ date, w, compact = false }: { date: string; w?: DayWeather; compact?: boolean }) {
+export function WeatherPanel({ date, w, compact = false, innerRef }: { date: string; w?: DayWeather; compact?: boolean; innerRef?: React.Ref<HTMLDivElement> }) {
   const season = seasonOf(date);
   return (
-    <div className={`wx${compact ? " compact" : ""}`} aria-label="그날 기간과 날씨">
+    <div className={`wx${compact ? " compact" : ""}`} aria-label="그날 기간과 날씨" ref={innerRef}>
       <div className={`season s-${season.kind}`} title={season.name || "평상시"}>
         <span aria-hidden>{season.emoji}</span> {season.kind}
       </div>
