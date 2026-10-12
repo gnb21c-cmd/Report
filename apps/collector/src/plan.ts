@@ -5,11 +5,12 @@
      수요일 확정 실적은 아직 없어(09:12 수집) 수요일 밤 마지막 마감 전 카페 숫자(live/{수요일}, withLiveCafe)로 셈 — 없으면 화요일까지
    - 매일 15시: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
      목요일 15시에는 주간 잠정안을 다시 세지 않음(매니저가 확정하는 중에 숫자가 바뀌지 않게) — 새벽 계산이 빠졌을 때만 그때 만듦
-   - 아침 09:10 자동 수집된 어제까지의 실적으로 지난 2주 빵별 결과(생산 대비 정가 판매 · 50% 할인 · 폐기)를 셈 → 보정 배수로 다시 넣음
+   - 같은 요일 결과로 ±1 (2026-10-12 사장님 규칙, core bakery.ts nextSteps): 날짜마다 앞선 같은 요일(평일에 낀 공휴일은 공휴일끼리) 계획의 칸 +
+     그날 결과(할인 없이 매진 +1 · 할인 있으며 매진 그대로 · 폐기 −1)를 손님 예측 위에 더함. 최종안(3일 전)에는 7일 전 결과가 늘 들어옴
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, corrections, dayRange, dayResult, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nowKst, weekday, WEEK_PLAN_WEEKDAY, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -27,16 +28,31 @@ async function main() {
   const learned = learnWeather(board, weather, "2025-01-01", asOf);
   const fb = await fbLogin({ ...cfg, email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") });
 
-  // 지난 2주 결과 — 작업지시 계획이 있던 날만 (쓰기 전 날은 없음)
-  const past: { date: string; rows: ReturnType<typeof dayResult> }[] = [];
-  for (const d of dayRange(addDays(asOf, -13), asOf)) {
-    if (!board.report(d)?.cafe) continue;
-    const plan = asPlan(parse(await readPlan(fb, d)));
-    if (!plan) continue;
-    past.push({ date: d, rows: dayResult(board, d, plan, asOrder(parse(await readOrder(fb, d)))) });
-  }
-  const corr = corrections(past, asOf);
-  console.log(`${today} · 실적 ${asOf} 까지 · 지난 결과 ${past.length}일 · 보정한 빵 ${Object.values(corr).filter((c) => Math.abs(c - 1) >= 0.005).length}종`);
+  console.log(`${today} · 실적 ${asOf} 까지`);
+
+  // 같은 요일 결과로 ±1 — 그 날보다 앞선 같은 요일 중 계획이 있는 가장 가까운 날(문 닫은 날 · 작업지시 전은 건너뜀)의 칸 + 그날 결과
+  const prevDocs = new Map<string, { plan: PlanDoc | null; order: OrderDoc | null }>();
+  const docsOf = async (d: string) => {
+    let x = prevDocs.get(d);
+    if (!x) {
+      const plan = asPlan(parse(await readPlan(fb, d)));
+      x = { plan, order: plan ? asOrder(parse(await readOrder(fb, d))) : null };
+      prevDocs.set(d, x);
+    }
+    return x;
+  };
+  const stepsFor = async (date: string, b: Board, a: string): Promise<Record<string, number>> => {
+    for (const p of sameGroupBefore(date, 8)) {
+      const x = await docsOf(p);
+      if (!x.plan?.final && !x.plan?.week) continue;
+      const st = nextSteps(b, a, { date: p, ...x });
+      const v = Object.values(st);
+      console.log(`같은 요일 ±1: ${date} ← ${p}${p <= a && b.report(p)?.cafe ? "" : " (그날 실적 전 · 칸만 이어 감)"} · 올림 ${v.filter((k) => k > 0).length}종 · 내림 ${v.filter((k) => k < 0).length}종`);
+      return st;
+    }
+    console.log(`같은 요일 ±1: ${date} — 앞선 같은 요일 계획이 없어 예측 그대로`);
+    return {};
+  };
 
   const out = new Map<string, PlanDoc>();
   const load = async (d: string): Promise<PlanDoc> => out.get(d) || asPlan(parse(await readPlan(fb, d))) || { v: 2, date: d };
@@ -61,7 +77,9 @@ async function main() {
           console.log(`어제 카페: 마감 전 숫자(${new Date(Date.parse(w.at) + 9 * 3600e3).toISOString().slice(11, 16)} 기준)로 셈`);
         } else console.log("어제 카페: 마감 전 숫자가 없어 그 전날까지로 셈");
       }
-      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, corr)) {
+      const steps: Record<string, Record<string, number>> = {};
+      for (const d of weekDates(today)) steps[d] = await stepsFor(d, wBoard, wAsOf);
+      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps)) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
       }
@@ -76,7 +94,7 @@ async function main() {
     return;
   }
   const doc = await load(target);
-  const fin = makeFinal(board, weather, learned, today, asOf, doc, asOrder(parse(await readOrder(fb, target))), corr);
+  const fin = doc.week ? makeFinal(board, weather, learned, today, asOf, doc, asOrder(parse(await readOrder(fb, target))), await stepsFor(target, board, asOf)) : null;
   if (fin) {
     out.set(target, { ...doc, final: fin });
     console.log(`최종안: ${target} · 빵 ${fin.items.length}종`);

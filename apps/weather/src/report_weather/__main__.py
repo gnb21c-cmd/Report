@@ -23,6 +23,7 @@ CHUNK_DAYS = 60  # 기상청은 긴 기간을 한 번에 달라면 늦게 답해
 # 기상청은 어제 관측을 아침 일찍 최고/최저 없이 먼저 내줄 때가 있음 → 'observed-partial' 로 두고 다시 받음
 # (최근 7일만 — 오래전 날이 끝내 비어 있어도 매시간 그날부터 다시 받지 않게)
 PARTIAL_DAYS = 7
+FC_LOG_MAX = 4  # 예보 기록: 그날 ~ 4일 전 예보 (3일 전 15시 최종안이 보는 예보 = fc3)
 
 
 def chunks(start: str, end: str, size: int = CHUNK_DAYS) -> list:
@@ -61,9 +62,26 @@ def run(relay, kma, now: dt.datetime, errors: list | None = None) -> list:
             errors.append(f"관측 {a}~{b}: {e}")
             break
     try:
-        put(kma.forecast(now.replace(tzinfo=None)))
+        both = getattr(kma, "forecast_both", None)
+        days, detail = both(now.replace(tzinfo=None)) if both else (kma.forecast(now.replace(tzinfo=None)), {})
+        put(days)
     except WeatherError as e:
         errors.append(f"예보: {e}")
+        detail = {}
+    # 예보 기록 (날씨 규칙 2단계 시험) — 며칠 전 예보였는지(fc0 = 그날, fc3 = 3일 전) 날짜 문서에 따로 남김. 실패해도 날씨 올리기는 그대로
+    put_log = getattr(relay, "put_fc_log", None)
+    logged = 0
+    for date, det in sorted(detail.items()):
+        lead = (dt.date.fromisoformat(date) - now.date()).days
+        if not put_log or not 0 <= lead <= FC_LOG_MAX or have.get(date, "").startswith("observed"):
+            continue
+        try:
+            put_log(date, lead, det)
+            logged += 1
+        except Exception as e:  # noqa: BLE001
+            print(f"예보 기록 실패 ({date}): {str(e)[:80]}")
+    if logged:
+        print(f"예보 기록 {logged}일 (오전 · 오후 비 · 눈 · 구름)")
     return done
 
 

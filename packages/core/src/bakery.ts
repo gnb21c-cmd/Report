@@ -10,8 +10,8 @@
    생산 = 최종 수량, 폐기 = 생산 − 판매(정가 + 50% 할인). 그날 아침 6시부터는 최종 수량을 못 바꿈 (productionStarted)
    보고 앱(B)은 마감일의 plans · orders 를 그날 생산 기록으로 읽어 영수증 판매와 맞춤 (dayResult · breadTotals)
    ============================================================ */
-import { addDays, weekday } from "./dates";
-import { bandRange, breadPlan, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
+import { addDays, weekday, WEEKDAY_KO } from "./dates";
+import { bandRange, breadPlan, dayKind, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
 import { NOT_BREAD } from "./rules";
 import type { WeatherMap } from "./weather";
@@ -54,7 +54,9 @@ export interface PlanItem {
   qty: number;
   /** 보정 전 예측 수량 (다음 보정의 기준 — 보정이 되풀이해 쌓이지 않게) */
   base?: number;
-  /** 보정 배수 (1 이 아니면 지난 결과로 고친 것) */
+  /** 같은 요일 결과로 더한 칸 (±1 씩 쌓임, 예측의 ±30% 안 · 0 이면 없음) — 다음 같은 요일이 이어 받음 */
+  step?: number;
+  /** 예전 보정 배수 (2026-10 까지 쓰던 2주 보정 — 지금은 안 씀, 예전 문서에만) */
   adj?: number;
   /** 최종 계산에서: 잠정 수량 ±10% 범위 */
   lo?: number;
@@ -168,22 +170,21 @@ export function displayDays(now: Now): [string, string] {
 
 /* ---------- 계획 세기 ---------- */
 
-function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, corr: Record<string, number>): PlanStep {
+function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>): PlanStep {
   const p = breadPlan(board, weather, asOf, date, learned);
   const items: PlanItem[] = p.items.map((it) => {
-    const c = corr[it.name] ?? 1;
-    const adj = Math.abs(c - 1) >= 0.005 ? Math.round(c * 100) / 100 : undefined;
-    return { name: it.name, qty: snapUnit(it.name, it.qty * c), base: it.qty, ...(adj ? { adj } : {}) };
+    const k = clampStep(it.name, it.qty, steps[it.name] ?? 0);
+    return { name: it.name, qty: snapUnit(it.name, it.qty + k * breadUnit(it.name)), base: it.qty, ...(k ? { step: k } : {}) };
   });
   return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 
-/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌) */
-export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, corr: Record<string, number> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
+/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 */
+export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
   const dates = weekDates(thursday);
   return dates.map((date, i) => ({
     date,
-    week: step(board, weather, learned, thursday, asOf, date, corr),
+    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}),
     ...(i === 0 ? { outlook: weeklyOutlook(board, asOf, date, learned) } : {}),
   }));
 }
@@ -193,10 +194,10 @@ export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, th
  * 빵마다 기준 = 매니저 잠정 확정 수량(없으면 주간 수량) → 새로 센 수량을 그 ±10% 안으로 묶음
  * 새로 생긴 빵(잠정에 없던 빵)은 새로 센 수량 그대로
  */
-export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, today: string, asOf: string, plan: PlanDoc | null, order: OrderDoc | null, corr: Record<string, number> = {}): PlanStep | null {
+export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, today: string, asOf: string, plan: PlanDoc | null, order: OrderDoc | null, steps: Record<string, number> = {}): PlanStep | null {
   const date = addDays(today, FINAL_LEAD);
   if (!plan?.week || plan.date !== date) return null;
-  const now = step(board, weather, learned, today, asOf, date, corr);
+  const now = step(board, weather, learned, today, asOf, date, steps);
   const fresh = new Map(now.items.map((i) => [i.name, i]));
   const anchor = new Map<string, number>();
   for (const it of plan.week.items) anchor.set(it.name, it.qty);
@@ -209,7 +210,7 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
       if (a == null) return f!;
       const [lo, hi] = bandRange(a, FINAL_BAND);
       const qty = snapUnit(name, withinBand(a, f?.qty ?? 0, FINAL_BAND), lo, hi);
-      return { name, qty, base: f?.base ?? a, ...(f?.adj ? { adj: f.adj } : {}), lo, hi };
+      return { name, qty, base: f?.base ?? a, ...(f?.step ? { step: f.step } : {}), lo, hi };
     })
     .filter((i) => i.qty > 0)
     .sort((x, y) => y.qty - x.qty || x.name.localeCompare(y.name, "ko"));
@@ -407,36 +408,61 @@ export function productionStarted(date: string, now: Now): boolean {
   return now.date > date || (now.date === date && now.time >= DAY_START);
 }
 
-/** 다 팔린 날 — 실제로는 더 팔 수 있었다고 보고 올리는 배수 */
-export const SOLD_OUT_STEP = 1.1;
+/* ---------- 같은 요일 결과로 ±1 (2026-10-12 사장님 규칙) ----------
+   남은 빵은 그날 모두 폐기. 빵마다 그날 결과 한 칸:
+   - 할인 없이 매진(지시 수량 이상 팔림 · 50% 할인 없음) → +1
+   - 할인 있으며 매진(다 팔렸지만 저녁 50% 할인으로) → 그대로
+   - 폐기가 생김(지시 수량보다 덜 팔림) → −1
+   칸은 다음 같은 요일에만 씀 (월요일 결과 → 다음 월요일. 평일에 낀 공휴일은 공휴일끼리) — 손님 예측 위에 칸 × 생산 단위(몽블랑 5개)를 더함
+   칸은 계획(plans 의 step)에 남겨 다음 같은 요일이 이어 받음 · 예측의 ±30% 안으로 묶음
+   최종안은 3일 전에 정하므로 7일 전 같은 요일 결과는 늘 들어옴 */
+export const STEP_LIMIT = 0.3;
 
-/**
- * 빵별 보정 배수 — 지난 날들(앱 수량대로 만든 날)의 '정가 판매 ÷ 보정 전 예측'
- * 목표: 저녁 7시쯤이면 거의 다 팔림 → 정가 판매가 예측만큼이면 1, 50% 할인 · 폐기가 나오면 그만큼 낮춤, 다 팔렸으면 만든 양보다 조금 올림
- * 보정 전 예측과 견주므로 보정이 날마다 되풀이해 쌓이지 않음
- * 최근 날일수록 무겁게(하루 0.85배씩), 날이 적으면 1 쪽으로 (2일이면 반반)
- */
-export function corrections(days: { date: string; rows: BreadResult[] }[], asOf: string): Record<string, number> {
-  const acc = new Map<string, { s: number; w: number; n: number }>();
-  for (const d of days) {
-    if (d.date > asOf) continue;
-    const age = Math.max(0, Math.round((Date.parse(asOf) - Date.parse(d.date)) / 86400e3));
-    const w = Math.pow(0.85, age);
-    for (const r of d.rows) {
-      if (!r.made) continue;
-      const base = r.base || r.made;
-      const ratio = Math.min(1.5, Math.max(0.3, r.soldOut ? (r.made / base) * SOLD_OUT_STEP : r.full / base));
-      const a = acc.get(r.name) || { s: 0, w: 0, n: 0 };
-      a.s += w * Math.log(ratio);
-      a.w += w;
-      a.n++;
-      acc.set(r.name, a);
-    }
-  }
+/** 같은 요일 묶음 — 요일마다 따로, 평일에 낀 공휴일 · 대체 휴일은 '공휴일'끼리 (주말은 그 요일) */
+export function stepGroup(date: string): string {
+  const w = weekday(date);
+  if (w >= 1 && w <= 5 && dayKind(date) === "휴일") return "공휴일";
+  return WEEKDAY_KO[w];
+}
+
+/** 그날보다 앞선 같은 묶음 날들 (가까운 순, n 개 · 공휴일은 1년 안) */
+export function sameGroupBefore(date: string, n = 8): string[] {
+  const g = stepGroup(date);
+  const out: string[] = [];
+  const by = g === "공휴일" ? 1 : 7;
+  for (let d = addDays(date, -by), i = 0; out.length < n && i < 400; d = addDays(d, -by), i++) if (stepGroup(d) === g) out.push(d);
+  return out;
+}
+
+/** 빵 하나의 그날 결과 → 한 칸 (+1 · 0 · −1). 작업지시에 없었거나 0개면 null */
+export function stepOf(r: BreadResult): number | null {
+  if (!r.made) return null;
+  if (r.sold < r.made) return -1;
+  return r.half > 0 ? 0 : 1;
+}
+
+/** 칸을 예측의 ±30% 안으로 (적어도 ±1 칸은 허용) */
+export function clampStep(name: string, base: number, k: number): number {
+  const lim = Math.max(1, Math.floor((base * STEP_LIMIT) / breadUnit(name)));
+  return Math.max(-lim, Math.min(lim, Math.round(k)));
+}
+
+/** 그날 계획에 쓴 빵별 칸 (최종안 → 없으면 주간안) */
+export function planSteps(plan: PlanDoc | null | undefined): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const [name, a] of acc) {
-    const shrink = a.n / (a.n + 2);
-    out[name] = Math.min(1.5, Math.max(0.6, Math.exp(shrink * (a.s / a.w))));
-  }
+  for (const it of (plan?.final || plan?.week)?.items || []) if (it.step) out[it.name] = it.step;
+  return out;
+}
+
+/** 다음 같은 요일에 쓸 빵별 칸 = 앞 같은 요일 계획의 칸 + 그날 결과(쓸 수 있는 실적이 있으면). 0 인 빵은 뺌 */
+export function nextSteps(board: Board, asOf: string, prev: { date: string; plan: PlanDoc | null; order: OrderDoc | null } | null): Record<string, number> {
+  if (!prev) return {};
+  const out = planSteps(prev.plan);
+  if (prev.date <= asOf && board.report(prev.date)?.cafe)
+    for (const r of dayResult(board, prev.date, prev.plan, prev.order)) {
+      const k = stepOf(r);
+      if (k) out[r.name] = (out[r.name] || 0) + k;
+    }
+  for (const n of Object.keys(out)) if (!out[n]) delete out[n];
   return out;
 }

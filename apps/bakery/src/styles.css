@@ -440,6 +440,19 @@ th {
   margin: 0;
   padding: 6px 14px;
 }
+/* 결과 — 다음 같은 요일 칸 (+1 · 그대로 · −1) */
+td.step {
+  white-space: nowrap;
+  font-size: 13px;
+}
+td.step.up {
+  color: var(--ok);
+  font-weight: 700;
+}
+td.step.down {
+  color: var(--bad);
+  font-weight: 700;
+}
 .sold-out {
   font-size: 11px;
   color: var(--ok);
