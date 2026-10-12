@@ -2,10 +2,9 @@
 # 작년 대비 비율이 고른지 · 주 총 개수 예측 · 요일 몫으로 나눈 하루 오차 · 손님이 같은 주 다른 날로 옮겨 가는지
 # 공개 저장소라 기록에는 % · 상관 · 날 수 · 주 수만 (판매 개수 · 손님 수 · 매출 없음)
 name: 1주 단위 시험
+# 2026-10-12 결과: 작년 대비 비율은 주마다 ±10%p 흔들림 · 주 단위 방식(13%)보다 지금 방식(8%)이 주 총 개수를 잘 맞힘 ·
+#   한가한/붐빈 날은 며칠 이어짐(이웃한 날 상관 +0.4, 같은 주 다른 날로 옮겨 가지 않음) · 비 오는 날 손님 +3.5%
 on:
-  push:
-    branches: ["feature/bakery-step"]
-    paths: ["apps/collector/src/weekStudy.ts", ".github/workflows/week-study.yml"]
   workflow_dispatch:
 jobs:
   study:
