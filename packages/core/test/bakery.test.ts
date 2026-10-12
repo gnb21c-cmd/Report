@@ -3,6 +3,7 @@ import {
   addDays,
   asOrder,
   asPlan,
+  bakeryProducts,
   Board,
   corrections,
   dayKind,
@@ -302,5 +303,37 @@ describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금
     expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "06:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-09", time: "01:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-07", time: "23:00" })).toBe(false);
+  });
+});
+
+describe("베이커리로 셈해진 상품 전체 (B 베이커리 상세 맨 아래 목록)", () => {
+  // 9-01 에만 팔린 마카롱 · 10-10 ~ 10-12 소금빵 · 10-12 샌드위치(작업지시 없음) · 작업지시에만 있는 새 빵(바게트) · 잼은 기타
+  const reps = [
+    day("2026-09-01", 100, [["마카롱", 5]]),
+    day("2026-10-10", 100, [["소금빵", 30], ["딸기잼", 2]]),
+    day("2026-10-11", 100, [["소금빵", 40]]),
+    day("2026-10-12", 100, [["소금빵", 50], ["샌드위치", 7]]),
+    day("2026-10-13", 100, [["소금빵", 99]]),
+  ];
+  const b = new Board(reps);
+  const step = { madeOn: "2026-10-09", asOf: "2026-10-08", kind: "평일" as const, visitors: 100, weather: "모름", total: 80 };
+  const plan: PlanDoc = { v: 2, date: "2026-10-12", final: { ...step, items: [{ name: "소금빵", qty: 60, base: 60 }, { name: "바게트", qty: 10, base: 10 }] } };
+  const list = bakeryProducts(b, "2026-10-12", plan, null);
+  const get = (n: string) => list.find((x) => x.name === n);
+
+  it("작업지시 수량 · 그날 판매 · 최근 4주 판매 · 마지막 판매일 (고른 날까지만)", () => {
+    expect(get("소금빵")).toEqual({ name: "소금빵", order: 60, day: 50, recent: 120, last: "2026-10-12" });
+    expect(get("샌드위치")).toEqual({ name: "샌드위치", order: null, day: 7, recent: 7, last: "2026-10-12" });
+    expect(get("바게트")).toEqual({ name: "바게트", order: 10, day: 0, recent: 0, last: null });
+  });
+  it("4주 넘게 안 팔린 상품도 마지막 판매일과 함께 · 잼(생산품 아님)은 빠짐", () => {
+    expect(get("마카롱")).toEqual({ name: "마카롱", order: null, day: 0, recent: 0, last: "2026-09-01" });
+    expect(get("딸기잼")).toBeUndefined();
+  });
+  it("순서: 작업지시 있는 빵(지시 많은 순) → 그날 · 4주 많이 팔린 순 → 오래 안 팔린 것", () => {
+    expect(list.map((x) => x.name)).toEqual(["소금빵", "바게트", "샌드위치", "마카롱"]);
+  });
+  it("작업지시가 없는 날은 지시 칸이 모두 비어 있음", () => {
+    expect(bakeryProducts(b, "2026-10-11", null, null).every((x) => x.order === null)).toBe(true);
   });
 });

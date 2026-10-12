@@ -14,10 +14,9 @@ export type BakeryDoc = { plan: PlanDoc | null; order: OrderDoc | null };
 function demoDoc(board: Board, date: string): BakeryDoc | null {
   const from = board.report(date)?.cafe ? date : board.latest();
   if (!from) return null;
-  const items = board
-    .products(from, from, "베이커리")
-    .filter((p) => !NOT_BREAD.has(p.name) && p.qty > 0)
-    .map((p, i) => ({ name: p.name, qty: p.qty + (i % 3) + 1 }));
+  // 체험판에서도 보이게: 두 번째 빵은 지시보다 더 팔림 · 마지막 상품은 작업지시에 없음
+  const sold = board.products(from, from, "베이커리").filter((p) => !NOT_BREAD.has(p.name) && p.qty > 0);
+  const items = sold.slice(0, -1).map((p, i) => ({ name: p.name, qty: i === 1 ? Math.max(1, p.qty - 2) : p.qty + (i % 3) + 1 }));
   if (!items.length) return null;
   const total = items.reduce((a, i) => a + i.qty, 0);
   return { plan: { v: 2, date, final: { madeOn: date, asOf: date, kind: "평일", visitors: 0, weather: "", total, items } as any }, order: null };

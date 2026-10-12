@@ -12,8 +12,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   count,
+  bakeryProducts,
   breadTotals,
   dayResult,
+  RECENT_DAYS,
+  type BakeryProduct,
   extraTotal,
   hourDay,
   hourLabel,
@@ -148,6 +151,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
         )}
 
         {box === "베이커리" && <BreadTable board={board} date={date} doc={bread} />}
+        {box === "베이커리" && <BakeryList board={board} date={date} doc={bread} />}
       </main>
     </>
   );
@@ -382,6 +386,99 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
             {open && " · 오늘은 마감 전이라 남음 = 생산 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
             {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
           </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 베이커리 맨 아래 — 베이커리로 셈하는 상품 전체 (그날 보고에 저장된 분류 = 베이커리 매출 · 판매 개수에 들어간 상품)
+    작업지시에 있는 빵 / 작업지시에 없는데 팔린 상품(판매에는 들어가고 생산 · 남음에서는 빠짐) / 4주 넘게 안 팔린 상품(접힘). 금액 없이 개수만 */
+function BakeryList({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
+  const list = useMemo(() => bakeryProducts(board, date, doc?.plan, doc?.order), [board, date, doc]);
+  const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("ko-KR"));
+  const hasOrder = list.some((r) => r.order != null);
+  const ordered = list.filter((r) => r.order != null);
+  const others = list.filter((r) => r.order == null && (r.day > 0 || r.recent > 0));
+  const old = list.filter((r) => r.order == null && !(r.day > 0 || r.recent > 0));
+  const othersDay = others.reduce((a, r) => a + r.day, 0);
+  const table = (rows: BakeryProduct[], showOrder: boolean) => (
+    <table className="bread-tbl">
+      <thead>
+        <tr>
+          <th>상품</th>
+          {showOrder && <th className="num">작업지시</th>}
+          <th className="num">그날 판매</th>
+          <th className="num">4주 판매</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.name}>
+            <td>{r.name}</td>
+            {showOrder && <td className="num">{n(r.order)}</td>}
+            <td className={`num${showOrder && r.order != null && r.day > r.order ? " warn" : ""}`}>{n(r.day)}</td>
+            <td className="num">{n(r.recent)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+  return (
+    <section className="card bakery-list">
+      <h2>
+        베이커리로 셈하는 상품 전체 <small className="muted">{list.length}종 · 개수</small>
+      </h2>
+      <p className="note muted">POS 영수증에서 베이커리로 분류되어 베이커리 매출 · 판매 개수에 들어가는 상품입니다 ({shortLabel(date)}까지 받은 보고 기준 · 4주 = 그날 포함 {RECENT_DAYS}일)</p>
+      {doc === undefined ? (
+        <p className="empty">작업지시 자료를 받는 중입니다…</p>
+      ) : !list.length ? (
+        <p className="empty">베이커리로 셈한 상품이 없습니다.</p>
+      ) : (
+        <>
+          {hasOrder && (
+            <>
+              <h3 className="bl-head">
+                작업지시에 있는 빵 <small className="muted">{ordered.length}종</small>
+              </h3>
+              {table(ordered, true)}
+              {ordered.some((r) => r.day > (r.order ?? 0)) && <p className="note bl-warn">빨간 숫자 = 작업지시보다 더 팔림 (더 만들었거나 전날 남은 빵 · 실제 생산은 시스템이 모름)</p>}
+            </>
+          )}
+          <h3 className="bl-head">
+            {hasOrder ? "작업지시에 없는 상품" : "최근 4주 팔린 상품"} <small className="muted">{others.length}종</small>
+          </h3>
+          {hasOrder && others.length > 0 && (
+            <p className="note bl-warn">
+              그날 {othersDay.toLocaleString("ko-KR")}개 — 베이커리 판매 개수에는 들어가지만 작업지시가 없어 생산 · 남음(폐기) 계산에서는 빠집니다
+            </p>
+          )}
+          {others.length ? table(others, false) : <p className="empty">없습니다.</p>}
+          {old.length > 0 && (
+            <details className="bl-old">
+              <summary>
+                최근 4주 안 팔린 상품 {old.length}종 <small className="muted">(눌러서 보기)</small>
+              </summary>
+              <table className="bread-tbl">
+                <thead>
+                  <tr>
+                    <th>상품</th>
+                    <th className="num">마지막 판매</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {old.map((r) => (
+                    <tr key={r.name}>
+                      <td>{r.name}</td>
+                      <td className="num">{r.last ? r.last.replaceAll("-", ".") : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+          <p className="note muted">딸기잼 · 블루베리잼은 베이커리 매대에서 팔아도 생산품이 아니라 기타로 셉니다 (이 목록 · 작업지시에서 빠짐)</p>
+          {!hasOrder && <p className="note muted">이날은 작업지시 자료가 없어 작업지시 칸이 없습니다.</p>}
         </>
       )}
     </section>
