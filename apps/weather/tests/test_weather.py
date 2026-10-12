@@ -2,7 +2,8 @@ import datetime as dt
 import json
 import unittest
 
-from report_weather.weather import Kma, days_to_fetch, latest_forecast_base, parse_asos, parse_forecast, parse_precip
+from report_weather.relay import FirebaseRelay
+from report_weather.weather import Kma, days_to_fetch, forecast_detail, latest_forecast_base, parse_asos, parse_forecast, parse_precip, parse_snow
 
 
 def fc(date, time, cat, val):
@@ -153,6 +154,60 @@ class RunTest(unittest.TestCase):
         relay, kma = FakeRelay(have), FakeKma()
         self.run_once(relay, kma, dt.datetime(2026, 10, 9, 9, 0))
         self.assertEqual(kma.asked[0][0], "2026-10-02")
+
+
+
+class ForecastLogTest(unittest.TestCase):
+    """날씨 규칙 2단계 — 예보를 날짜 문서의 fc{며칠 전} 칸에 따로 남김 (관측이 와도 지워지지 않음)"""
+
+    def test_detail_am_pm(self):
+        d = "20261015"
+        items = [fc(d, f"{h:02d}00", "SKY", "4" if h >= 13 else "1") for h in range(10, 20)]
+        items += [fc(d, f"{h:02d}00", "POP", "60" if h >= 14 else "20") for h in range(10, 20)]
+        items += [fc(d, f"{h:02d}00", "PTY", "1" if h in (15, 16) else "0") for h in range(10, 20)]
+        items += [fc(d, "1500", "PCP", "1mm 미만"), fc(d, "1600", "PCP", "2.0mm"), fc(d, "0300", "PCP", "1.0mm")]
+        items += [fc(d, "1100", "SNO", "적설없음"), fc("20261016", "0000", "TMP", "12")]
+        out = forecast_detail(items)
+        self.assertEqual(list(out), ["2026-10-15"])  # 16일은 영업 시간 예보가 없어 버림
+        x = out["2026-10-15"]
+        self.assertEqual((x["r"], x["ar"], x["pr"], x["at"], x["pt"], x["ps"], x["pop"]), (3.5, 0, 2.5, "", "비", 0, 60))
+        self.assertEqual((x["sky"], x["sky4"]), (0.7, 0.7))
+        self.assertEqual([parse_snow(v) for v in ("적설없음", "1cm 미만", "3.0cm")], [0, 0.5, 3.0])
+
+    def test_put_keeps_log(self):
+        calls = []
+
+        def post(url, body, token=None, method="POST", timeout=20):
+            calls.append((url, method, body))
+            return {"idToken": "t", "expiresIn": "3600"} if "signInWithPassword" in url or "accounts" in url else {}
+
+        r = FirebaseRelay({"apiKey": "k", "projectId": "p", "board": "b", "email": "e", "password": "w"}, post=post)
+        r.put_weather({"date": "2026-10-15", "key": "rain", "label": "비", "icon": "🌧️", "tempMax": 1.0, "tempMin": 0.0, "rainMm": 3, "source": "observed", "basis": "119"})
+        r.put_fc_log("2026-10-15", 3, {"pt": "비", "pr": 2.5})
+        url, method, body = calls[-2]
+        self.assertIn("updateMask.fieldPaths=date", url)  # 날씨 칸만 바꿈 → fc 칸은 남음
+        self.assertNotIn("fc3", url)
+        url, method, body = calls[-1]
+        self.assertTrue(url.endswith("weather/2026-10-15?updateMask.fieldPaths=fc3"))
+        self.assertEqual(json.loads(body["fields"]["fc3"]["stringValue"]), {"pt": "비", "pr": 2.5})
+
+    def test_run_logs_leads(self):
+        class K(FakeKma):
+            def forecast_both(self, now):
+                return self.forecast(now), {"2026-10-01": {"pt": "비"}, "2026-10-04": {"pt": ""}, "2026-10-09": {"pt": "눈"}, "2026-09-30": {"pt": ""}}
+
+        class R(FakeRelay):
+            def __init__(self, have=None):
+                super().__init__(have)
+                self.log = []
+
+            def put_fc_log(self, date, lead, det):
+                self.log.append((date, lead))
+
+        relay = R({"2026-09-30": "observed"})
+        RunTest.run_once(None, relay, K(), dt.datetime(2026, 10, 1, 9, 0))
+        # 그날(0) · 3일 전 기록, 5일 넘게 앞(10-09) · 이미 관측된 날(09-30)은 안 남김
+        self.assertEqual(relay.log, [("2026-10-01", 0), ("2026-10-04", 3)])
 
 
 if __name__ == "__main__":

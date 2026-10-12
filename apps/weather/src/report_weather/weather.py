@@ -66,6 +66,64 @@ def parse_precip(v) -> float:
     return float(m.group(1)) if m else 0.0
 
 
+def parse_snow(v) -> float:
+    """예보 신적설(SNO) → cm. 적설없음=0, 1cm 미만=0.5"""
+    s = str(v or "").strip()
+    if not s or s in ("적설없음", "0"):
+        return 0.0
+    if "미만" in s:
+        return 0.5
+    m = re.search(r"(\d+(?:\.\d+)?)", s)
+    return float(m.group(1)) if m else 0.0
+
+
+AM_HOURS = ("1000", "1200")
+PM_HOURS = ("1300", "1900")
+
+
+def forecast_detail(items: list) -> dict:
+    """예보 기록용 (날씨 규칙 2단계 시험) — 날짜별 오전(10~12시) · 오후(13~19시) 비 · 눈, 구름, 강수확률
+    {날짜: {b 발표, r 하루 강수 mm, ar/pr 오전/오후 강수 mm, as/ps 오전/오후 신적설 cm, at/pt 오전/오후 비·눈 종류, sky 구름많음·흐림 시간 몫, sky4 흐림 몫, pop 최대 강수확률}}"""
+    by_date: dict = {}
+    for it in items:
+        by_date.setdefault(it["fcstDate"], []).append(it)
+    out = {}
+    for d, lst in sorted(by_date.items()):
+        span = lambda a, z: [i for i in lst if a <= i["fcstTime"] <= z]
+        day = span("1000", "1900")
+        if len({i["fcstTime"] for i in day}) < 8:
+            continue  # 영업 시간 예보가 다 없는 날(발표 범위 끝)은 버림
+        cat = lambda xs, c: [i["fcstValue"] for i in xs if i["category"] == c]
+
+        def kind(xs):
+            pty = {int(float(v)) for v in cat(xs, "PTY")}
+            if pty & {2, 6} or (pty & {1, 4, 5} and pty & {3, 7}):
+                return "비/눈"
+            if pty & {3, 7}:
+                return "눈"
+            if pty & {1, 4, 5}:
+                return "비"
+            return ""
+
+        am, pm = span(*AM_HOURS), span(*PM_HOURS)
+        sky = [int(float(v)) for v in cat(day, "SKY")]
+        pop = [int(float(v)) for v in cat(day, "POP")]
+        out[f"{d[:4]}-{d[4:6]}-{d[6:8]}"] = {
+            "b": lst[0]["baseDate"] + lst[0]["baseTime"],
+            "r": round(sum(parse_precip(v) for v in cat(lst, "PCP")), 1),
+            "ar": round(sum(parse_precip(v) for v in cat(am, "PCP")), 1),
+            "pr": round(sum(parse_precip(v) for v in cat(pm, "PCP")), 1),
+            "as": round(sum(parse_snow(v) for v in cat(am, "SNO")), 1),
+            "ps": round(sum(parse_snow(v) for v in cat(pm, "SNO")), 1),
+            "at": kind(am),
+            "pt": kind(pm),
+            "sky": round(sum(1 for x in sky if x >= 3) / len(sky), 2) if sky else None,
+            "sky4": round(sum(1 for x in sky if x == 4) / len(sky), 2) if sky else None,
+            "pop": max(pop) if pop else None,
+        }
+    return out
+
+
 def parse_asos(items: list) -> list:
     """지상관측 일자료 → 날짜별 날씨 (관측 확정값)"""
     out = []
@@ -182,12 +240,16 @@ class Kma:
 
     def forecast(self, now: dt.datetime) -> list:
         """오늘 예보 — 오늘 02시 발표에 그날 최고(TMX)·최저(TMN, 06시 칸)가 다 있으므로 그것을 씀 (그 전이면 가장 최근 발표)"""
+        return self.forecast_both(now)[0]
+
+    def forecast_both(self, now: dt.datetime) -> tuple:
+        """(날짜별 날씨, 예보 기록용 오전 · 오후 자세히) — 같은 발표 한 번 호출로"""
         if now.hour * 60 + now.minute >= 2 * 60 + 10:
             bd, bt = now.strftime("%Y%m%d"), "0200"
         else:
             bd, bt = latest_forecast_base(now)
         items = self._all("VilageFcstInfoService_2.0/getVilageFcst", {"base_date": bd, "base_time": bt, "nx": self.conf["nx"], "ny": self.conf["ny"]}, 1000)
-        return parse_forecast(items)
+        return parse_forecast(items), forecast_detail(items)
 
 
 def days_to_fetch(today: dt.date, have: set, since: str) -> tuple | None:

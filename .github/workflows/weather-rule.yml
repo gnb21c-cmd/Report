@@ -1,0 +1,27 @@
+# 날씨 규칙 시험 (손으로 실행) — apps/collector/src/weatherRule.ts
+# "비 · 눈 · 흐림 예보일 빵 +10% (많은 비 · 눈은 빼고) · 오후 적은 비 · 눈" 을 지난 실제 날씨(기상청 수원 관측)로 시험
+# 공개 저장소라 기록에는 % · 날 수만 (판매 개수 · 손님 수 · 매출 · 기상청 키 없음)
+name: 날씨 규칙 시험
+on:
+  push:
+    branches: ["feature/bakery-step"]
+    paths: ["apps/collector/src/weatherRule.ts", ".github/workflows/weather-rule.yml"]
+  workflow_dispatch:
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector weather-rule
+        env:
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          KMA_SERVICE_KEY: ${{ secrets.KMA_SERVICE_KEY }}

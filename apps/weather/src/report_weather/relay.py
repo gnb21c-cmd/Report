@@ -98,14 +98,21 @@ class FirebaseRelay:
         self._until = self.clock() + max(60, int(res.get("expiresIn") or 3600) - 300)
         return self._token
 
-    def put(self, path: str, data: dict):
+    def put(self, path: str, data: dict, only: bool = False):
+        """only=True 면 data 에 있는 칸만 바꾸고 문서의 다른 칸은 그대로 (updateMask)"""
         url = DOC_URL.format(project=self.project, path=path)
+        if only:
+            url += "?" + "&".join(f"updateMask.fieldPaths={k}" for k in data)
         return self.post(url, fields(data), token=self.token(), method="PATCH")
 
     def put_weather(self, day: dict):
-        """boards/{열쇠}/weather/{날짜} — 보고 앱이 at 으로 새로 온 것만 받음"""
+        """boards/{열쇠}/weather/{날짜} — 보고 앱이 at 으로 새로 온 것만 받음. 예보 기록 칸(fc0 ~ fc4)은 그대로 둠"""
         body = {k: day.get(k) for k in ("date", "key", "label", "icon", "tempMax", "tempMin", "rainMm", "source", "basis")}
-        return self.put(f"boards/{self.board}/weather/{day['date']}", {**body, "at": dt.datetime.now(dt.timezone.utc)})
+        return self.put(f"boards/{self.board}/weather/{day['date']}", {**body, "at": dt.datetime.now(dt.timezone.utc)}, only=True)
+
+    def put_fc_log(self, date: str, lead: int, detail: dict):
+        """예보 기록 — weather/{날짜} 의 fc{며칠 전} 칸에 그때 예보(오전 · 오후 비 · 눈 · 구름)를 남김. 관측이 와도 지워지지 않음"""
+        return self.put(f"boards/{self.board}/weather/{date}", {f"fc{lead}": json.dumps(detail, ensure_ascii=False, separators=(",", ":"))}, only=True)
 
     def weather_sources(self) -> dict:
         """이미 올린 날씨 {날짜: observed|observed-partial|forecast} — 관측인데 최고/최저가 비었으면 observed-partial (다시 받을 날)"""

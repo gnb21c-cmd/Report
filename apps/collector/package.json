@@ -9,6 +9,7 @@
     "backtest": "tsx src/backtest.ts",
     "weather-study": "tsx src/weatherStudy.ts",
     "week-study": "tsx src/weekStudy.ts",
+    "weather-rule": "tsx src/weatherRule.ts",
     "export-daily": "tsx src/exportDaily.ts",
     "plan": "tsx src/plan.ts",
     "halfoff": "tsx src/halfoff.ts",
