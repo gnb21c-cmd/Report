@@ -1469,6 +1469,12 @@ ul.plain li {
 .bread-tbl td:first-child { word-break: keep-all; }
 .bread-tbl tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
 .bread-tbl td.warn { color: var(--bad); }
+/* 베이커리로 셈하는 상품 전체 (베이커리 상세 맨 아래) */
+.bakery-list .bl-head { font-size: 15px; margin: 14px 0 4px; }
+.bakery-list .bl-head small { font-weight: 500; }
+.bakery-list .bl-warn { color: var(--bad); font-size: 13px; margin: 4px 0; }
+.bakery-list .bl-old { margin-top: 12px; }
+.bakery-list .bl-old summary { cursor: pointer; font-weight: 700; font-size: 15px; padding: 6px 0; }
 
 /* 오늘 마감 전 — 문제가 있을 때만 경고 (안내 다섯 줄은 날짜 띠 오른쪽 .strip-note) */
 .live-banner {

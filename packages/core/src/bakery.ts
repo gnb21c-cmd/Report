@@ -355,6 +355,53 @@ export function breadTotals(rows: BreadResult[]): { made: number | null; full: n
   };
 }
 
+/** 베이커리로 셈해진 상품 하나 (B 베이커리 상세 맨 아래 목록) */
+export interface BakeryProduct {
+  name: string;
+  /** 그날 작업지시 수량 (작업지시에 없으면 null) */
+  order: number | null;
+  /** 그날 판매 개수 */
+  day: number;
+  /** 최근 4주(그날 포함 28일) 판매 개수 */
+  recent: number;
+  /** 마지막으로 팔린 날 (고른 날까지 · 한 번도 없으면 null) */
+  last: string | null;
+}
+export const RECENT_DAYS = 28;
+
+/** 베이커리로 셈해진 상품 전체 — 그날 보고에 저장된 분류 그대로(= 베이커리 매출 · 판매 개수에 들어간 상품) + 그날 작업지시에만 있는 빵
+    잼(NOT_BREAD)은 기타라 빠짐. 순서: 작업지시 있는 빵(지시 많은 순) → 그날 · 4주 많이 팔린 순 → 오래 안 팔린 것(최근 순) */
+export function bakeryProducts(board: Board, date: string, plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): BakeryProduct[] {
+  const ordered = new Map(orderRows(plan, order, { date: "9999-12-31", time: "00:00" }).map((r) => [r.name, r.qty]));
+  const from = addDays(date, -(RECENT_DAYS - 1));
+  const m = new Map<string, BakeryProduct>();
+  const row = (name: string) => {
+    let r = m.get(name);
+    if (!r) m.set(name, (r = { name, order: ordered.get(name) ?? null, day: 0, recent: 0, last: null }));
+    return r;
+  };
+  for (const d of [...board.byDate.keys()].filter((k) => k <= date).sort()) {
+    for (const p of board.products(d, d, "베이커리")) {
+      if (NOT_BREAD.has(p.name)) continue;
+      const r = row(p.name);
+      if (p.qty > 0) r.last = d;
+      if (d >= from) r.recent += p.qty;
+      if (d === date) r.day += p.qty;
+    }
+  }
+  for (const name of ordered.keys()) row(name);
+  const rank = (r: BakeryProduct) => (r.order != null ? 0 : r.day > 0 || r.recent > 0 ? 1 : 2);
+  return [...m.values()].sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      (b.order ?? 0) - (a.order ?? 0) ||
+      b.day - a.day ||
+      b.recent - a.recent ||
+      (b.last || "").localeCompare(a.last || "") ||
+      a.name.localeCompare(b.name, "ko"),
+  );
+}
+
 /** 그날 생산이 시작됐는지 (아침 6시 = 현장 태블릿 하루 시작) — 그 뒤로는 그날 최종 수량을 못 바꿈 (현장에 지시한 수량 = 그날 생산 기록) */
 export function productionStarted(date: string, now: Now): boolean {
   return now.date > date || (now.date === date && now.time >= DAY_START);
