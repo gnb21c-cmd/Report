@@ -23,6 +23,8 @@ import {
   shortLabel,
   snapUnit,
   breadUnit,
+  stepGroup,
+  stepOf,
   weekday,
   weekDates,
   weekPlanDay,
@@ -714,7 +716,9 @@ function Result({ api, today }: { api: Api; today: string }) {
             ›
           </button>
         </div>
-        <p className="muted">폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 다음 날 아침 9시 10분 실적 수집 뒤 채워지고, 그날 15시 계획이 이 차이만큼 빵별 수량을 고칩니다</p>
+        <p className="muted">
+          폐기 = 생산 − 판매 · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 다음 날 아침 9시 10분 실적 수집 뒤 채워짐. 다음 {stepGroup(date) === "공휴일" ? "공휴일" : `${stepGroup(date)}요일`} 수량: 할인 없이 매진 +1 · 할인 있으며 매진 그대로 · 폐기 −1 (몽블랑은 5개 단위)
+        </p>
         {err && <p className="error">{err}</p>}
         {rows && !rows.length && <p className="empty">이날 실적이 아직 없습니다.</p>}
         {rows && rows.length > 0 && (
@@ -726,6 +730,7 @@ function Result({ api, today }: { api: Api; today: string }) {
                 <th className="num">판매</th>
                 <th className="num">50%</th>
                 <th className="num">폐기</th>
+                <th className="num">다음</th>
               </tr>
             </thead>
             <tbody>
@@ -739,6 +744,7 @@ function Result({ api, today }: { api: Api; today: string }) {
                   <td className="num">{r.sold}</td>
                   <td className="num">{r.half || ""}</td>
                   <td className="num">{r.waste == null ? "—" : r.waste || ""}</td>
+                  <td className={`num step${stepOf(r) ? (stepOf(r)! > 0 ? " up" : " down") : ""}`}>{stepOf(r) == null ? "—" : stepOf(r)! > 0 ? "+1" : stepOf(r)! < 0 ? "−1" : "그대로"}</td>
                 </tr>
               ))}
               <tr className="sum">
@@ -747,6 +753,7 @@ function Result({ api, today }: { api: Api; today: string }) {
                 <td className="num">{sum("sold")}</td>
                 <td className="num">{sum("half")}</td>
                 <td className="num">{known ? sum("waste") : "—"}</td>
+                <td />
               </tr>
             </tbody>
           </table>

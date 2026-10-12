@@ -4,11 +4,15 @@ import {
   asOrder,
   asPlan,
   Board,
-  corrections,
   dayKind,
   dayRange,
   dayResult,
   DEFAULT_LEARNED,
+  nextSteps,
+  sameGroupBefore,
+  stepGroup,
+  stepOf,
+  STEP_LIMIT,
   displayDays,
   finalDay,
   floorCopy,
@@ -116,13 +120,23 @@ describe("주간 잠정안 (목 아침)", () => {
       expect(s.base).toBe(s.qty);
     }
   });
-  it("보정 배수를 곱하고 보정 전 수량(base)을 남김", () => {
-    const fixed = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07", { 소금빵: 0.8 });
+  it("같은 요일 칸(±1)을 그날에만 더하고 예측 수량(base)을 남김", () => {
+    const fixed = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07", { "2026-10-12": { 소금빵: -2 } });
     const a = week[0].week.items.find((i) => i.name === "소금빵")!;
     const b = fixed[0].week.items.find((i) => i.name === "소금빵")!;
-    expect(b.qty).toBe(Math.round(a.qty * 0.8));
+    expect(b.qty).toBe(a.qty - 2);
     expect(b.base).toBe(a.qty);
-    expect(b.adj).toBe(0.8);
+    expect(b.step).toBe(-2);
+    // 화요일은 그대로
+    expect(fixed[1].week.items.find((i) => i.name === "소금빵")!.qty).toBe(week[1].week.items.find((i) => i.name === "소금빵")!.qty);
+  });
+  it("칸은 예측의 ±30% 안으로 묶음 (끝없이 쌓이지 않게)", () => {
+    const a = week[0].week.items.find((i) => i.name === "소금빵")!;
+    const lim = Math.floor(a.qty * STEP_LIMIT);
+    const up = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07", { "2026-10-12": { 소금빵: 100 } })[0].week.items.find((i) => i.name === "소금빵")!;
+    const down = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07", { "2026-10-12": { 소금빵: -100 } })[0].week.items.find((i) => i.name === "소금빵")!;
+    expect([up.qty, up.step]).toEqual([a.qty + lim, lim]);
+    expect([down.qty, down.step]).toEqual([a.qty - lim, -lim]);
   });
 });
 
@@ -135,13 +149,17 @@ describe("최종안 (3일 전 15시)", () => {
     expect(makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-10", "2026-10-09", plan, null)).toBeNull(); // 10-13 이 아님
   });
   it("금(10-09) → 월(10-12) · 잠정 확정 수량 ±10% 안으로 묶음", () => {
-    const order: OrderDoc = { v: 2, date: mon.date, provisional: { 소금빵: L(50) }, final: {} };
-    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", plan, order, { 소금빵: 3 })!;
+    // 잠정 확정 = 주간 수량 그대로 (같은 요일 칸 ±30% 를 넣어도 최종은 잠정의 ±10% 안)
+    const w = mon.week.items.find((i) => i.name === "소금빵")!.qty;
+    const order: OrderDoc = { v: 2, date: mon.date, provisional: { 소금빵: L(w) }, final: {} };
+    const [lo, hi] = [Math.floor(w * 0.9), Math.ceil(w * 1.1)];
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", plan, order, { 소금빵: 100 })!;
     const s = f.items.find((i) => i.name === "소금빵")!;
-    expect(s.qty).toBe(55); // 크게 늘어도 잠정 50 의 +10%
-    expect([s.lo, s.hi]).toEqual([45, 55]);
-    const low = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", plan, order, { 소금빵: 0.1 })!;
-    expect(low.items.find((i) => i.name === "소금빵")!.qty).toBe(45); // 크게 줄어도 −10%
+    expect(s.qty).toBe(hi); // 크게 늘어도 잠정의 +10%
+    expect([s.lo, s.hi]).toEqual([lo, hi]);
+    expect(s.step).toBeGreaterThan(0); // 다음 같은 요일로 이어 갈 칸
+    const low = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", plan, order, { 소금빵: -100 })!;
+    expect(low.items.find((i) => i.name === "소금빵")!.qty).toBe(lo); // 크게 줄어도 −10%
     // 잠정 확정이 없는 빵은 주간 수량이 기준
     const c = f.items.find((i) => i.name === "크루아상")!;
     const cw = mon.week.items.find((i) => i.name === "크루아상")!.qty;
@@ -228,17 +246,6 @@ describe("결과 · 오차 → 다음 예측", () => {
     expect(rows.some((x) => x.name === "딸기잼")).toBe(false);
     expect(rows.some((x) => x.name === "블루베리잼")).toBe(false);
   });
-  it("많이 만들면 줄이고, 다 팔리면 조금 올림 (하루뿐이라 1 쪽으로 당김)", () => {
-    const c = corrections([{ date: "2026-10-12", rows }], "2026-10-12");
-    expect(c["소금빵"]).toBeLessThan(1);
-    expect(c["소금빵"]).toBeGreaterThan(42 / 60);
-    expect(c["크루아상"]).toBeGreaterThan(1);
-  });
-  it("보정이 쌓이지 않음 — 보정 전 예측과 견줌", () => {
-    const x: BreadResult = { name: "소금빵", made: 45, base: 60, sold: 45, half: 0, full: 45, waste: 0, soldOut: true };
-    const c = corrections([1, 2, 3, 4, 5, 6].map((k) => ({ date: addDays("2026-10-12", -k), rows: [x] })), "2026-10-12");
-    expect(c["소금빵"]).toBeCloseTo(Math.exp((6 / 8) * Math.log(0.75 * 1.1)), 2);
-  });
 });
 
 describe("생산 단위 — 몽블랑은 5개 단위", () => {
@@ -258,18 +265,18 @@ describe("생산 단위 — 몽블랑은 5개 단위", () => {
     const b = new Board([...make("2025-08-01", "2025-12-31", () => 1), ...make("2026-08-01", "2026-10-07", () => 1)].map((r) => ({ ...r, cafe: { ...r.cafe!, products: [...r.cafe!.products, ["몽블랑", "베이커리", 23, 0] as any] } })));
     const [mon] = makeWeek(b, {}, DEFAULT_LEARNED, "2026-10-08", "2026-10-07");
     expect(mon.week.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
-    const f = makeFinal(b, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", { v: 2, date: mon.date, week: mon.week }, null, { 몽블랑: 1.07 })!;
+    const f = makeFinal(b, {}, DEFAULT_LEARNED, "2026-10-09", "2026-10-08", { v: 2, date: mon.date, week: mon.week }, null, { 몽블랑: 1 })!;
     expect(f.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
   });
 });
 
 describe("현장 태블릿 복사본 — 수량 · 상태만", () => {
   it("예상 손님 · 날씨 · 보정 값은 빼고, 태블릿에서 같은 목록이 나옴", () => {
-    const step = { madeOn: "2026-10-08", asOf: "2026-10-07", kind: "평일" as const, visitors: 321, weather: "쾌적", total: 50, items: [{ name: "소금빵", qty: 50, base: 47, adj: 1.06 }] };
+    const step = { madeOn: "2026-10-08", asOf: "2026-10-07", kind: "평일" as const, visitors: 321, weather: "쾌적", total: 50, items: [{ name: "소금빵", qty: 50, base: 47, step: 3 }] };
     const plan: PlanDoc = { v: 2, date: "2026-10-12", week: step, final: { ...step, madeOn: "2026-10-09", items: [{ name: "소금빵", qty: 52, base: 49, lo: 45, hi: 55 }] }, outlook: [] };
     const order: OrderDoc = { v: 2, date: "2026-10-12", provisional: { 소금빵: L(50) }, final: {} };
     const f = floorCopy(plan, order);
-    expect(JSON.stringify(f)).not.toMatch(/321|쾌적|base|adj|outlook|매니저/);
+    expect(JSON.stringify(f)).not.toMatch(/321|쾌적|base|adj|step|outlook|매니저/);
     const now = T("2026-10-12", "07:00");
     expect(orderRows(f.plan, f.order, now)).toEqual(orderRows(plan, order, now));
   });
@@ -302,5 +309,49 @@ describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금
     expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "06:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-09", time: "01:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-07", time: "23:00" })).toBe(false);
+  });
+});
+
+describe("같은 요일 결과로 ±1 (2026-10-12 사장님 규칙)", () => {
+  it("묶음 — 요일마다 따로, 평일에 낀 공휴일은 공휴일끼리 (주말은 그 요일)", () => {
+    expect(stepGroup("2026-10-12")).toBe("월");
+    expect(stepGroup("2026-10-13")).toBe("화");
+    expect(stepGroup("2026-10-09")).toBe("공휴일"); // 한글날(금)
+    expect(stepGroup("2026-10-05")).toBe("공휴일"); // 개천절 대체 휴일(월)
+    expect(stepGroup("2026-10-10")).toBe("토");
+    expect(stepGroup("2026-10-03")).toBe("토"); // 개천절이 토요일
+  });
+  it("앞선 같은 묶음 날 — 월요일은 월요일만, 공휴일 월요일은 건너뜀", () => {
+    expect(sameGroupBefore("2026-10-19", 3)).toEqual(["2026-10-12", "2026-09-28", "2026-09-21"]);
+    expect(sameGroupBefore("2026-10-16", 2)).toEqual(["2026-10-02", "2026-09-18"]); // 10-09 한글날 · 09-25 추석 건너뜀
+    expect(sameGroupBefore("2026-10-09", 3)).toEqual(["2026-10-05", "2026-09-25", "2026-09-24"]);
+  });
+  const R = (made: number | null, sold: number, half = 0): BreadResult => ({ name: "x", made, base: made, sold, half, full: sold - half, waste: made == null ? null : Math.max(0, made - sold), soldOut: false });
+  it("한 칸 — 할인 없이 매진 +1 · 할인 있으며 매진 그대로 · 폐기 −1", () => {
+    expect(stepOf(R(20, 20))).toBe(1);
+    expect(stepOf(R(20, 25))).toBe(1); // 더 만들어 다 팔림
+    expect(stepOf(R(20, 20, 3))).toBe(0);
+    expect(stepOf(R(60, 50, 8))).toBe(-1);
+    expect(stepOf(R(60, 59))).toBe(-1);
+    expect(stepOf(R(null, 5))).toBeNull(); // 작업지시에 없던 상품
+    expect(stepOf(R(0, 0))).toBeNull();
+  });
+  // 10-12(월): 소금빵 지시 60(칸 +2) → 50 팔림(폐기) · 크루아상 20 → 20 다 팔림(할인 없음) · 시나몬롤 10(칸 −1) → 10 팔림 중 2개 50% · 바게트 5 → 하나도 안 팔림
+  const r = day("2026-10-12", 100, [["소금빵", 50], ["크루아상", 20], ["시나몬롤", 10]]);
+  r.cafe!.bakeryHalfBy = { 소금빵: 8, 시나몬롤: 2 };
+  const b = new Board([r]);
+  const st = { madeOn: "2026-10-09", asOf: "2026-10-08", kind: "평일" as const, visitors: 100, weather: "모름", total: 95 };
+  const plan: PlanDoc = { v: 2, date: "2026-10-12", final: { ...st, items: [{ name: "소금빵", qty: 60, base: 58, step: 2 }, { name: "크루아상", qty: 20, base: 20 }, { name: "시나몬롤", qty: 10, base: 11, step: -1 }, { name: "바게트", qty: 5, base: 5 }] } };
+  it("다음 같은 요일 칸 = 그날 계획의 칸 + 그날 결과", () => {
+    expect(nextSteps(b, "2026-10-13", { date: "2026-10-12", plan, order: null })).toEqual({ 소금빵: 1, 크루아상: 1, 시나몬롤: -1, 바게트: -1 });
+  });
+  it("매니저가 확정한 수량이 생산 기준", () => {
+    const order: OrderDoc = { v: 2, date: "2026-10-12", provisional: {}, final: { 소금빵: L(50) } };
+    expect(nextSteps(b, "2026-10-13", { date: "2026-10-12", plan, order }).소금빵).toBe(2); // 50 만들어 50 다 팔림(할인 8개 있음 → 그대로)
+  });
+  it("실적이 아직 없거나(쓸 수 있는 날 뒤) 문 닫은 날은 칸만 이어 감", () => {
+    expect(nextSteps(b, "2026-10-11", { date: "2026-10-12", plan, order: null })).toEqual({ 소금빵: 2, 시나몬롤: -1 });
+    expect(nextSteps(new Board([]), "2026-10-13", { date: "2026-10-12", plan, order: null })).toEqual({ 소금빵: 2, 시나몬롤: -1 });
+    expect(nextSteps(b, "2026-10-13", null)).toEqual({});
   });
 });
