@@ -100,7 +100,6 @@ async function main() {
     ["총매출", "total"],
     ["카페 매출(바리스타+베이커리+키친)", "cafe"],
     ["카페 소비 인원", "visitors"],
-    ["카페 영수증 묶음(팀)", "teams"],
     ["키즈 1장당 총매출", ["total", "tickets"]],
     ["키즈 1장당 카페 매출", ["cafe", "tickets"]],
     ["키즈 1장당 카페 소비 인원", ["visitors", "tickets"]],
