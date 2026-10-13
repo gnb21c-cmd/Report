@@ -1,5 +1,5 @@
 /* ============================================================
-   카페아스타나 방문인원 — 홈의 방문인원 상자를 누르면
+   카페 소비 인원 (예전 이름 '카페아스타나 방문인원') — 홈의 소비 인원 상자를 누르면
    ① 주 단위 합계 선 (월 ~ 일, 1월 첫 주 ~ 마감일이 든 주) — 작년 같은 주(364일 전) 회색 · 올해 분홍
    ② 달마다 막대 (1 ~ 12월) — 작년 같은 달 회색 · 올해 분홍 (마감일이 든 달은 마감일까지)
    방문인원 = 음료 · 맥주 잔 × 0.96 (rules.ts VISITOR_FACTOR)
@@ -29,7 +29,7 @@ export function VisitorsDetail(props: { board: Board } & Nav) {
 
   return (
     <>
-      <DetailHeader title="카페아스타나 방문인원" {...props} />
+      <DetailHeader title="카페 소비 인원" {...props} />
       <main className="content">
         <div className="stats">
           <Stat label={`마감일 · ${shortLabel(date)}`} value={people(day.visitors)} note={`음료 · 맥주 ${count(day.cups, "잔")} × 0.96`} />
@@ -37,7 +37,7 @@ export function VisitorsDetail(props: { board: Board } & Nav) {
         </div>
 
         <ChartCard
-          title="주 단위 방문인원 합계"
+          title="주 단위 소비 인원 합계"
           sub="월요일 ~ 일요일 합 · 회색 = 작년 같은 주 (같은 요일) · 분홍 = 올해 (마감일이 든 주는 마감일까지)"
           legend={legend}
           table={<Table head="주 (월요일)" rows={w.starts.map((s, i) => [md(s), w.ly[i], w.cur[i]])} />}
@@ -57,13 +57,13 @@ export function VisitorsDetail(props: { board: Board } & Nav) {
             tipTitle={(i) => `${weekLabel(i)} 주`}
             fmt={people}
             axisFmt={n}
-            label="주 단위 방문인원"
+            label="주 단위 소비 인원"
             height={230}
           />
         </ChartCard>
 
         <ChartCard
-          title="달마다 방문인원"
+          title="달마다 소비 인원"
           sub={`1 ~ 12월 · 회색 = 작년 같은 달 · 분홍 = 올해 (${Number(date.slice(5, 7))}월은 ${Number(date.slice(8, 10))}일까지)`}
           legend={legend}
           table={<Table head="월" rows={months.map((m, i) => [`${m}월`, mo.ly[i], mo.cur[i]])} />}
@@ -78,10 +78,10 @@ export function VisitorsDetail(props: { board: Board } & Nav) {
             tipTitle={(i) => `${i + 1}월`}
             fmt={people}
             axisFmt={n}
-            label="달마다 방문인원"
+            label="달마다 소비 인원"
           />
         </ChartCard>
-        <p className="note center-note">방문인원 = 그날 음료 · 맥주 잔 수 × 0.96 (영수증 · 상품별 엑셀에서)</p>
+        <p className="note center-note">카페 소비 인원 = 그날 음료 · 맥주 잔 수 × 0.96 (영수증 · 상품별 엑셀에서)</p>
       </main>
     </>
   );
