@@ -99,7 +99,7 @@ export function DayDetail(props: { board: Board; weather: WeatherMap } & Nav) {
               {BOXES.map((b) => (
                 <Row key={b} label={BOX_LABEL[b]} now={day.box[b]} before={last.box[b]} ok={ok} fmt={num} />
               ))}
-              <Row label="방문인원" now={day.visitors} before={last.visitors} ok={ok} fmt={(v) => count(v, "명")} />
+              <Row label="카페 소비 인원" now={day.visitors} before={last.visitors} ok={ok} fmt={(v) => count(v, "명")} />
               <Row label="객단가" now={day.avgSpend} before={last.avgSpend} ok={ok && last.avgSpend != null} fmt={num} />
               <Row label="네이버 입장" now={day.naver} before={last.naver} ok={ok} fmt={(v) => count(v, "장")} />
               <Row label="현장 입장" now={day.walkIn} before={last.walkIn} ok={ok} fmt={(v) => count(v, "장")} />

@@ -3,9 +3,9 @@
    ① 왼쪽 상자: 날씨 네 칸 + 날짜 · 마감일 매출 · 지난주 같은 요일 비교 (→ 하루 상세)
    ② 오른쪽: 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 — 왼쪽 상자 높이를 다섯으로 나눈 긴 상자, 금액은 원 단위 (→ 섹터 상세)
       위치는 마감 전 · 후 모든 날 같게. 글자는 칸에 맞춰(줄 바꿈 · 잘림 없이) 가능한 크게
-   ③ 당월 매출 합계 · 전년도 같은 기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
-   ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
-   ⑤ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
+   ③ 당월 매출 합계 · 전년 동기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
+   ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
+   ⑤ 카페 소비 인원 · 1인 평균소비 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
@@ -13,7 +13,7 @@ import { useRef } from "react";
 import { WeatherPanel } from "../ui/WeatherPanel";
 import { LiveWarn, useLive } from "../ui/Live";
 import { useFit } from "../ui/fit";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -93,23 +93,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         <SectorBars d={d} open={open} />
       </div>
 
-      {/* 그날 정보 — 방문인원 · 1인 평균소비 · 키즈 입장 (하루치라 섹터 바로 아래) */}
-      <div className="stats">
-        <button className="stat tap" onClick={() => open({ name: "visitors" })}>
-          <div className="stat-label">
-            카페아스타나 방문인원 <Chevron />
-          </div>
-          <div className="stat-value">{count(day.visitors, "명")}</div>
-          <span className="note">음료·맥주 {count(day.cups, "잔")} × 0.96</span>
-        </button>
-        <div className="stat">
-          <div className="stat-label">1인 평균소비</div>
-          <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
-          <span className="note">총 매출 ÷ 방문인원</span>
-        </div>
-      </div>
-
-      {/* 키즈 입장 4칸 한 줄 — 이름 · 장수 모두 가운데. 네이버 아래 회색 '(中 신규 41장)', 네 칸 같은 크기 */}
+      {/* 키즈 입장 4칸 한 줄 (섹터 바로 아래) — 이름 · 장수 모두 가운데. 네이버 아래 회색 '(中 신규 41장)', 네 칸 같은 크기 */}
       <div className="stats four">
         <div className="stat">
           <div className="stat-label">
@@ -140,6 +124,22 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         </button>
       </div>
 
+      {/* 그날 정보 — 카페 소비 인원 · 1인 평균소비 (키즈 입장 4칸 아래, 2026-10-13 사장님 지시로 순서 바꿈) */}
+      <div className="stats">
+        <button className="stat tap" onClick={() => open({ name: "visitors" })}>
+          <div className="stat-label">
+            카페 소비 인원 <Chevron />
+          </div>
+          <div className="stat-value">{count(day.visitors, "명")}</div>
+          <span className="note">음료·맥주 {count(day.cups, "잔")} × 0.96</span>
+        </button>
+        <div className="stat">
+          <div className="stat-label">1인 평균소비</div>
+          <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
+          <span className="note">총 매출 ÷ 카페 소비 인원</span>
+        </div>
+      </div>
+
       {/* 자금 현황 — 그날 정보 아래. 누르면 계좌 · 적요까지 자세히 */}
       <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
         <div className="stat-label">
@@ -159,20 +159,22 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         )}
       </button>
 
-      {/* 1. 당월 매출 합계 · 2. 전년도 동 기간 매출 합계 (좌우 비교) / 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 */}
+      {/* 1. 당월 매출 합계 · 2. 전년 동기간 매출 합계 (좌우 비교) / 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 */}
       <div className="stats">
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
             당월 매출 합계 <Chevron />
           </div>
+          <DayKindsLine k={d.monthDays} />
           <div className="stat-value">{won(d.month.total)}</div>
           {/* 오늘 마감 전이면 누계는 어제까지 (d.cumTo) */}
           <span className="note period">({d.cumTo < d.month.from ? "오늘 마감 전 · 확정분 없음" : span(d.month.from, d.cumTo, true)})</span>
         </button>
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
-            전년도 동 기간 매출 합계 <Chevron />
+            전년 동기간 매출 합계 <Chevron />
           </div>
+          <DayKindsLine k={d.lyMonthDays} />
           <div className="stat-value">{hasData(d.lyMonth) ? won(d.lyMonth.total) : "—"}</div>
           <span className="note period">({span(d.lyMonth.from, d.lyMonth.to, true)})</span>
         </button>
@@ -194,6 +196,17 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         </button>
       </div>
     </>
+  );
+}
+
+/** 누계 기간에 영업한 날 — 평일(파랑) · 휴일(빨강, 토 · 일 · 공휴일) 날 수. 평일/휴일 차이로 매출이 다른지 감안하게 (2026-10-13 사장님) */
+function DayKindsLine({ k }: { k: DayKinds }) {
+  if (!k.weekday && !k.holiday) return null;
+  return (
+    <div className="day-kinds">
+      <span className="dk-weekday">평일 {k.weekday}일</span>
+      <span className="dk-holiday">휴일 {k.holiday}일</span>
+    </div>
   );
 }
 
