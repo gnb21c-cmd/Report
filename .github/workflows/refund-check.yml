@@ -1,9 +1,7 @@
 # 반품 확인 (손으로 실행) — apps/collector/src/refundCheck.ts. 기록에는 개수만 (상품 이름 · 금액 없음)
 name: 반품 확인
+# 2026-10-13 마감 전: 반품 영수증 2장 · 반품 줄 9개 중 짝 못 찾은 3개 → 베이커리 2종이 각 −1 (그날 같은 이름 매출이 없음)
 on:
-  push:
-    branches: ["feature/bakery-neg-fix"]
-    paths: ["apps/collector/src/refundCheck.ts", ".github/workflows/refund-check.yml"]
   workflow_dispatch:
     inputs:
       date:
