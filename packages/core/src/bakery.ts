@@ -345,15 +345,19 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
     .sort((a, b) => (b.made ?? b.sold) - (a.made ?? a.sold) || a.name.localeCompare(b.name, "ko"));
 }
 
-/** 그날 합계 (B 베이커리 상세 맨 위) — 총 생산 · 정가판매 · 할인판매 · 폐기. 작업지시가 없는 빵뿐이면 생산 · 폐기는 null */
+/** 그날 빵 하나의 생산(보고 앱 표시) = 판매 + 폐기 — 현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신 (2026-10-13 사장님 지시)
+    폐기 = 지시(확정 · 자동) − 판매(모자라면 0, 일과 중 바뀐 양은 모름) · 작업지시에 없는 상품은 폐기를 몰라 판매만 */
+export function producedOf(r: BreadResult): number {
+  return r.sold + (r.waste ?? 0);
+}
+
+/** 그날 합계 (B 베이커리 상세 맨 위) — 총 생산 = 정가판매 + 할인판매 + 폐기. 작업지시가 없는 빵뿐이면 생산 · 폐기는 null */
 export function breadTotals(rows: BreadResult[]): { made: number | null; full: number; half: number; waste: number | null } {
   const planned = rows.filter((r) => r.made != null);
-  return {
-    made: planned.length ? planned.reduce((a, r) => a + (r.made || 0), 0) : null,
-    full: rows.reduce((a, r) => a + r.full, 0),
-    half: rows.reduce((a, r) => a + r.half, 0),
-    waste: planned.length ? planned.reduce((a, r) => a + (r.waste || 0), 0) : null,
-  };
+  const full = rows.reduce((a, r) => a + r.full, 0);
+  const half = rows.reduce((a, r) => a + r.half, 0);
+  const waste = planned.length ? planned.reduce((a, r) => a + (r.waste || 0), 0) : null;
+  return { made: waste == null ? null : full + half + waste, full, half, waste };
 }
 
 /** 베이커리로 셈해진 상품 하나 (B 베이커리 상세 맨 아래 목록) */

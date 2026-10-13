@@ -15,6 +15,7 @@ import {
   bakeryProducts,
   breadTotals,
   dayResult,
+  producedOf,
   RECENT_DAYS,
   type BakeryProduct,
   extraTotal,
@@ -308,14 +309,14 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
   );
 }
 
-/** 베이커리 맨 위 합계 — 총 생산(그날 D 확정 수량) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) · 폐기(= 생산 − 정가 − 할인) */
+/** 베이커리 맨 위 합계 — 총 생산(= 정가 + 할인 + 폐기, 현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) · 폐기(= 지시(확정 · 자동) − 판매) */
 function BreadCount({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
   const t = useMemo(() => breadTotals(dayResult(board, date, doc?.plan, doc?.order)), [board, date, doc]);
   const sales = !!board.report(date)?.cafe;
   // 오늘 마감 전에는 아직 안 팔린 것이라 '폐기'가 아니라 '남음'
   const open = !!useLive()?.today;
   const cells: [string, number | null][] = [
-    ["총 생산", t.made],
+    ["총 생산", sales ? t.made : null],
     ["정가판매", sales ? t.full : null],
     ["할인판매", sales ? t.half : null],
     [open ? "남음 (마감 전)" : "폐기", sales ? t.waste : null],
@@ -332,7 +333,7 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
   );
 }
 
-/** 베이커리 맨 아래 — 빵별 생산 · 정가판매 · 50% 할인 · 폐기 (생산은 작업지시, 판매는 그날 영수증) */
+/** 베이커리 맨 아래 — 빵별 생산(= 판매 + 폐기) · 정가판매 · 50% 할인 · 폐기(= 지시 − 판매), 판매는 그날 영수증 */
 function BreadTable({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
   const rows = useMemo(() => dayResult(board, date, doc?.plan, doc?.order), [board, date, doc]);
   const hasSales = !!board.report(date)?.cafe;
@@ -364,7 +365,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
               {rows.map((r) => (
                 <tr key={r.name}>
                   <td>{r.name}</td>
-                  <td className="num">{n(r.made)}</td>
+                  <td className="num">{hasSales ? n(producedOf(r)) : "—"}</td>
                   <td className="num">{hasSales ? n(r.full) : "—"}</td>
                   <td className="num">{hasSales ? n(r.half) : "—"}</td>
                   <td className={`num${r.waste && !open ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
@@ -374,7 +375,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
             <tfoot>
               <tr>
                 <td>합계 {rows.length}종</td>
-                <td className="num">{n(sum((r) => r.made))}</td>
+                <td className="num">{hasSales ? n(sum((r) => producedOf(r))) : "—"}</td>
                 <td className="num">{hasSales ? n(sum((r) => r.full)) : "—"}</td>
                 <td className="num">{hasSales ? n(sum((r) => r.half)) : "—"}</td>
                 <td className="num">{hasSales ? n(sum((r) => r.waste)) : "—"}</td>
@@ -382,8 +383,8 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
             </tfoot>
           </table>
           <p className="note muted">
-            생산 = 그날 베이커리 작업지시(D) 확정 수량 · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 다음 날 아침 수집한 영수증 · 폐기 = 생산 − 정가판매 − 할인판매
-            {open && " · 오늘은 마감 전이라 남음 = 생산 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
+            생산 = 정가판매 + 할인판매 + 폐기 (현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 영수증 · 폐기 = 작업지시(확정, 없으면 자동) 수량 − 판매 (일과 중 바뀐 양은 모름, 작업지시에 없는 상품은 —)
+            {open && " · 오늘은 마감 전이라 남음 = 작업지시 수량 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
             {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
           </p>
         </>
