@@ -295,14 +295,17 @@ describe("태블릿 키 번호", () => {
 });
 
 describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금", async () => {
-  const { breadTotals, productionStarted } = await import("../src");
-  it("합계: 총 생산 · 정가판매 · 할인판매 · 폐기(= 생산 − 정가 − 할인), 작업지시 없는 빵은 생산 · 폐기를 모름", () => {
-    const t = breadTotals([
+  const { breadTotals, producedOf, productionStarted } = await import("../src");
+  it("합계: 총 생산 = 정가판매 + 할인판매 + 폐기 (현장에서 그날 수량이 바뀔 수 있어 지시 수량이 아님) · 폐기 = 지시(확정 · 자동) − 판매", () => {
+    const rows = [
       { name: "소금빵", made: 50, base: null, sold: 48, half: 6, full: 42, waste: 2, soldOut: false },
-      { name: "몽블랑", made: 20, base: null, sold: 20, half: 0, full: 20, waste: 0, soldOut: true },
-      { name: "딸기빵", made: null, base: null, sold: 3, half: 0, full: 3, waste: null, soldOut: false },
-    ]);
-    expect(t).toEqual({ made: 70, full: 65, half: 6, waste: 2 });
+      { name: "몽블랑", made: 20, base: null, sold: 23, half: 0, full: 23, waste: 0, soldOut: true }, // 지시보다 더 만들어 더 팔림
+      { name: "딸기빵", made: null, base: null, sold: 3, half: 0, full: 3, waste: null, soldOut: false }, // 작업지시 없음 — 폐기 모름
+    ];
+    const t = breadTotals(rows);
+    expect(t).toEqual({ made: 76, full: 68, half: 6, waste: 2 });
+    expect(t.made).toBe(t.full + t.half + t.waste!);
+    expect(rows.map(producedOf)).toEqual([50, 23, 3]);
     expect(breadTotals([{ name: "x", made: null, base: null, sold: 3, half: 1, full: 2, waste: null, soldOut: false }])).toEqual({ made: null, full: 2, half: 1, waste: null });
   });
   it("그날 아침 6시(현장 시작)부터는 그날 최종 수량을 못 바꿈 — 현장에 지시한 수량이 그날 생산 기록", () => {
