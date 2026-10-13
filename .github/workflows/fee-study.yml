@@ -1,0 +1,26 @@
+# 키즈 요금제 검증 (손으로 실행) — apps/collector/src/feeStudy.ts
+# 2026-04-01 교환권 → 입장료 전환 전 · 후 작년 대비 흐름의 차이(이중 차이), 평일 · 휴일 · 기간 스티커 · 달마다
+# 공개 저장소라 기록에는 % · 비율 · 날 수만 (매출 금액 · 손님 수 없음)
+name: 키즈 요금제 검증
+on:
+  push:
+    branches: ["feature/fee-study"]
+    paths: ["apps/collector/src/feeStudy.ts", ".github/workflows/fee-study.yml"]
+  workflow_dispatch:
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector fee-study
+        env:
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
