@@ -5,7 +5,10 @@
    - 총매출은 두 방식 모두 '실제로 들어온 돈' 기준(교환권 시절 키즈 = 판 교환권 − 카페에서 쓴 교환권, 카페에서 산 것은 카페 매출) — metrics.ts
    - 키즈 입장 장수 = 네이버 + 현장 + 이벤트 무료 (POS 입장 발행 기준, 두 방식 같은 키)
    - 2025-01 평일은 2만원 선결제 상품(2월부터 3만원) → 평일의 '바뀌기 전'은 2 ~ 3월만. 휴일은 1월부터 3만원이라 1 ~ 3월
-   - 네이버 예약은 시간마다 10팀까지만 받음(사장님) → 휴일엔 꽉 차서 네이버 장수가 수요보다 적게 보임. ⑤ 에서 상한 근처 날을 따로 봄
+   - 1장 = 4인 기준 한 팀 (교환권 · 입장권 같음) → '1장당' 은 한 팀당
+   - 네이버 예약은 10:00 ~ 19:30 30분마다 10팀(하루 200팀)까지 — 휴일엔 꽉 차서 네이버 장수가 수요보다 적게 보임. ⑤ 에서 상한 근처 날을 따로 봄
+     바뀐 뒤에는 통합데스크 공회전이 적게 상한 수를 조절함 (사장님 2026-10-13)
+   - 남는 돈은 원재료만 뺀 값(총매출 − 카페 매출 × 원가율). 원가율은 공개 저장소에 남기지 않고 25% · 30% 두 값으로 내어 그 사이를 읽음
    공개 저장소라 기록에는 % · 비율 · 날 수만 (매출 금액 · 손님 수 없음) */
 import { addDays, applySettings, Board, dayKind, dayRange, kidsTickets, seasonOf, type Metrics } from "@report/core";
 import { readAll } from "./reports";
@@ -15,8 +18,8 @@ const pct = (x: number) => (Number.isFinite(x) ? `${x >= 0 ? "+" : ""}${(x * 100
 const share = (x: number) => (Number.isFinite(x) ? `${(x * 100).toFixed(1)}%` : "—");
 const CHANGE = "2026-04-01";
 
-type V = { tickets: number; paid: number; naver: number; walkIn: number; total: number; cafe: number; kidsBox: number; other: number; visitors: number };
-const KEYS: (keyof V)[] = ["tickets", "paid", "naver", "walkIn", "total", "cafe", "kidsBox", "other", "visitors"];
+type V = { tickets: number; paid: number; naver: number; walkIn: number; total: number; cafe: number; kidsBox: number; other: number; visitors: number; g25: number; g30: number };
+const KEYS: (keyof V)[] = ["tickets", "paid", "naver", "walkIn", "total", "cafe", "kidsBox", "other", "visitors", "g25", "g30"];
 
 async function main() {
   const { reports, settings } = await readAll({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY") });
@@ -31,20 +34,23 @@ async function main() {
     const m: Metrics = board.day(d);
     const tickets = kidsTickets(m);
     if (tickets <= 0) return null; // 문 닫은 날
+    const cafe = m.box.바리스타 + m.box.베이커리 + m.box.키친;
     return {
       tickets,
       paid: m.naver + m.walkIn,
       naver: m.naver,
       walkIn: m.walkIn,
       total: m.total,
-      cafe: m.box.바리스타 + m.box.베이커리 + m.box.키친,
+      cafe,
       kidsBox: m.box.키즈입장료,
       other: m.box.기타,
       visitors: m.visitors,
+      g25: m.total - cafe * 0.25,
+      g30: m.total - cafe * 0.3,
     };
   };
   const type = (d: string) => (dayKind(d) === "휴일" ? "휴일" : "평일");
-  const zero = (): V => ({ tickets: 0, paid: 0, naver: 0, walkIn: 0, total: 0, cafe: 0, kidsBox: 0, other: 0, visitors: 0 });
+  const zero = (): V => ({ tickets: 0, paid: 0, naver: 0, walkIn: 0, total: 0, cafe: 0, kidsBox: 0, other: 0, visitors: 0, g25: 0, g30: 0 });
   const add = (a: V, b: V) => {
     for (const k of KEYS) a[k] += b[k];
   };
@@ -102,11 +108,13 @@ async function main() {
     ["  그중 네이버", "naver"],
     ["  그중 현장", "walkIn"],
     ["총매출", "total"],
+    ["원재료 뺀 금액 (카페 원가율 25%)", "g25"],
+    ["원재료 뺀 금액 (카페 원가율 30%)", "g30"],
     ["카페 매출(바리스타+베이커리+키친)", "cafe"],
     ["카페 소비 인원", "visitors"],
-    ["키즈 1장당 총매출", ["total", "tickets"]],
-    ["키즈 1장당 카페 매출", ["cafe", "tickets"]],
-    ["키즈 1장당 카페 소비 인원", ["visitors", "tickets"]],
+    ["키즈 1장(한 팀)당 총매출", ["total", "tickets"]],
+    ["키즈 1장(한 팀)당 카페 매출", ["cafe", "tickets"]],
+    ["키즈 1장(한 팀)당 카페 소비 인원", ["visitors", "tickets"]],
     ["현장 판매 몫(현장 ÷ 유료 장수)", ["walkIn", "paid"]],
   ];
 
