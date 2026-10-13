@@ -6,7 +6,7 @@
    ③ 당월 매출 합계 · 전년 동기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
    ⑤ 카페 소비 인원 · 1인 평균소비 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
-   ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
+   ⑥ 당월 · 전년 동기간 줄 다음에 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세), 그 아래 OO년 총 매출 · 정산완료 줄
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
 import { useRef } from "react";
@@ -140,26 +140,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         </div>
       </div>
 
-      {/* 자금 현황 — 그날 정보 아래. 누르면 계좌 · 적요까지 자세히 */}
-      <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
-        <div className="stat-label">
-          자금 현황 · 잔액 합계 <small className="muted">증권계좌 별도</small> <Chevron />
-        </div>
-        {cash ? (
-          <>
-            <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
-            <CashBar inn={cash.krw.in} out={cash.krw.out} />
-            {cashFrom && <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>}
-            <span className="note">
-              대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
-            </span>
-          </>
-        ) : (
-          <span className="note">이날 자금 보고 없음 — 눌러서 가까운 날 보기</span>
-        )}
-      </button>
-
-      {/* 1. 당월 매출 합계 · 2. 전년 동기간 매출 합계 (좌우 비교) / 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 */}
+      {/* 1. 당월 매출 합계 · 2. 전년 동기간 매출 합계 (좌우 비교) — 카페 소비 인원 줄 아래 */}
       <div className="stats">
         <button className="stat tap" onClick={() => open({ name: "month" })}>
           <div className="stat-label">
@@ -179,6 +160,26 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <span className="note period">({span(d.lyMonth.from, d.lyMonth.to, true)})</span>
         </button>
       </div>
+      {/* 자금 현황 — 당월 · 전년 동기간 줄 아래, 올해 누계 줄 위 (2026-10-13 사장님 지시로 순서 바꿈). 누르면 계좌 · 적요까지 자세히 */}
+      <button className="stat tap cash-stat" onClick={() => open({ name: "cash" })} aria-label="자금 현황 자세히">
+        <div className="stat-label">
+          자금 현황 · 잔액 합계 <small className="muted">증권계좌 별도</small> <Chevron />
+        </div>
+        {cash ? (
+          <>
+            <div className="stat-value">{money(cash.total, "KRW", false)}원</div>
+            <CashBar inn={cash.krw.in} out={cash.krw.out} />
+            {cashFrom && <span className="note">휴일 — 입출금 없음 · {shortLabel(cashFrom)} 잔액 그대로</span>}
+            <span className="note">
+              대출 제외 자금 <b className={cash.net < 0 ? "minus" : ""}>{cash.net < 0 ? `(${money(-cash.net, "KRW", false)})` : money(cash.net, "KRW", false)}원</b>
+            </span>
+          </>
+        ) : (
+          <span className="note">이날 자금 보고 없음 — 눌러서 가까운 날 보기</span>
+        )}
+      </button>
+
+      {/* 3. OO년 총 매출 합계 · 4. OO년 (현금/신용) 정산완료 합계 — 자금 현황 아래 */}
       <div className="stats">
         <button className="stat tap" onClick={() => open({ name: "year" })}>
           <div className="stat-label">
