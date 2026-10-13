@@ -1,0 +1,32 @@
+# 키즈 요금제 검증 (손으로 실행) — apps/collector/src/feeStudy.ts
+# 2026-04-01 교환권 → 입장료 전환 전 · 후 작년 대비 흐름의 차이(이중 차이), 평일 · 휴일 · 기간 스티커 · 달마다
+# 공개 저장소라 기록에는 % · 비율 · 날 수만 (매출 금액 · 손님 수 없음)
+name: 키즈 요금제 검증
+# 2026-10-13 결과 (평일 기준은 2 ~ 3월 — 작년 1월 평일은 2만원): 총매출 이중 차이 평일 +0.6% · 휴일 −0.8% (변화 없음) ·
+#   키즈 장수 휴일 −12.3% [−20 ~ −6] · 평일 −12.7% (범위 −43 ~ +31, 확정 못 함) · 휴일 1장당 총매출 +13.1% · 휴일 현장 입장 +70%
+#   휴일 네이버 상한 근처 날 2025-01~03 72% → 2026-01~03 30% → 2026-04~ 4.5% · 2025 네이버 달마다 몫이 사장님 캡처와 0.6%p 안에서 같음
+#   교환권 시절 판 교환권의 98 ~ 100% 를 카페에서 씀 (카페 매출의 29 ~ 32%) · 입장료 시절 키즈 몫 10.4%
+#   원재료 뺀 금액 이중 차이 (원가율 25% · 30%): 평일 +1.8% · +2.1% (범위 넓음) · 휴일 +3.9% [−4 ~ +11] · +5.2% [−3 ~ +13]
+#   휴일 한 팀당 카페 매출 −3.2% (범위 안) → 카페 매출이 준 것은 오는 팀이 줄어서
+#   ⑦ 앞으로 1년(입장료 − 교환권): 매출 +0.4% [−7 ~ +8] · 원재료 뺀 25% +3.6% · 30% +4.5% · 팀 수 −11% / 4월 빼면 매출 +1.2% · 원재료 뺀 +4.4 ~ +5.3%
+#     성수기 · 평상시는 입장료가 매출 +3 ~ 6% · 원재료 뺀 +5 ~ 12%, 비수기(3 · 4 · 9 · 10월)는 매출 −5 ~ −9% · 원재료 뺀 −4 ~ −5% · 팀 수 −28 ~ −32%
+#     → 겨울방학이 끝난 2027년 3월에 다시 돌려 볼 것
+on:
+  workflow_dispatch:
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector fee-study
+        env:
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
