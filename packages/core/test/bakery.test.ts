@@ -4,7 +4,9 @@ import {
   asOrder,
   asPlan,
   bakeryProducts,
+  producedOf,
   Board,
+  breadTotals,
   dayKind,
   dayRange,
   dayResult,
@@ -295,7 +297,7 @@ describe("태블릿 키 번호", () => {
 });
 
 describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금", async () => {
-  const { breadTotals, producedOf, productionStarted } = await import("../src");
+  const { productionStarted } = await import("../src");
   it("합계: 총 생산 = 정가판매 + 할인판매 + 폐기 (현장에서 그날 수량이 바뀔 수 있어 지시 수량이 아님) · 폐기 = 지시(확정 · 자동) − 판매", () => {
     const rows = [
       { name: "소금빵", made: 50, base: null, sold: 48, half: 6, full: 42, waste: 2, soldOut: false },
@@ -313,6 +315,49 @@ describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금
     expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "06:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-09", time: "01:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-07", time: "23:00" })).toBe(false);
+  });
+});
+
+describe("베이커리 기본 기준 (2026-10-13 사장님) — 그날 만든 빵은 그날만 · 남으면 모두 폐기 · 총 생산 = 생산 명령, 더 팔리면 현장에서 더 만든 것", () => {
+  const st = { madeOn: "2026-10-10", asOf: "2026-10-09", kind: "평일" as const, visitors: 100, weather: "모름", total: 60 };
+  const plan: PlanDoc = { v: 2, date: "2026-10-13", final: { ...st, items: [{ name: "소금빵", qty: 20, base: 20 }, { name: "크루아상", qty: 20, base: 20 }, { name: "시나몬롤", qty: 20, base: 20 }] } };
+  it("마감 전 — 총 생산은 생산 명령 수량, 남음 = 명령 − 지금까지 판매", () => {
+    const b = new Board([day("2026-10-13", 100, [["소금빵", 5], ["크루아상", 0], ["시나몬롤", 12]])]);
+    const rows = dayResult(b, "2026-10-13", plan, null);
+    expect(rows.map(producedOf)).toEqual([20, 20, 20]);
+    expect(breadTotals(rows)).toMatchObject({ made: 60, waste: 60 - 17 });
+  });
+  it("명령보다 더 팔림 — 현장에서 1 ~ 2개 더 만든 것으로 보고 총 생산을 판매만큼 올림 (폐기 0)", () => {
+    const b = new Board([day("2026-10-13", 100, [["소금빵", 22], ["크루아상", 20], ["시나몬롤", 18]])]);
+    const rows = dayResult(b, "2026-10-13", plan, null);
+    const x = rows.find((r) => r.name === "소금빵")!;
+    expect([producedOf(x), x.waste]).toEqual([22, 0]);
+    expect(breadTotals(rows)).toMatchObject({ made: 62, waste: 2 });
+  });
+  it("마감 뒤 — 총 생산 = 정가판매 + 할인판매 + 폐기 (남은 빵은 모두 폐기)", () => {
+    const r = day("2026-10-13", 100, [["소금빵", 18], ["크루아상", 20], ["시나몬롤", 21]]);
+    r.cafe!.bakeryHalfBy = { 소금빵: 3 };
+    const t = breadTotals(dayResult(new Board([r]), "2026-10-13", plan, null));
+    expect(t).toEqual({ made: 61, full: 56, half: 3, waste: 2 });
+    expect(t.made).toBe(t.full + t.half + t.waste!);
+  });
+});
+
+describe("그날 개수가 마이너스인 빵(짝 못 찾은 반품 등) — 판매 · 할인 · 생산이 마이너스로 나오지 않음", () => {
+  // 10-13 마감 전: 소금빵 5개 팔림 · 크루아상은 반품 2개만 잡혀 −2 · 할인 줄은 아직 없음
+  const r = day("2026-10-13", 100, [["소금빵", 5], ["크루아상", -2]]);
+  const b = new Board([r]);
+  const st = { madeOn: "2026-10-10", asOf: "2026-10-09", kind: "평일" as const, visitors: 100, weather: "모름", total: 30 };
+  const plan: PlanDoc = { v: 2, date: "2026-10-13", final: { ...st, items: [{ name: "소금빵", qty: 20, base: 20 }, { name: "크루아상", qty: 10, base: 10 }] } };
+  const rows = dayResult(b, "2026-10-13", plan, null);
+  it("반품만 잡힌 빵은 판매 0 · 할인 0 · 남음 = 지시 수량", () => {
+    expect(rows.find((x) => x.name === "크루아상")).toMatchObject({ sold: 0, half: 0, full: 0, waste: 10 });
+    const t = breadTotals(rows);
+    expect(t).toEqual({ made: 30, full: 5, half: 0, waste: 25 });
+  });
+  it("상품 목록의 그날 · 4주 판매도 마이너스로 안 셈", () => {
+    const x = bakeryProducts(b, "2026-10-13", plan, null).find((p) => p.name === "크루아상")!;
+    expect([x.day, x.recent]).toEqual([0, 0]);
   });
 });
 
