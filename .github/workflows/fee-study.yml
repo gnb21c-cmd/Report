@@ -9,6 +9,9 @@ name: 키즈 요금제 검증
 #   원재료 뺀 금액 이중 차이 (원가율 25% · 30%): 평일 +1.8% · +2.1% (범위 넓음) · 휴일 +3.9% [−4 ~ +11] · +5.2% [−3 ~ +13]
 #   휴일 한 팀당 카페 매출 −3.2% (범위 안) → 카페 매출이 준 것은 오는 팀이 줄어서
 on:
+  push:
+    branches: ["feature/fee-study"]
+    paths: ["apps/collector/src/feeStudy.ts"]
   workflow_dispatch:
 jobs:
   study:

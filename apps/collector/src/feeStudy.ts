@@ -10,7 +10,7 @@
      바뀐 뒤에는 통합데스크 공회전이 적게 상한 수를 조절함 (사장님 2026-10-13)
    - 남는 돈은 원재료만 뺀 값(총매출 − 카페 매출 × 원가율). 원가율은 공개 저장소에 남기지 않고 25% · 30% 두 값으로 내어 그 사이를 읽음
    공개 저장소라 기록에는 % · 비율 · 날 수만 (매출 금액 · 손님 수 없음) */
-import { addDays, applySettings, Board, dayKind, dayRange, kidsTickets, seasonOf, type Metrics } from "@report/core";
+import { addDays, applySettings, Board, currentSettings, dayKind, dayRange, kidsTickets, seasonOf, type Metrics } from "@report/core";
 import { readAll } from "./reports";
 
 const env = (k: string) => process.env[k] || "";
@@ -242,6 +242,55 @@ async function main() {
   console.log(`   ${Array.from({ length: 11 }, (_, i) => `${i + 2}월 ${share(sumN(mon(i + 2)) / all)}`).join(" · ")}`);
   const days25 = dayRange("2025-01-01", "2025-12-31").filter((d) => val(d));
   console.log(`   자료 있는 날 ${days25.length}일 · 네이버 입력(사람 · 자동)이 있는 날 ${days25.filter((d) => board.day(d).naverInput > 0).length}일 · 나머지는 POS 발행 − 현장`);
+
+  /* ⑦ 앞으로 1년 견주기 — 입장료를 그대로 둘 때 vs 교환권(3만원 선결제)으로 돌아갈 때
+     - 칸 = 기간 스티커(성수기 · 평상시 · 비수기) × 평일/휴일. 칸마다 입장료 효과 = (1 + 바뀐 뒤 그 칸의 작년 대비) ÷ (1 + 바뀌기 전 평일/휴일 전체의 작년 대비) − 1
+       바뀌기 전(1 ~ 3월)엔 평상시 날이 없고 칸마다 날이 적어, 원래 흐름은 기간과 상관없이 평일/휴일마다 같다고 봄
+     - 칸마다 2025년 한 해 총매출 중 몫으로 무게를 줘 1년 효과를 냄 (아직 입장료로 겪지 않은 11 ~ 3월도 같은 기간 스티커 칸의 효과로 봄)
+     - 바뀐 첫 달(4월)은 손님이 바뀐 방식에 익숙해지는 때라 뺀 것도 같이 */
+  const KINDS = ["성수기", "평상시", "비수기"] as const;
+  const rules = currentSettings().seasons;
+  console.log(`\n⑦ 앞으로 1년 견주기 — 기간 스티커: ${rules.map((r) => `${r.kind} ${r.from}~${r.to}(${r.name})`).join(" · ") || "기본값"}`);
+  const year25 = dayRange("2025-01-01", "2025-12-31");
+  const cellOf = (d: string) => `${seasonOf(d).kind}${type(d)}`;
+  const totalBy = new Map<string, number>();
+  for (const d of year25) {
+    const v = val(d);
+    if (v) totalBy.set(cellOf(d), (totalBy.get(cellOf(d)) || 0) + v.total);
+  }
+  const yearSum = [...totalBy.values()].reduce((a, b) => a + b, 0);
+  const preT = { 평일: group(...PRE("평일"), "평일"), 휴일: group(...PRE("휴일"), "휴일") };
+  const OUT: [string, keyof V][] = [["장수", "tickets"], ["총매출", "total"], ["원재료 뺀 25%", "g25"], ["원재료 뺀 30%", "g30"]];
+  for (const start of [CHANGE, "2026-05-01"]) {
+    const cells = KINDS.flatMap((kind) =>
+      (["평일", "휴일"] as const).map((t) => {
+        const post = group(start, last, t, (d) => seasonOf(d).kind === kind);
+        return { kind, t, post, w: (totalBy.get(`${kind}${t}`) || 0) / yearSum };
+      }),
+    );
+    const eff = (pre: G, post: G, k: keyof V) => (1 + yoy(post, k)) / (1 + yoy(pre, k)) - 1;
+    // 칸에 바뀐 뒤 날이 없으면 그 평일/휴일 전체의 바뀐 뒤로 대신
+    const postAll = { 평일: group(start, last, "평일"), 휴일: group(start, last, "휴일") };
+    const postOf = (c: (typeof cells)[number]) => (c.post.now.length >= 5 && c.post.prev.length >= 5 ? c.post : postAll[c.t]);
+    const year = (pre: Record<"평일" | "휴일", G>, posts: G[], k: keyof V) => cells.reduce((s, c, i) => s + c.w * eff(pre[c.t], posts[i], k), 0);
+    console.log(`   ${start === CHANGE ? "바뀐 뒤 전체(4월 ~)" : "4월 빼고(5월 ~)"}:`);
+    for (const c of cells) {
+      const p = postOf(c);
+      console.log(`     ${c.kind} ${c.t}: 1년 매출 몫 ${share(c.w)} · 바뀐 뒤 ${c.post.now.length}일${p === c.post ? "" : "(적어 전체로 대신)"} · ${OUT.map(([n, k]) => `${n} ${pct(eff(preT[c.t], p, k))}`).join(" · ")}`);
+    }
+    const posts = cells.map(postOf);
+    for (const [n, k] of OUT) {
+      const point = year(preT, posts, k);
+      const bs: number[] = [];
+      for (let i = 0; i < 400; i++) {
+        const rs = (g: G): G => ({ now: resample(g.now), prev: resample(g.prev) });
+        const x = year({ 평일: rs(preT.평일), 휴일: rs(preT.휴일) }, posts.map(rs), k);
+        if (Number.isFinite(x)) bs.push(x);
+      }
+      bs.sort((a, b) => a - b);
+      console.log(`     ▶ 1년 ${n}: 입장료가 교환권보다 ${pct(point)} [95% 범위 ${pct(bs[Math.floor(bs.length * 0.025)])} ~ ${pct(bs[Math.floor(bs.length * 0.975)])}]`);
+    }
+  }
 }
 
 main().catch((e) => {
