@@ -1455,6 +1455,29 @@ ul.plain li {
   font-size: 13px;
   color: var(--text-secondary);
 }
+/* 누르면 상품별 목록이 뜨는 칸 (총 생산 · 폐기) */
+button.quad-box {
+  color: var(--text-primary);
+  font-weight: 400;
+  cursor: pointer;
+}
+.quad-more {
+  color: var(--accent);
+  font-weight: 700;
+}
+/* 아래에서 올라오는 상품별 목록 */
+.list-sheet {
+  max-height: 85vh;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.list-sheet .sheet-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.bread-tbl td.strong {
+  color: var(--bad);
+  font-weight: 700;
+}
 .quad-value {
   margin-top: 2px;
   font-size: 17px;

@@ -18,6 +18,7 @@ import {
   producedOf,
   RECENT_DAYS,
   type BakeryProduct,
+  type BreadResult,
   extraTotal,
   hourDay,
   hourLabel,
@@ -309,26 +310,101 @@ function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: nu
   );
 }
 
-/** 베이커리 맨 위 합계 — 총 생산(= 정가 + 할인 + 폐기, 현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) · 폐기(= 지시(확정 · 자동) − 판매) */
+/** 베이커리 맨 위 합계 — 총 생산(= 정가 + 할인 + 폐기, 현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) · 폐기(= 지시(확정 · 자동) − 판매)
+    총 생산을 누르면 상품별 생산 · 정가 · 할인 · 폐기 전체, 폐기를 누르면 폐기된 빵만 (아래에서 올라오는 창) */
 function BreadCount({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
-  const t = useMemo(() => breadTotals(dayResult(board, date, doc?.plan, doc?.order)), [board, date, doc]);
+  const rows = useMemo(() => dayResult(board, date, doc?.plan, doc?.order), [board, date, doc]);
+  const t = useMemo(() => breadTotals(rows), [rows]);
   const sales = !!board.report(date)?.cafe;
   // 오늘 마감 전에는 아직 안 팔린 것이라 '폐기'가 아니라 '남음'
   const open = !!useLive()?.today;
-  const cells: [string, number | null][] = [
-    ["총 생산", sales ? t.made : null],
-    ["정가판매", sales ? t.full : null],
-    ["할인판매", sales ? t.half : null],
-    [open ? "남음 (마감 전)" : "폐기", sales ? t.waste : null],
+  const [sheet, setSheet] = useState<"all" | "waste" | null>(null);
+  const wasteLabel = open ? "남음 (마감 전)" : "폐기";
+  const cells: [string, number | null, "all" | "waste" | null][] = [
+    ["총 생산", sales ? t.made : null, "all"],
+    ["정가판매", sales ? t.full : null, null],
+    ["할인판매", sales ? t.half : null, null],
+    [wasteLabel, sales ? t.waste : null, "waste"],
   ];
   return (
-    <div className="quad" aria-label="베이커리 개수">
-      {cells.map(([k, v]) => (
-        <div key={k} className="quad-box">
-          <div className="quad-label">{k}</div>
-          <div className="quad-value">{v == null ? "—" : count(v, "개")}</div>
+    <>
+      <div className="quad" aria-label="베이커리 개수">
+        {cells.map(([k, v, list]) =>
+          list && v != null ? (
+            <button key={k} className="quad-box tap" onClick={() => setSheet(list)} aria-haspopup="dialog" aria-label={`${k} ${count(v, "개")} — 상품별 목록`}>
+              <div className="quad-label">
+                {k} <span className="quad-more" aria-hidden>›</span>
+              </div>
+              <div className="quad-value">{count(v, "개")}</div>
+            </button>
+          ) : (
+            <div key={k} className="quad-box">
+              <div className="quad-label">{k}</div>
+              <div className="quad-value">{v == null ? "—" : count(v, "개")}</div>
+            </div>
+          ),
+        )}
+      </div>
+      {sheet && <BreadSheet date={date} rows={rows} kind={sheet} wasteLabel={wasteLabel} onClose={() => setSheet(null)} />}
+    </>
+  );
+}
+
+/** 아래에서 올라오는 상품별 목록 — all: 생산 · 정가 · 할인 · 폐기 전체 (생산 많은 순) / waste: 폐기된 빵만 (폐기 많은 순) */
+function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; rows: BreadResult[]; kind: "all" | "waste"; wasteLabel: string; onClose: () => void }) {
+  const list = kind === "all" ? [...rows].sort((a, b) => producedOf(b) - producedOf(a) || a.name.localeCompare(b.name, "ko")) : rows.filter((r) => (r.waste || 0) > 0).sort((a, b) => b.waste! - a.waste! || a.name.localeCompare(b.name, "ko"));
+  const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("ko-KR"));
+  const total = (f: (r: BreadResult) => number | null) => list.reduce((a, r) => a + (f(r) || 0), 0);
+  const title = kind === "all" ? "상품별 생산 · 판매 · 폐기" : wasteLabel === "폐기" ? "폐기된 빵" : "남은 빵 (마감 전)";
+  return (
+    <div className="sheet-bg" onClick={onClose}>
+      <div className="sheet list-sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <b>{title}</b>
+          <span className="muted">{shortLabel(date)}</span>
         </div>
-      ))}
+        {!list.length ? (
+          <p className="empty">{kind === "waste" ? `${wasteLabel === "폐기" ? "폐기된" : "남은"} 빵이 없습니다.` : "이날은 베이커리 생산 · 판매 자료가 없습니다."}</p>
+        ) : (
+          <div className="sheet-scroll">
+            <table className="bread-tbl">
+              <thead>
+                <tr>
+                  <th>상품</th>
+                  <th className="num">생산</th>
+                  <th className="num">정가판매</th>
+                  <th className="num">할인판매</th>
+                  <th className="num">{wasteLabel === "폐기" ? "폐기" : "남음"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.name}>
+                    <td>{r.name}</td>
+                    <td className="num">{n(producedOf(r))}</td>
+                    <td className="num">{n(r.full)}</td>
+                    <td className="num">{n(r.half)}</td>
+                    <td className={`num${kind === "waste" ? " strong" : ""}`}>{n(r.waste)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>합계 {list.length}종</td>
+                  <td className="num">{n(total(producedOf))}</td>
+                  <td className="num">{n(total((r) => r.full))}</td>
+                  <td className="num">{n(total((r) => r.half))}</td>
+                  <td className="num">{n(total((r) => r.waste))}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <p className="note muted">생산 = 정가판매 + 할인판매 + {wasteLabel === "폐기" ? "폐기" : "남음"} · {wasteLabel === "폐기" ? "폐기" : "남음"} = 작업지시(확정, 없으면 자동) 수량 − 판매 · 작업지시에 없는 상품은 —</p>
+          </div>
+        )}
+        <button className="ghost wide" onClick={onClose}>
+          닫기
+        </button>
+      </div>
     </div>
   );
 }
