@@ -4,6 +4,8 @@
      요일 · 공휴일이 해마다 달라 평일 · 휴일을 따로 하루 평균으로 견줌. 기간(성수기 · 평상시 · 비수기)은 설정의 기간 스티커
    - 총매출은 두 방식 모두 '실제로 들어온 돈' 기준(교환권 시절 키즈 = 판 교환권 − 카페에서 쓴 교환권, 카페에서 산 것은 카페 매출) — metrics.ts
    - 키즈 입장 장수 = 네이버 + 현장 + 이벤트 무료 (POS 입장 발행 기준, 두 방식 같은 키)
+   - 2025-01 평일은 2만원 선결제 상품(2월부터 3만원) → 평일의 '바뀌기 전'은 2 ~ 3월만. 휴일은 1월부터 3만원이라 1 ~ 3월
+   - 네이버 예약은 시간마다 10팀까지만 받음(사장님) → 휴일엔 꽉 차서 네이버 장수가 수요보다 적게 보임. ⑤ 에서 상한 근처 날을 따로 봄
    공개 저장소라 기록에는 % · 비율 · 날 수만 (매출 금액 · 손님 수 없음) */
 import { addDays, applySettings, Board, dayKind, dayRange, kidsTickets, seasonOf, type Metrics } from "@report/core";
 import { readAll } from "./reports";
@@ -13,8 +15,8 @@ const pct = (x: number) => (Number.isFinite(x) ? `${x >= 0 ? "+" : ""}${(x * 100
 const share = (x: number) => (Number.isFinite(x) ? `${(x * 100).toFixed(1)}%` : "—");
 const CHANGE = "2026-04-01";
 
-type V = { tickets: number; paid: number; walkIn: number; total: number; cafe: number; kidsBox: number; other: number; visitors: number; teams: number };
-const KEYS: (keyof V)[] = ["tickets", "paid", "walkIn", "total", "cafe", "kidsBox", "other", "visitors", "teams"];
+type V = { tickets: number; paid: number; naver: number; walkIn: number; total: number; cafe: number; kidsBox: number; other: number; visitors: number };
+const KEYS: (keyof V)[] = ["tickets", "paid", "naver", "walkIn", "total", "cafe", "kidsBox", "other", "visitors"];
 
 async function main() {
   const { reports, settings } = await readAll({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY") });
@@ -32,17 +34,17 @@ async function main() {
     return {
       tickets,
       paid: m.naver + m.walkIn,
+      naver: m.naver,
       walkIn: m.walkIn,
       total: m.total,
       cafe: m.box.바리스타 + m.box.베이커리 + m.box.키친,
       kidsBox: m.box.키즈입장료,
       other: m.box.기타,
       visitors: m.visitors,
-      teams: m.teams,
     };
   };
   const type = (d: string) => (dayKind(d) === "휴일" ? "휴일" : "평일");
-  const zero = (): V => ({ tickets: 0, paid: 0, walkIn: 0, total: 0, cafe: 0, kidsBox: 0, other: 0, visitors: 0, teams: 0 });
+  const zero = (): V => ({ tickets: 0, paid: 0, naver: 0, walkIn: 0, total: 0, cafe: 0, kidsBox: 0, other: 0, visitors: 0 });
   const add = (a: V, b: V) => {
     for (const k of KEYS) a[k] += b[k];
   };
@@ -97,6 +99,8 @@ async function main() {
 
   const MEASURES: [string, keyof V | [keyof V, keyof V]][] = [
     ["키즈 입장 장수", "tickets"],
+    ["  그중 네이버", "naver"],
+    ["  그중 현장", "walkIn"],
     ["총매출", "total"],
     ["카페 매출(바리스타+베이커리+키친)", "cafe"],
     ["카페 소비 인원", "visitors"],
@@ -106,23 +110,23 @@ async function main() {
     ["현장 판매 몫(현장 ÷ 유료 장수)", ["walkIn", "paid"]],
   ];
 
-  /* ① 바뀌기 전 · 뒤 작년 대비, 이중 차이 */
-  const PRE: [string, string] = ["2026-01-01", "2026-03-31"];
+  /* ① 바뀌기 전 · 뒤 작년 대비, 이중 차이 — 평일은 2 ~ 3월(2025-01 평일은 2만원 상품), 휴일은 1 ~ 3월 */
+  const PRE = (t: "평일" | "휴일"): [string, string] => [t === "평일" ? "2026-02-01" : "2026-01-01", "2026-03-31"];
   const POST: [string, string] = [CHANGE, last];
   for (const t of ["평일", "휴일"] as const) {
-    const pre = group(...PRE, t);
+    const pre = group(...PRE(t), t);
     const post = group(...POST, t);
-    console.log(`\n① ${t} — 작년 같은 요일 대비 (하루 평균) · 바뀌기 전 1 ~ 3월 ${pre.now.length}일 / 바뀐 뒤 4월 ~ ${post.now.length}일`);
+    console.log(`\n① ${t} — 작년 같은 요일 대비 (하루 평균) · 바뀌기 전 ${t === "평일" ? "2 ~ 3월" : "1 ~ 3월"} ${pre.now.length}일 / 바뀐 뒤 4월 ~ ${post.now.length}일`);
     console.log(`   ${"".padEnd(26)} 바뀌기 전   바뀐 뒤    요금제 효과(이중 차이) [95% 범위]`);
     for (const [name, k] of MEASURES) console.log(`   ${name.padEnd(26)} ${pct(yoy(pre, k)).padStart(8)}  ${pct(yoy(post, k)).padStart(8)}   ${fmtDid(did(pre, post, k))}`);
   }
 
   /* ② 기간(성수기 · 평상시 · 비수기)별 — 바뀐 뒤 작년 대비, 바뀌기 전 같은 기간과 */
-  console.log("\n② 기간 스티커별 작년 대비 (하루 평균, 평일 · 휴일 따로) — 바뀌기 전은 1 ~ 3월 중 그 기간");
+  console.log("\n② 기간 스티커별 작년 대비 (하루 평균, 평일 · 휴일 따로) — 바뀌기 전은 ①과 같은 달 중 그 기간");
   for (const kind of ["성수기", "평상시", "비수기"] as const) {
     for (const t of ["평일", "휴일"] as const) {
       const pick = (d: string) => seasonOf(d).kind === kind;
-      const pre = group(...PRE, t, pick);
+      const pre = group(...PRE(t), t, pick);
       const post = group(...POST, t, pick);
       const line = (g: G, k: keyof V | [keyof V, keyof V]) => pct(yoy(g, k));
       console.log(
@@ -140,7 +144,7 @@ async function main() {
     const w = group(from, to, "평일");
     const h = group(from, to, "휴일");
     console.log(
-      `   ${mo}월${from >= CHANGE ? " (입장료)" : " (교환권)"}: 평일 ${w.now.length}일 장수 ${pct(yoy(w, "tickets"))} · 총매출 ${pct(yoy(w, "total"))} · 1장당 ${pct(yoy(w, ["total", "tickets"]))} | 휴일 ${h.now.length}일 장수 ${pct(yoy(h, "tickets"))} · 총매출 ${pct(yoy(h, "total"))} · 1장당 ${pct(yoy(h, ["total", "tickets"]))}`,
+      `   ${mo}월${from >= CHANGE ? " (입장료)" : mo === 1 ? " (교환권 · 작년 평일은 2만원)" : " (교환권)"}: 평일 ${w.now.length}일 장수 ${pct(yoy(w, "tickets"))} · 총매출 ${pct(yoy(w, "total"))} · 1장당 ${pct(yoy(w, ["total", "tickets"]))} | 휴일 ${h.now.length}일 장수 ${pct(yoy(h, "tickets"))} · 총매출 ${pct(yoy(h, "total"))} · 1장당 ${pct(yoy(h, ["total", "tickets"]))}`,
     );
   }
 
@@ -171,6 +175,65 @@ async function main() {
       `   ${label} ${n}일: 키즈 몫(총매출 중) ${share(kidsBox / total)} · 카페 몫 ${share(cafe / total)} · ${a < CHANGE ? `판 교환권 중 카페에서 쓴 몫 ${share(coupon / fee)} (안 쓴 몫 ${share(1 - coupon / fee)}) · 카페 매출 중 교환권으로 낸 몫 ${share(coupon / cafe)}` : `입장료 중 사은권으로 빠진 몫 ${share(coupon / fee)}`}`,
     );
   }
+
+  /* ⑤ 네이버 예약 상한 — 시간마다 10팀까지라 휴일엔 꽉 참. 상한 = 2025 휴일 네이버 장수의 상위 5% 값, 그 90% 이상이면 '상한 근처'
+     상한 근처인 날은 네이버 장수가 수요가 아니라 상한이라, 작년이 꽉 찬 날과 견주면 줄어든 게 덜 보임 */
+  const hol25 = dayRange("2025-01-01", "2025-12-31")
+    .filter((d) => type(d) === "휴일")
+    .map(val)
+    .filter((v): v is V => !!v)
+    .map((v) => v.naver)
+    .sort((a, b) => a - b);
+  const cap = hol25[Math.floor(hol25.length * 0.95)] || 0;
+  const near = (v: V) => cap > 0 && v.naver >= 0.9 * cap;
+  console.log(`\n⑤ 네이버 예약 상한 (2025 휴일 상위 5% 값 기준, 그 90% 이상 = 상한 근처) · 2025 휴일 ${hol25.length}일`);
+  for (const [label, a, z] of [
+    ["2025-01 ~ 03 (교환권)", "2025-01-01", "2025-03-31"],
+    ["2026-01 ~ 03 (교환권)", "2026-01-01", "2026-03-31"],
+    ["2025-04 ~ 같은 날 (교환권)", "2025-04-01", addDays(last, -364)],
+    ["2026-04 ~ (입장료)", CHANGE, last],
+  ] as const) {
+    const hs = dayRange(a, z < last ? z : last).filter((d) => type(d) === "휴일").map((d) => ({ d, v: val(d) })).filter((x): x is { d: string; v: V } => !!x.v);
+    const sat = hs.filter((x) => new Date(`${x.d}T00:00:00Z`).getUTCDay() === 6);
+    const top = Math.max(0, ...hs.map((x) => x.v.naver));
+    console.log(
+      `   ${label}: 휴일 ${hs.length}일 중 상한 근처 ${share(hs.filter((x) => near(x.v)).length / hs.length)} · 토요일 ${sat.length}일 중 ${share(sat.filter((x) => near(x.v)).length / sat.length)} · 가장 많은 날 = 상한의 ${share(top / cap)} · 네이버 몫(유료 장수 중) ${share(hs.reduce((s, x) => s + x.v.naver, 0) / hs.reduce((s, x) => s + x.v.paid, 0))}`,
+    );
+  }
+  // 휴일을 작년 같은 날(364일 전도 휴일)과 짝지어, 작년이 상한 근처였는지로 나눠 견줌
+  const pairs = (a: string, z: string, cond: (prev: V) => boolean) => {
+    const g: G = { now: [], prev: [] };
+    for (const d of dayRange(a, z < last ? z : last)) {
+      const l = addDays(d, -364);
+      if (type(d) !== "휴일" || type(l) !== "휴일") continue;
+      const v = val(d);
+      const u = val(l);
+      if (v && u && cond(u)) {
+        g.now.push(v);
+        g.prev.push(u);
+      }
+    }
+    return g;
+  };
+  for (const [label, cond] of [
+    ["작년이 상한 근처였던 휴일", (u: V) => near(u)],
+    ["작년이 상한 아래였던 휴일", (u: V) => !near(u)],
+  ] as const) {
+    const pre = pairs(...PRE("휴일"), cond);
+    const post = pairs(...POST, cond);
+    console.log(
+      `   ${label}: 바뀌기 전 ${pre.now.length}쌍 장수 ${pct(yoy(pre, "tickets"))} (네이버 ${pct(yoy(pre, "naver"))} · 현장 ${pct(yoy(pre, "walkIn"))}) · 총매출 ${pct(yoy(pre, "total"))} | 바뀐 뒤 ${post.now.length}쌍 장수 ${pct(yoy(post, "tickets"))} (네이버 ${pct(yoy(post, "naver"))} · 현장 ${pct(yoy(post, "walkIn"))}) · 총매출 ${pct(yoy(post, "total"))}`,
+    );
+  }
+
+  /* ⑥ 2025 네이버 장수 맞춰 보기 — 달마다 2 ~ 12월 합계 중 몫(%) · 토요일 상한 근처 날 비율. 사장님 캡처(네이버 이용완료)에서 같은 값을 내어 견줌 */
+  const mon = (m: number) => dayRange(`2025-${String(m).padStart(2, "0")}-01`, addDays(m === 12 ? "2026-01-01" : `2025-${String(m + 1).padStart(2, "0")}-01`, -1));
+  const sumN = (ds: string[]) => ds.reduce((s, d) => s + (val(d)?.naver || 0), 0);
+  const all = sumN(Array.from({ length: 11 }, (_, i) => mon(i + 2)).flat());
+  console.log(`\n⑥ 2025 네이버 장수 달마다 몫 (2 ~ 12월 합계 = 100%) — 캡처와 견주기`);
+  console.log(`   ${Array.from({ length: 11 }, (_, i) => `${i + 2}월 ${share(sumN(mon(i + 2)) / all)}`).join(" · ")}`);
+  const days25 = dayRange("2025-01-01", "2025-12-31").filter((d) => val(d));
+  console.log(`   자료 있는 날 ${days25.length}일 · 네이버 입력(사람 · 자동)이 있는 날 ${days25.filter((d) => board.day(d).naverInput > 0).length}일 · 나머지는 POS 발행 − 현장`);
 }
 
 main().catch((e) => {
