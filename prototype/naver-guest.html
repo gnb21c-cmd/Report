@@ -1,0 +1,968 @@
+<title>네이버 고객 집계</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 사무실 PC 한 대에서 쓰는 장부형 도구 — 위: 기간 띠(요약), 왼쪽: 순서 단계, 오른쪽: 단계 화면. 폰에서는 단계가 위 가로 탭 */
+:root {
+  --paper: #f3f5f4;
+  --panel: #ffffff;
+  --ink: #17222a;
+  --muted: #5a6a72;
+  --line: #d8e0de;
+  --accent: #1f5fbf;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4ecf9;
+  --ok: #1c7a4e;
+  --ok-soft: #dff2e8;
+  --warn: #a96400;
+  --warn-soft: #fbefd9;
+  --bad: #b3261e;
+  --bad-soft: #f9e1df;
+  --cell-none: #e3e8e6;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Consolas", "Malgun Gothic", monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10171c; --panel: #172229; --ink: #e4ecef; --muted: #93a4ac; --line: #2a3741;
+    --accent: #7ea9f2; --accent-ink: #0d1620; --accent-soft: #1c2b43;
+    --ok: #5cc28f; --ok-soft: #173326; --warn: #e3a54d; --warn-soft: #3a2a12; --bad: #f08078; --bad-soft: #3d1c1a;
+    --cell-none: #24313a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10171c; --panel: #172229; --ink: #e4ecef; --muted: #93a4ac; --line: #2a3741;
+  --accent: #7ea9f2; --accent-ink: #0d1620; --accent-soft: #1c2b43;
+  --ok: #5cc28f; --ok-soft: #173326; --warn: #e3a54d; --warn-soft: #3a2a12; --bad: #f08078; --bad-soft: #3d1c1a;
+  --cell-none: #24313a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.55; }
+.app { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 40px; display: grid; gap: 14px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h2 { font-size: 18px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; }
+.num, .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 맨 위 */
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
+.tag { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); white-space: nowrap; }
+.pill b { color: var(--ink); font-weight: 600; }
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); background: var(--ok-soft); }
+
+/* 기간 띠 */
+.band { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; }
+.band .k { font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+.band .v { font-size: 15px; font-weight: 600; }
+.band .item { display: grid; gap: 0; }
+.band .warnline { color: var(--warn); font-weight: 600; font-size: 13px; }
+.band .okline { color: var(--ok); font-weight: 600; font-size: 13px; }
+
+/* 본문 두 칸 */
+.body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 14px; align-items: start; }
+.steps { display: grid; gap: 4px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.steps button { display: flex; gap: 10px; align-items: center; text-align: left; border: 1px solid transparent; background: transparent; border-radius: var(--r); padding: 9px 10px; color: var(--muted); font-weight: 500; }
+.steps button .no { font-family: var(--font-data); font-size: 12px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); background: var(--panel); flex: none; }
+.steps button:hover { background: var(--panel); color: var(--ink); }
+.steps button[aria-selected="true"] { background: var(--panel); border-color: var(--line); color: var(--ink); font-weight: 600; }
+.steps button[aria-selected="true"] .no { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.steps .sep { height: 1px; background: var(--line); margin: 6px 4px; }
+
+.view { display: grid; gap: 14px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: 13px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.field { display: grid; gap: 4px; }
+.field label, .lab { font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+input[type="date"], input[type="text"], input[type="number"], input[type="search"], select {
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; background: var(--paper); min-width: 0;
+}
+input[type="text"].wide { width: 100%; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 14px; font-weight: 500; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); color: var(--accent-ink); }
+.btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.btn.danger.armed { background: var(--bad); color: var(--panel); border-color: var(--bad); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.chip { border: 1px solid var(--line); background: var(--paper); border-radius: 99px; padding: 4px 11px; font-size: 13px; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.check { display: inline-flex; gap: 6px; align-items: center; }
+
+/* 진행 */
+.bar { height: 10px; background: var(--cell-none); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+
+/* 날짜 칸 */
+.grid-wrap { overflow-x: auto; }
+.daygrid { display: grid; gap: 3px; min-width: 560px; }
+.mrow { display: grid; grid-template-columns: 64px repeat(31, 1fr); gap: 3px; align-items: center; }
+.mrow .ml { font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.d { height: 14px; border-radius: 3px; background: var(--cell-none); }
+.d.off { background: transparent; }
+.d.got { background: color-mix(in srgb, var(--ok) 70%, var(--panel)); }
+.d.got.hol { background: var(--ok); }
+.d.todo { background: var(--warn-soft); outline: 1px dashed var(--warn); outline-offset: -1px; }
+.d.now { background: var(--accent); }
+.d.fail { background: var(--bad); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; gap: 5px; align-items: center; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+.log { font-family: var(--font-data); font-size: 12.5px; display: grid; gap: 2px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--paper); }
+.log .bad { color: var(--bad); }
+.log .ok { color: var(--ok); }
+
+/* 표 */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--paper); position: sticky; top: 0; }
+td.r, th.r { text-align: right; }
+td.r { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+tr.total td { font-weight: 700; background: var(--paper); }
+.barcell { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.barcell i { display: block; height: 8px; border-radius: 99px; background: var(--accent); opacity: 0.75; }
+.badge { font-size: 11.5px; padding: 1px 7px; border-radius: 99px; font-weight: 600; }
+.badge.new { background: var(--accent-soft); color: var(--accent); }
+.badge.re { background: var(--ok-soft); color: var(--ok); }
+.badge.hol { background: var(--bad-soft); color: var(--bad); }
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 13px; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 6px 12px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+/* 요약 숫자 */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px; background: var(--paper); }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-family: var(--font-data); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 12px; color: var(--muted); }
+
+/* 기준 */
+.crit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.crit:last-child { border-bottom: 0; }
+.crit .name { font-weight: 600; }
+.crit .body2 { display: grid; gap: 6px; min-width: 0; }
+.crit .err { color: var(--bad); font-size: 12.5px; }
+.crit .kind { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 0 7px; margin-left: 6px; font-weight: 500; }
+.preview { display: flex; gap: 4px; flex-wrap: wrap; }
+.preview span { font-size: 12px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 1px 7px; }
+
+.note { border-left: 3px solid var(--line); padding-left: 10px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+.msg { font-size: 13.5px; font-weight: 600; }
+.msg.ok { color: var(--ok); }
+.msg.bad { color: var(--bad); }
+.sheets { display: grid; gap: 6px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .steps { position: static; display: flex; overflow-x: auto; gap: 4px; padding-bottom: 2px; }
+  .steps button { white-space: nowrap; padding: 7px 10px; }
+  .steps .sep { display: none; }
+  .crit { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>네이버 고객 집계</h1>
+      <span class="tag">체험판 · 가짜 자료</span>
+    </div>
+    <div class="pills">
+      <span class="pill ok">● 네이버 로그인됨</span>
+      <span class="pill">개인정보 책임자 <b id="ownerPill">사장님</b></span>
+      <span class="pill mono" id="folderPill">C:\아스타나\고객집계</span>
+    </div>
+  </header>
+
+  <section class="band" aria-label="지금 기간">
+    <div class="item"><span class="k">기간</span><span class="v num" id="bandPeriod"></span></div>
+    <div class="item"><span class="k">날 수</span><span class="v num" id="bandDays"></span></div>
+    <div class="item"><span class="k">받은 날</span><span class="v num" id="bandGot"></span></div>
+    <div class="item"><span class="k">방문 건수 (받은 날)</span><span class="v num" id="bandVisits"></span></div>
+    <div class="item"><span class="k">고객 수</span><span class="v num" id="bandCust"></span></div>
+    <div id="bandState"></div>
+  </section>
+
+  <div class="body">
+    <nav class="steps" role="tablist" aria-label="단계">
+      <button role="tab" data-tab="collect" aria-selected="true"><span class="no">1</span>수집</button>
+      <button role="tab" data-tab="data" aria-selected="false"><span class="no">2</span>고객 자료</button>
+      <button role="tab" data-tab="criteria" aria-selected="false"><span class="no">3</span>구분 기준</button>
+      <button role="tab" data-tab="result" aria-selected="false"><span class="no">4</span>집계 결과</button>
+      <button role="tab" data-tab="excel" aria-selected="false"><span class="no">5</span>엑셀 받기</button>
+      <div class="sep"></div>
+      <button role="tab" data-tab="safety" aria-selected="false"><span class="no">⚙</span>설정 · 보안</button>
+    </nav>
+
+    <main class="view">
+      <!-- 1 수집 -->
+      <div data-panel="collect" class="view">
+        <section class="card">
+          <div class="head"><h2>기간 정하기</h2><span class="hint">이 기간에 이용완료한 손님을 모읍니다</span></div>
+          <div class="row">
+            <div class="field"><label for="from">시작일</label><input type="date" id="from"></div>
+            <div class="field"><label for="to">끝일</label><input type="date" id="to"></div>
+          </div>
+          <div class="row" id="quick">
+            <button class="chip" data-q="lastMonth">지난달</button>
+            <button class="chip" data-q="3m">최근 3개월</button>
+            <button class="chip" data-q="fee">입장료로 바뀐 뒤 (2026-04-01 ~)</button>
+            <button class="chip" data-q="y2026">2026년</button>
+            <button class="chip" data-q="y2025">2025년</button>
+            <button class="chip" data-q="all">받을 수 있는 전체</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="head"><h2>수집</h2><span class="hint" id="collectHint"></span></div>
+          <div class="row">
+            <button class="btn primary" id="startBtn">수집 시작</button>
+            <button class="btn" id="stopBtn" disabled>멈춤</button>
+            <label class="check"><input type="checkbox" id="redo"> 이미 받은 날도 다시 받기</label>
+          </div>
+          <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+          <p class="num" id="progressText"></p>
+          <div class="grid-wrap"><div class="daygrid" id="daygrid"></div></div>
+          <div class="legend">
+            <span><i style="background:var(--ok)"></i>받음 (휴일)</span>
+            <span><i style="background:color-mix(in srgb, var(--ok) 70%, var(--panel))"></i>받음 (평일)</span>
+            <span><i style="background:var(--warn-soft);outline:1px dashed var(--warn);outline-offset:-1px"></i>안 받음</span>
+            <span><i style="background:var(--accent)"></i>받는 중</span>
+            <span><i style="background:var(--bad)"></i>실패 (다시 받기)</span>
+          </div>
+          <div class="log" id="log" aria-live="polite"></div>
+          <div class="note">
+            <p>날짜마다 네이버 예약현황을 열고, 이용완료가 있는 회차마다 완료자 목록을 읽습니다.</p>
+            <p>실제로는 하루 20 ~ 40초쯤 걸립니다. 받은 날은 하루씩 이 PC에 바로 저장되어, 멈추거나 꺼져도 다음에 이어서 받습니다.</p>
+            <p>체험판은 가짜 자료로 빠르게 흉내만 냅니다.</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- 2 고객 자료 -->
+      <div data-panel="data" class="view" hidden>
+        <section class="card">
+          <div class="head">
+            <h2>고객 자료</h2>
+            <div class="seg" role="group" aria-label="보기">
+              <button id="segVisits" aria-pressed="true">방문 건별</button>
+              <button id="segCust" aria-pressed="false">고객별</button>
+            </div>
+          </div>
+          <div class="row">
+            <input type="search" id="q" placeholder="이름 · 전화 뒷자리 · 예약번호" aria-label="찾기" style="flex:1;min-width:180px">
+            <span class="hint" id="dataCount"></span>
+          </div>
+          <div class="tbl-wrap"><table id="dataTable"></table></div>
+          <div class="pager">
+            <button class="btn" id="prev">이전</button>
+            <span class="num" id="pageInfo"></span>
+            <button class="btn" id="next">다음</button>
+          </div>
+          <p class="hint">누적 이용완료 = 그 손님이 네이버에서 지금까지 이용완료한 예약 수 (그 방문 포함). 1이면 처음 온 손님입니다.</p>
+        </section>
+      </div>
+
+      <!-- 3 구분 기준 -->
+      <div data-panel="criteria" class="view" hidden>
+        <section class="card">
+          <div class="head"><h2>구분 기준</h2><span class="hint">켠 기준마다 집계 표가 하나씩 생깁니다</span></div>
+          <div id="critList"></div>
+        </section>
+        <section class="card">
+          <div class="head"><h2>교차표</h2><span class="hint">두 기준을 엮어 한 표로 봅니다</span></div>
+          <div class="row">
+            <div class="field"><label for="xRow">줄</label><select id="xRow"></select></div>
+            <div class="field"><label for="xCol">칸</label><select id="xCol"></select></div>
+            <div class="field"><label for="xVal">숫자</label>
+              <select id="xVal"><option value="visits">방문 건수</option><option value="cust">고객 수</option></select>
+            </div>
+          </div>
+          <p class="hint">필요한 기준이 더 있으면 말씀해 주세요. 체험판에 바로 넣어 보여드립니다.</p>
+        </section>
+      </div>
+
+      <!-- 4 집계 결과 -->
+      <div data-panel="result" class="view" hidden>
+        <section class="card">
+          <div class="head"><h2>집계 결과</h2><span class="hint num" id="resultPeriod"></span></div>
+          <div class="tiles" id="tiles"></div>
+        </section>
+        <div id="resultTables" class="view"></div>
+        <section class="card" id="crossCard">
+          <div class="head"><h3 id="crossTitle">교차표</h3></div>
+          <div class="tbl-wrap"><table id="crossTable"></table></div>
+        </section>
+      </div>
+
+      <!-- 5 엑셀 -->
+      <div data-panel="excel" class="view" hidden>
+        <section class="card">
+          <div class="head"><h2>엑셀 받기</h2><span class="hint">지금 기간 · 기준 그대로 한 파일로</span></div>
+          <div class="field"><label for="fname">파일 이름</label><input type="text" id="fname" class="wide mono"></div>
+          <div class="sheets">
+            <span class="lab">넣을 시트</span>
+            <label class="check"><input type="checkbox" id="shSet" checked> 설정 (기간 · 기준 · 만든 때 · 책임자)</label>
+            <label class="check"><input type="checkbox" id="shVisits" checked> 방문 건별 원자료</label>
+            <label class="check"><input type="checkbox" id="shCust" checked> 고객별 요약</label>
+            <label class="check"><input type="checkbox" id="shAgg" checked> 기준별 집계</label>
+            <label class="check"><input type="checkbox" id="shCross" checked> 교차표</label>
+          </div>
+          <p class="hint" id="maskHint"></p>
+          <div class="row">
+            <button class="btn primary" id="xlsxBtn">엑셀 받기</button>
+            <span class="msg" id="xlsxMsg" aria-live="polite"></span>
+          </div>
+          <div class="note">
+            <p>실제 프로그램은 위 저장 폴더에 바로 저장하고, 설정에서 켜면 엑셀 파일에 암호를 겁니다.</p>
+            <p>체험판은 가짜 자료로 만든 파일을 내려받기만 합니다 (암호 없음).</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- 설정 · 보안 -->
+      <div data-panel="safety" class="view" hidden>
+        <section class="card">
+          <div class="head"><h2>설정 · 보안</h2><span class="hint">이 PC 한 대에서 책임자 한 명이 씁니다</span></div>
+          <div class="two">
+            <div class="field"><label for="owner">개인정보 책임자</label><input type="text" id="owner" value="사장님"></div>
+            <div class="field"><label for="folder">저장 폴더</label><input type="text" id="folder" class="mono" value="C:\아스타나\고객집계"></div>
+          </div>
+          <div class="sheets">
+            <label class="check"><input type="checkbox" id="maskPhone" checked> 전화번호 가운데 네 자리 가리기 (화면 · 엑셀)</label>
+            <label class="check"><input type="checkbox" id="maskName"> 이름 가운데 글자 가리기 (화면 · 엑셀)</label>
+            <label class="check"><input type="checkbox" id="appLock" checked> 프로그램 열 때 암호 묻기</label>
+            <label class="check"><input type="checkbox" id="xlsxLock" checked> 엑셀 파일에 암호 걸기</label>
+          </div>
+        </section>
+        <section class="card">
+          <div class="head"><h2>보관 기간</h2><span class="hint">오래된 원자료는 지웁니다</span></div>
+          <div class="row">
+            <div class="field"><label for="keep">원자료 보관</label>
+              <select id="keep"><option value="12">12개월</option><option value="24" selected>24개월</option><option value="36">36개월</option></select>
+            </div>
+            <button class="btn danger" id="purgeBtn">지난 원자료 지우기</button>
+            <button class="btn" id="resetBtn">체험판 처음으로</button>
+          </div>
+          <p class="hint" id="purgeHint"></p>
+        </section>
+        <section class="card">
+          <h3>개인정보 원칙</h3>
+          <ul class="plain">
+            <li>프로그램과 모은 자료는 이 PC에만 둡니다. GitHub · 클라우드(Firebase)에 올리지 않습니다.</li>
+            <li>네이버 비밀번호는 저장하지 않습니다. 프로그램 안의 창에서 직접 로그인하고, 로그인 상태만 이 PC에 둡니다.</li>
+            <li>예약 때 받은 정보를 내부 분석에만 씁니다. 문자 · 광고 등 다른 용도로 쓰려면 손님의 따로 동의가 필요할 수 있습니다.</li>
+            <li>엑셀을 다른 사람에게 줄 때는 가리기를 켜고 만든 파일만 줍니다.</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(() => {
+  "use strict";
+  /* ───────── 날짜 ───────── */
+  const FIRST = "2025-01-01", LAST = "2026-10-12", CHANGE = "2026-04-01", TODAY = "2026-10-13";
+  const addDays = (d, n) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const dow = (d) => new Date(d + "T00:00:00Z").getUTCDay();
+  const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const range = (a, z) => { const out = []; for (let d = a; d <= z; d = addDays(d, 1)) out.push(d); return out; };
+  const HOL = new Set([
+    "2025-01-01", "2025-01-27", "2025-01-28", "2025-01-29", "2025-01-30", "2025-03-03", "2025-05-05", "2025-05-06", "2025-06-03", "2025-06-06",
+    "2025-08-15", "2025-10-03", "2025-10-06", "2025-10-07", "2025-10-08", "2025-10-09", "2025-12-25",
+    "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
+    "2026-09-24", "2026-09-25", "2026-09-26", "2026-10-05", "2026-10-09",
+  ]);
+  const isHol = (d) => dow(d) === 0 || dow(d) === 6 || HOL.has(d);
+  // 기간 스티커 — 보고 앱 설정과 같은 규칙 (위에서부터 먼저 맞는 것)
+  const SEASONS = [
+    ["성수기", "07-20", "08-20"], ["성수기", "12-24", "02-28"], ["성수기", "05-01", "05-31"], ["비수기", "03-02", "03-31"],
+    ["비수기", "09-01", "09-30"], ["비수기", "10-01", "10-31"], ["성수기", "06-20", "08-20"], ["비수기", "04-01", "05-31"],
+  ];
+  const seasonOf = (d) => {
+    const md = d.slice(5);
+    for (const [k, a, z] of SEASONS) if (a <= z ? md >= a && md <= z : md >= a || md <= z) return k;
+    return "평상시";
+  };
+  const SLOTS = Array.from({ length: 20 }, (_, i) => `${String(10 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+
+  /* ───────── 가짜 자료 (체험판) ───────── */
+  let seed = 20261013;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const SUR = "김이박최정강조윤장임한오서신권황안송류홍".split("");
+  const GIV = "민서지윤하준예은도현수아시우채원유진서연지호주원하린태윤소율건우다은재희나연승민가온".split("");
+  const customers = [];
+  const pool = [];
+  const newCustomer = () => {
+    const c = {
+      id: customers.length,
+      name: pick(SUR) + pick(GIV) + pick(GIV),
+      phone: `010-${String(1000 + Math.floor(rnd() * 9000))}-${String(1000 + Math.floor(rnd() * 9000))}`,
+      prior: rnd() < 0.3 ? 1 + Math.floor(-Math.log(1 - rnd()) * 4) : 0,
+      n: 0,
+    };
+    customers.push(c);
+    const w = pick([1, 1, 1, 1, 2, 2, 3, 5, 8]);
+    for (let i = 0; i < w; i++) pool.push(c);
+    return c;
+  };
+  const SLOT_W = [3, 5, 7, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 2, 1, 1];
+  const SLOT_SUM = SLOT_W.reduce((a, b) => a + b, 0);
+  const pickSlot = () => { let r = rnd() * SLOT_SUM; for (let i = 0; i < SLOT_W.length; i++) { r -= SLOT_W[i]; if (r < 0) return i; } return 19; };
+  const productOf = (d, slot) => {
+    const night = slot >= 16 && rnd() < 0.6;
+    if (d < CHANGE) return night ? "~26.3.31 야간 이용권" : isHol(d) ? "~26.3.31 휴일 이용권" : "~26.3.31 1h50 이용권";
+    return night ? "야간자유 입장권" : "평일 무제한 / 휴일 입장권";
+  };
+  const visits = [];
+  let bookNo = 731204000;
+  for (const d of range(FIRST, LAST)) {
+    const s = seasonOf(d);
+    let n = isHol(d) ? 165 : 32;
+    n *= s === "성수기" ? 1.15 : s === "비수기" ? 0.8 : 1;
+    if (d >= CHANGE) n *= s === "비수기" ? 0.68 : 0.88;
+    n *= 0.8 + rnd() * 0.4;
+    n = Math.min(isHol(d) ? 200 : 140, Math.round(n));
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      const c = pool.length && rnd() < 0.5 ? pick(pool) : newCustomer();
+      c.n++;
+      const slot = pickSlot();
+      bookNo += 1 + Math.floor(rnd() * 40);
+      rows.push({ date: d, slot, product: productOf(d, slot), no: String(bookNo), cid: c.id, done: c.prior + c.n });
+    }
+    rows.sort((a, b) => a.slot - b.slot);
+    visits.push(...rows);
+  }
+  const byDate = new Map();
+  for (const v of visits) { if (!byDate.has(v.date)) byDate.set(v.date, []); byDate.get(v.date).push(v); }
+
+  /* ───────── 이 PC에 받은 날 (체험판: 9월 말까지 받아 둠, 하루 실패) ───────── */
+  const initialGot = () => { const s = new Set(range(FIRST, "2026-09-30")); s.delete("2026-07-14"); return s; };
+  let got = initialGot();
+  const failed = new Set(["2026-07-14"]);
+
+  /* ───────── 상태 ───────── */
+  const $ = (s) => document.querySelector(s);
+  const state = { from: CHANGE, to: LAST, tab: "collect", view: "visits", page: 0, q: "" };
+  const fmt = (n) => n.toLocaleString("ko-KR");
+  const pct = (a, b) => (b ? `${((a / b) * 100).toFixed(1)}%` : "—");
+  const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+  const dlabel = (d) => `${d} (${DOW[dow(d)]})`;
+
+  /* 가리기 */
+  const maskPhone = (p) => ($("#maskPhone").checked ? p.replace(/^(\d{3})-\d{4}-(\d{4})$/, "$1-****-$2") : p);
+  const maskName = (n) => ($("#maskName").checked ? (n.length <= 2 ? n[0] + "*" : n[0] + "*".repeat(n.length - 2) + n[n.length - 1]) : n);
+
+  /* ───────── 구분 기준 ───────── */
+  // 구간 글 "1, 2-3, 4-9, 10+" → [{lo, hi}]
+  const parseBands = (txt, unit) => {
+    const parts = txt.split(",").map((x) => x.trim()).filter(Boolean);
+    if (!parts.length) throw new Error("구간을 하나 이상 적어 주세요");
+    const out = [];
+    for (const p of parts) {
+      let m;
+      if ((m = p.match(/^(\d+)\+$/))) out.push({ lo: +m[1], hi: Infinity, label: `${m[1]}${unit} 이상` });
+      else if ((m = p.match(/^(\d+)\s*[-~]\s*(\d+)$/))) {
+        if (+m[2] < +m[1]) throw new Error(`'${p}' 앞 숫자가 더 큽니다`);
+        out.push({ lo: +m[1], hi: +m[2], label: `${m[1]}~${m[2]}${unit}` });
+      } else if ((m = p.match(/^(\d+)$/))) out.push({ lo: +m[1], hi: +m[1], label: `${m[1]}${unit}` });
+      else throw new Error(`'${p}' 를 알아보지 못했습니다 (예: 1, 2-3, 10+)`);
+    }
+    for (let i = 1; i < out.length; i++) if (out[i].lo <= out[i - 1].hi) throw new Error("구간이 겹칩니다");
+    return out;
+  };
+  const bandOf = (bands, x) => { for (const b of bands) if (x >= b.lo && x <= b.hi) return b.label; return "구간 밖"; };
+  const parseHours = (txt) => {
+    const parts = txt.split(",").map((x) => x.trim()).filter(Boolean);
+    if (!parts.length) throw new Error("시간 구간을 하나 이상 적어 주세요");
+    const out = parts.map((p) => {
+      const m = p.match(/^(\d{1,2})\s*[-~]\s*(\d{1,2})$/);
+      if (!m || +m[2] <= +m[1]) throw new Error(`'${p}' 를 알아보지 못했습니다 (예: 10-12)`);
+      return { lo: +m[1], hi: +m[2], label: `${m[1]}~${m[2]}시` };
+    });
+    for (let i = 1; i < out.length; i++) if (out[i].lo < out[i - 1].hi) throw new Error("시간 구간이 겹칩니다");
+    return out;
+  };
+  const hourOf = (slot) => 10 + Math.floor(slot / 2) + (slot % 2 ? 0.5 : 0);
+
+  const CRITERIA = [
+    { key: "visitBand", name: "기간 안 방문 횟수", level: "고객", on: true, param: "1, 2-3, 4-9, 10+", parse: (t) => parseBands(t, "회"),
+      help: "그 기간에 몇 번 왔는지로 손님을 나눕니다", cls: (v, c, P) => bandOf(P, c.visits) },
+    { key: "newRe", name: "신규 · 재방문", level: "방문", on: true, order: ["신규", "재방문"],
+      help: "그 방문이 그 손님의 첫 이용완료면 신규", cls: (v) => (v.done === 1 ? "신규" : "재방문") },
+    { key: "lifeBand", name: "누적 이용 횟수", level: "고객", on: false, param: "1, 2-5, 6-20, 21+", parse: (t) => parseBands(t, "회"),
+      help: "기간 마지막 방문 때의 누적 이용완료로 나눕니다 (기간 전 방문 포함)", cls: (v, c, P) => bandOf(P, c.lastDone) },
+    { key: "dayType", name: "평일 · 휴일", level: "방문", on: true, order: ["평일", "휴일"],
+      help: "토 · 일 · 공휴일 = 휴일", cls: (v) => (isHol(v.date) ? "휴일" : "평일") },
+    { key: "dow", name: "요일", level: "방문", on: false, order: ["월", "화", "수", "목", "금", "토", "일"],
+      help: "", cls: (v) => DOW[dow(v.date)] },
+    { key: "hours", name: "시간대 (회차)", level: "방문", on: true, param: "10-12, 12-14, 14-17, 17-20", parse: parseHours,
+      help: "회차 시작 시각으로 나눕니다", cls: (v, c, P) => { const h = hourOf(v.slot); for (const b of P) if (h >= b.lo && h < b.hi) return b.label; return "구간 밖"; } },
+    { key: "product", name: "상품", level: "방문", on: false, help: "네이버 상품 이름 그대로", cls: (v) => v.product },
+    { key: "month", name: "월별", level: "방문", on: false, help: "", cls: (v) => v.date.slice(0, 7) },
+    { key: "season", name: "기간 스티커", level: "방문", on: true, order: ["성수기", "평상시", "비수기"],
+      help: "보고 앱 설정의 성수기 · 평상시 · 비수기", cls: (v) => seasonOf(v.date) },
+    { key: "fee", name: "요금제", level: "방문", on: false, order: ["교환권 (~3/31)", "입장료 (4/1~)"],
+      help: "2026-04-01 부터 입장료", cls: (v) => (v.date < CHANGE ? "교환권 (~3/31)" : "입장료 (4/1~)") },
+  ];
+  const parsed = {};
+  const parseErr = {};
+  const reparse = (c) => {
+    if (!c.parse) return;
+    try { parsed[c.key] = c.parse(c.param); delete parseErr[c.key]; } catch (e) { parseErr[c.key] = e.message; }
+  };
+  CRITERIA.forEach(reparse);
+  const critBy = Object.fromEntries(CRITERIA.map((c) => [c.key, c]));
+  const crossSel = { row: "visitBand", col: "dayType", val: "visits" };
+
+  /* ───────── 계산 ───────── */
+  const daysIn = () => range(state.from, state.to);
+  const rowsIn = () => { const out = []; for (const d of daysIn()) if (got.has(d)) out.push(...(byDate.get(d) || [])); return out; };
+  const custStats = (rows) => {
+    const m = new Map();
+    for (const v of rows) {
+      let s = m.get(v.cid);
+      if (!s) { s = { c: customers[v.cid], visits: 0, first: v.date, last: v.date, lastDone: 0, hol: 0, slots: new Array(20).fill(0) }; m.set(v.cid, s); }
+      s.visits++;
+      if (v.date < s.first) s.first = v.date;
+      if (v.date >= s.last) { s.last = v.date; s.lastDone = Math.max(s.lastDone, v.done); }
+      if (isHol(v.date)) s.hol++;
+      s.slots[v.slot]++;
+    }
+    return m;
+  };
+  const classify = (c, v, cs) => c.cls(v, cs.get(v.cid), parsed[c.key]);
+  const labelsOf = (c, seen) => {
+    if (c.order) return c.order.filter((x) => seen.has(x)).concat([...seen].filter((x) => !c.order.includes(x)));
+    if (c.parse && parsed[c.key]) return parsed[c.key].map((b) => b.label).filter((x) => seen.has(x)).concat(seen.has("구간 밖") ? ["구간 밖"] : []);
+    return [...seen].sort();
+  };
+  /** 기준 하나로 나눈 표 — 방문 건수 · 고객 수(같은 손님은 한 번) */
+  const tableOf = (c, rows, cs) => {
+    const g = new Map();
+    for (const v of rows) {
+      const k = classify(c, v, cs);
+      let x = g.get(k);
+      if (!x) { x = { visits: 0, cust: new Set() }; g.set(k, x); }
+      x.visits++;
+      x.cust.add(v.cid);
+    }
+    return labelsOf(c, new Set(g.keys())).map((k) => ({ label: k, visits: g.get(k).visits, cust: g.get(k).cust.size }));
+  };
+  const crossOf = (cr, cc, rows, cs, val) => {
+    const g = new Map();
+    const rs = new Set(), ks = new Set();
+    for (const v of rows) {
+      const a = classify(cr, v, cs), b = classify(cc, v, cs);
+      rs.add(a); ks.add(b);
+      const k = a + "\u0000" + b;
+      let x = g.get(k);
+      if (!x) { x = { visits: 0, cust: new Set() }; g.set(k, x); }
+      x.visits++; x.cust.add(v.cid);
+    }
+    const R = labelsOf(cr, rs), K = labelsOf(cc, ks);
+    const cell = (a, b) => { const x = g.get(a + "\u0000" + b); return x ? (val === "visits" ? x.visits : x.cust.size) : 0; };
+    // 합계: 고객 수는 같은 손님을 한 번만
+    const rowTotal = (a) => { if (val === "visits") return K.reduce((s, b) => s + cell(a, b), 0); const u = new Set(); for (const b of K) { const x = g.get(a + "\u0000" + b); if (x) x.cust.forEach((id) => u.add(id)); } return u.size; };
+    const colTotal = (b) => { if (val === "visits") return R.reduce((s, a) => s + cell(a, b), 0); const u = new Set(); for (const a of R) { const x = g.get(a + "\u0000" + b); if (x) x.cust.forEach((id) => u.add(id)); } return u.size; };
+    const all = val === "visits" ? rows.length : new Set(rows.map((v) => v.cid)).size;
+    return { R, K, cell, rowTotal, colTotal, all };
+  };
+
+  /* ───────── 그리기 ───────── */
+  const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+
+  function renderBand() {
+    const days = daysIn();
+    const have = days.filter((d) => got.has(d)).length;
+    const rows = rowsIn();
+    $("#bandPeriod").textContent = `${state.from} ~ ${state.to}`;
+    $("#bandDays").textContent = `${fmt(days.length)}일`;
+    $("#bandGot").textContent = `${fmt(have)}일`;
+    $("#bandVisits").textContent = `${fmt(rows.length)}건`;
+    $("#bandCust").textContent = `${fmt(new Set(rows.map((v) => v.cid)).size)}명`;
+    const miss = days.length - have;
+    $("#bandState").innerHTML = miss
+      ? `<span class="warnline">안 받은 날 ${fmt(miss)}일 — 집계에서 빠집니다. [수집]에서 받아 주세요</span>`
+      : `<span class="okline">기간 안 날을 모두 받았습니다</span>`;
+  }
+
+  function renderGrid(nowDay) {
+    const days = daysIn();
+    const months = [...new Set(days.map((d) => d.slice(0, 7)))];
+    const html = months.map((m) => {
+      const cells = [];
+      for (let i = 1; i <= 31; i++) {
+        const d = `${m}-${String(i).padStart(2, "0")}`;
+        const inRange = d >= state.from && d <= state.to && !Number.isNaN(Date.parse(d + "T00:00:00Z")) && new Date(d + "T00:00:00Z").toISOString().slice(0, 10) === d;
+        if (!inRange) { cells.push(`<i class="d off"></i>`); continue; }
+        const cls = d === nowDay ? "now" : failed.has(d) && !got.has(d) ? "fail" : got.has(d) ? "got" + (isHol(d) ? " hol" : "") : "todo";
+        cells.push(`<i class="d ${cls}" title="${dlabel(d)}"></i>`);
+      }
+      return `<div class="mrow"><span class="ml">${m}</span>${cells.join("")}</div>`;
+    });
+    $("#daygrid").innerHTML = html.join("");
+    const miss = days.filter((d) => !got.has(d)).length;
+    $("#collectHint").textContent = miss ? `받을 날 ${fmt(miss)}일 · 실제로 약 ${Math.max(1, Math.round((miss * 30) / 60))}분` : "모두 받았습니다";
+  }
+
+  const logLines = [
+    `<span class="ok">2026-10-01 09:12 · 2025-01-01 ~ 2026-09-30 받아 둠 (체험판 시작 상태)</span>`,
+    `<span class="bad">2026-07-14 (화) · 완료자 목록 2칸을 못 읽음 — 다시 받아야 함</span>`,
+  ];
+  const renderLog = () => { $("#log").innerHTML = logLines.slice(-60).reverse().map((l) => `<div>${l}</div>`).join(""); };
+
+  /* 고객 자료 */
+  function renderData() {
+    const rows = rowsIn();
+    const q = state.q.trim();
+    const digits = q.replace(/\D/g, "");
+    const hit = (c, v) => !q || c.name.includes(q) || (digits.length >= 3 && (c.phone.replace(/\D/g, "").endsWith(digits) || (v && v.no.includes(digits))));
+    const PAGE = 50;
+    let head, body, total;
+    if (state.view === "visits") {
+      const list = rows.filter((v) => hit(customers[v.cid], v)).sort((a, b) => (a.date === b.date ? a.slot - b.slot : a.date < b.date ? 1 : -1));
+      total = list.length;
+      head = `<tr><th>이용일</th><th>회차</th><th>상품</th><th>예약번호</th><th>이름</th><th>전화번호</th><th class="r">누적 이용완료</th><th>구분</th></tr>`;
+      body = list.slice(state.page * PAGE, state.page * PAGE + PAGE).map((v) => {
+        const c = customers[v.cid];
+        return `<tr><td class="mono">${dlabel(v.date)} ${isHol(v.date) ? '<span class="badge hol">휴일</span>' : ""}</td><td class="mono">${SLOTS[v.slot]}</td><td>${esc(v.product)}</td><td class="mono">${v.no}</td><td>${esc(maskName(c.name))}</td><td class="mono">${maskPhone(c.phone)}</td><td class="r">${v.done}</td><td>${v.done === 1 ? '<span class="badge new">신규</span>' : '<span class="badge re">재방문</span>'}</td></tr>`;
+      }).join("");
+    } else {
+      const cs = custStats(rows);
+      const list = [...cs.values()].filter((s) => hit(s.c)).sort((a, b) => b.visits - a.visits || (a.last < b.last ? 1 : -1));
+      total = list.length;
+      head = `<tr><th>이름</th><th>전화번호</th><th class="r">기간 안 방문</th><th>첫 방문</th><th>마지막 방문</th><th class="r">누적 이용완료</th><th class="r">휴일 비율</th><th>자주 온 회차</th></tr>`;
+      body = list.slice(state.page * PAGE, state.page * PAGE + PAGE).map((s) => {
+        const top = s.slots.indexOf(Math.max(...s.slots));
+        return `<tr><td>${esc(maskName(s.c.name))}</td><td class="mono">${maskPhone(s.c.phone)}</td><td class="r">${s.visits}</td><td class="mono">${s.first}</td><td class="mono">${s.last}</td><td class="r">${s.lastDone}</td><td class="r">${pct(s.hol, s.visits)}</td><td class="mono">${SLOTS[top]}</td></tr>`;
+      }).join("");
+    }
+    const pages = Math.max(1, Math.ceil(total / PAGE));
+    if (state.page >= pages) state.page = pages - 1;
+    $("#dataTable").innerHTML = `<thead>${head}</thead><tbody>${body || `<tr><td colspan="8" class="hint">${rows.length ? "찾는 손님이 없습니다" : "이 기간에 받은 자료가 없습니다. [수집]에서 먼저 받아 주세요"}</td></tr>`}</tbody>`;
+    $("#dataCount").textContent = `${fmt(total)}${state.view === "visits" ? "건" : "명"}`;
+    $("#pageInfo").textContent = `${state.page + 1} / ${pages}`;
+    $("#prev").disabled = state.page <= 0;
+    $("#next").disabled = state.page >= pages - 1;
+  }
+
+  /* 구분 기준 화면 */
+  function renderCriteria() {
+    $("#critList").innerHTML = CRITERIA.map((c) => {
+      const prev = c.parse && parsed[c.key] && !parseErr[c.key] ? `<div class="preview">${parsed[c.key].map((b) => `<span>${esc(b.label)}</span>`).join("")}</div>` : c.order ? `<div class="preview">${c.order.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : "";
+      return `<div class="crit">
+        <input type="checkbox" id="on_${c.key}" data-on="${c.key}" ${c.on ? "checked" : ""} aria-label="${esc(c.name)} 켜기">
+        <div class="body2">
+          <label class="name" for="on_${c.key}">${esc(c.name)}<span class="kind">${c.level} 기준</span></label>
+          ${c.help ? `<span class="hint">${esc(c.help)}</span>` : ""}
+          ${c.parse ? `<input type="text" class="wide mono" id="p_${c.key}" data-param="${c.key}" value="${esc(c.param)}" aria-label="${esc(c.name)} 구간">` : ""}
+          ${parseErr[c.key] ? `<span class="err">${esc(parseErr[c.key])}</span>` : prev}
+        </div>
+      </div>`;
+    }).join("");
+    const opts = (sel) => CRITERIA.map((c) => `<option value="${c.key}" ${c.key === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+    $("#xRow").innerHTML = opts(crossSel.row);
+    $("#xCol").innerHTML = opts(crossSel.col);
+    $("#xVal").value = crossSel.val;
+  }
+
+  /* 집계 결과 */
+  function aggregate() {
+    const rows = rowsIn();
+    const cs = custStats(rows);
+    const nCust = cs.size;
+    const newVisits = rows.filter((v) => v.done === 1).length;
+    const multi = [...cs.values()].filter((s) => s.visits >= 2).length;
+    const tables = CRITERIA.filter((c) => c.on && !parseErr[c.key]).map((c) => ({ c, rows: tableOf(c, rows, cs) }));
+    const cr = critBy[crossSel.row], cc = critBy[crossSel.col];
+    const cross = !parseErr[cr.key] && !parseErr[cc.key] ? crossOf(cr, cc, rows, cs, crossSel.val) : null;
+    return { rows, cs, nCust, newVisits, multi, tables, cross, cr, cc };
+  }
+  function renderResult() {
+    const A = aggregate();
+    $("#resultPeriod").textContent = `${state.from} ~ ${state.to} · 받은 날만`;
+    const tile = (k, v, s) => `<div class="tile"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${s}</span></div>`;
+    $("#tiles").innerHTML = [
+      tile("방문 건수", fmt(A.rows.length), "이용완료 예약 수"),
+      tile("고객 수", fmt(A.nCust), "같은 손님은 한 명으로"),
+      tile("1명당 방문", A.nCust ? (A.rows.length / A.nCust).toFixed(2) : "—", "기간 안 평균"),
+      tile("신규 방문", pct(A.newVisits, A.rows.length), "첫 이용완료인 방문"),
+      tile("2번 이상 온 고객", pct(A.multi, A.nCust), `${fmt(A.multi)}명`),
+    ].join("");
+    $("#resultTables").innerHTML = A.tables.length ? A.tables.map(({ c, rows }) => {
+      const tv = rows.reduce((s, r) => s + r.visits, 0);
+      const max = Math.max(1, ...rows.map((r) => r.visits));
+      return `<section class="card"><div class="head"><h3>${esc(c.name)}</h3><span class="hint">${c.level} 기준</span></div>
+        <div class="tbl-wrap"><table><thead><tr><th>구분</th><th class="r">방문 건수</th><th>방문 비율</th><th class="r">고객 수</th><th class="r">고객 비율</th><th class="r">1명당 방문</th></tr></thead><tbody>
+        ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${fmt(r.visits)}</td><td><span class="barcell"><i style="width:${Math.round((r.visits / max) * 110)}px"></i><span class="num">${pct(r.visits, tv)}</span></span></td><td class="r">${fmt(r.cust)}</td><td class="r">${pct(r.cust, A.nCust)}</td><td class="r">${(r.visits / r.cust).toFixed(2)}</td></tr>`).join("")}
+        <tr class="total"><td>합계</td><td class="r">${fmt(tv)}</td><td class="num">100%</td><td class="r">${fmt(A.nCust)}</td><td class="r">${c.level === "고객" ? "100%" : "—"}</td><td class="r">${A.nCust ? (tv / A.nCust).toFixed(2) : "—"}</td></tr>
+        </tbody></table></div>
+        ${c.level === "방문" ? `<p class="hint">방문 기준 표의 고객 수는 그 구분에 한 번이라도 온 손님 수라, 더하면 전체 고객 수보다 많을 수 있습니다.</p>` : ""}
+      </section>`;
+    }).join("") : `<section class="card"><p class="hint">켠 기준이 없습니다. [구분 기준]에서 켜 주세요.</p></section>`;
+    if (A.cross) {
+      const X = A.cross;
+      $("#crossTitle").textContent = `교차표 — ${A.cr.name} × ${A.cc.name} (${crossSel.val === "visits" ? "방문 건수" : "고객 수"})`;
+      $("#crossTable").innerHTML = `<thead><tr><th>${esc(A.cr.name)} \\ ${esc(A.cc.name)}</th>${X.K.map((k) => `<th class="r">${esc(k)}</th>`).join("")}<th class="r">합계</th></tr></thead><tbody>
+        ${X.R.map((a) => `<tr><td>${esc(a)}</td>${X.K.map((b) => `<td class="r">${fmt(X.cell(a, b))}</td>`).join("")}<td class="r"><b>${fmt(X.rowTotal(a))}</b></td></tr>`).join("")}
+        <tr class="total"><td>합계</td>${X.K.map((b) => `<td class="r">${fmt(X.colTotal(b))}</td>`).join("")}<td class="r">${fmt(X.all)}</td></tr></tbody>`;
+    } else {
+      $("#crossTitle").textContent = "교차표";
+      $("#crossTable").innerHTML = `<tbody><tr><td class="hint">고른 기준의 구간 글을 먼저 고쳐 주세요.</td></tr></tbody>`;
+    }
+  }
+
+  /* 엑셀 */
+  const defaultName = () => `네이버고객_${state.from.replace(/-/g, "")}-${state.to.replace(/-/g, "")}.xlsx`;
+  function renderExcel() {
+    const f = $("#fname");
+    if (!f.dataset.touched) f.value = defaultName();
+    const m = [$("#maskPhone").checked ? "전화번호 가운데 가림" : "전화번호 그대로", $("#maskName").checked ? "이름 가운데 가림" : "이름 그대로"];
+    $("#maskHint").textContent = `설정 · 보안에 따라: ${m.join(" · ")}. 받은 날 ${fmt(daysIn().filter((d) => got.has(d)).length)}일치가 들어갑니다.`;
+  }
+  function buildWorkbook() {
+    const X = window.XLSX;
+    const A = aggregate();
+    const wb = X.utils.book_new();
+    const add = (name, aoa, widths) => { const ws = X.utils.aoa_to_sheet(aoa); if (widths) ws["!cols"] = widths.map((w) => ({ wch: w })); X.utils.book_append_sheet(wb, ws, name); };
+    if ($("#shSet").checked) {
+      add("설정", [
+        ["네이버 고객 집계 (체험판 · 가짜 자료)"], [],
+        ["기간", `${state.from} ~ ${state.to}`], ["받은 날", daysIn().filter((d) => got.has(d)).length], ["안 받은 날", daysIn().filter((d) => !got.has(d)).length],
+        ["방문 건수", A.rows.length], ["고객 수", A.nCust],
+        ["만든 때", new Date().toLocaleString("ko-KR")], ["개인정보 책임자", $("#owner").value], ["가리기", `${$("#maskPhone").checked ? "전화 가림" : "전화 그대로"} · ${$("#maskName").checked ? "이름 가림" : "이름 그대로"}`],
+        [], ["켠 기준", "구간"], ...CRITERIA.filter((c) => c.on).map((c) => [c.name, c.param || (c.order || []).join(" / ")]),
+      ], [18, 40]);
+    }
+    if ($("#shVisits").checked) {
+      const rows = [...A.rows].sort((a, b) => (a.date === b.date ? a.slot - b.slot : a.date < b.date ? -1 : 1));
+      add("방문 건별", [["이용일", "요일", "평일/휴일", "회차", "상품", "예약번호", "이름", "전화번호", "누적 이용완료", "신규/재방문", "기간 스티커", "요금제"],
+        ...rows.map((v) => { const c = customers[v.cid]; return [v.date, DOW[dow(v.date)], isHol(v.date) ? "휴일" : "평일", SLOTS[v.slot], v.product, v.no, maskName(c.name), maskPhone(c.phone), v.done, v.done === 1 ? "신규" : "재방문", seasonOf(v.date), v.date < CHANGE ? "교환권" : "입장료"]; })],
+        [11, 5, 8, 7, 24, 12, 8, 15, 12, 10, 10, 8]);
+    }
+    if ($("#shCust").checked) {
+      const list = [...A.cs.values()].sort((a, b) => b.visits - a.visits);
+      add("고객별", [["이름", "전화번호", "기간 안 방문", "첫 방문", "마지막 방문", "누적 이용완료", "휴일 방문", "휴일 비율", "자주 온 회차"],
+        ...list.map((s) => [maskName(s.c.name), maskPhone(s.c.phone), s.visits, s.first, s.last, s.lastDone, s.hol, Math.round((s.hol / s.visits) * 1000) / 10, SLOTS[s.slots.indexOf(Math.max(...s.slots))]])],
+        [8, 15, 11, 11, 11, 12, 9, 9, 11]);
+    }
+    if ($("#shAgg").checked) {
+      const aoa = [];
+      for (const { c, rows } of A.tables) {
+        const tv = rows.reduce((s, r) => s + r.visits, 0);
+        aoa.push([`${c.name} (${c.level} 기준)`], ["구분", "방문 건수", "방문 비율(%)", "고객 수", "고객 비율(%)", "1명당 방문"]);
+        for (const r of rows) aoa.push([r.label, r.visits, Math.round((r.visits / tv) * 1000) / 10, r.cust, Math.round((r.cust / A.nCust) * 1000) / 10, Math.round((r.visits / r.cust) * 100) / 100]);
+        aoa.push(["합계", tv, 100, A.nCust, c.level === "고객" ? 100 : "", Math.round((tv / A.nCust) * 100) / 100], []);
+      }
+      add("기준별 집계", aoa.length ? aoa : [["켠 기준 없음"]], [22, 11, 12, 10, 12, 11]);
+    }
+    if ($("#shCross").checked && A.cross) {
+      const X2 = A.cross;
+      add("교차표", [[`${A.cr.name} × ${A.cc.name} (${crossSel.val === "visits" ? "방문 건수" : "고객 수"})`],
+        [`${A.cr.name} \\ ${A.cc.name}`, ...X2.K, "합계"],
+        ...X2.R.map((a) => [a, ...X2.K.map((b) => X2.cell(a, b)), X2.rowTotal(a)]),
+        ["합계", ...X2.K.map((b) => X2.colTotal(b)), X2.all]], [22, ...X2.K.map(() => 11), 10]);
+    }
+    if (!wb.SheetNames.length) throw new Error("넣을 시트를 하나 이상 골라 주세요");
+    return X.write(wb, { bookType: "xlsx", type: "array", compression: true });
+  }
+  // 파일 저장 — 화면 안에서는 '내려받기' 확인을 거침, PC에서 파일을 직접 열었을 때는 바로 내려받음
+  const dlPromise = window.claude && window.claude.use ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  async function saveXlsx() {
+    const msg = $("#xlsxMsg");
+    msg.className = "msg";
+    if (!window.XLSX) { msg.classList.add("bad"); msg.textContent = "엑셀 도구를 아직 못 불러왔습니다. 잠시 뒤 다시 눌러 주세요."; return; }
+    let buf;
+    try { buf = buildWorkbook(); } catch (e) { msg.classList.add("bad"); msg.textContent = e.message; return; }
+    let name = $("#fname").value.trim() || defaultName();
+    if (!/\.xlsx$/i.test(name)) name += ".xlsx";
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const size = `${(blob.size / 1024 / 1024).toFixed(1)}MB`;
+    if (window.claude) {
+      msg.textContent = "저장 창을 여는 중…";
+      const dl = await dlPromise;
+      if (!dl) { msg.classList.add("bad"); msg.textContent = "이 화면에서는 파일 저장을 쓸 수 없습니다. 실제 프로그램에서는 저장 폴더에 바로 저장합니다."; return; }
+      try {
+        await dl.save({ filename: name, data: blob });
+        msg.classList.add("ok"); msg.textContent = `${name} (${size}) 를 넘겼습니다`;
+      } catch (e) {
+        msg.classList.add("bad");
+        msg.textContent = e && e.code === "declined" ? "저장을 취소했습니다" : e && e.code === "rate_limited" ? "저장 창이 이미 열려 있습니다. 잠시 뒤 다시 눌러 주세요" : "이 화면에서는 파일 저장을 쓸 수 없습니다";
+      }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    msg.classList.add("ok"); msg.textContent = `${name} (${size}) 를 저장했습니다`;
+  }
+
+  /* 설정 · 보안 */
+  let purgeArmed = false;
+  function purgeTarget() { const months = Number($("#keep").value); const t = new Date(TODAY + "T00:00:00Z"); t.setUTCMonth(t.getUTCMonth() - months); const cut = t.toISOString().slice(0, 10); return { cut, days: [...got].filter((d) => d < cut) }; }
+  function renderSafety() {
+    const { cut, days } = purgeTarget();
+    $("#purgeHint").textContent = purgeArmed
+      ? `${cut} 이전 ${fmt(days.length)}일치 원자료를 지웁니다. 한 번 더 누르면 지웁니다.`
+      : days.length ? `${cut} 이전 원자료 ${fmt(days.length)}일치가 보관 기간을 넘었습니다.` : `${cut} 이전 원자료는 없습니다.`;
+    const b = $("#purgeBtn");
+    b.classList.toggle("armed", purgeArmed);
+    b.textContent = purgeArmed ? "정말 지우기" : "지난 원자료 지우기";
+    b.disabled = !days.length;
+    $("#ownerPill").textContent = $("#owner").value || "—";
+    $("#folderPill").textContent = $("#folder").value || "—";
+  }
+
+  /* ───────── 수집 흉내 ───────── */
+  let timer = null;
+  function startCollect() {
+    const redo = $("#redo").checked;
+    const todo = daysIn().filter((d) => redo || !got.has(d));
+    if (!todo.length) { logLines.push(`<span class="ok">${state.from} ~ ${state.to} · 받을 날이 없습니다</span>`); renderLog(); return; }
+    let i = 0;
+    const retry = [];
+    const t0 = todo.length;
+    $("#startBtn").disabled = true; $("#stopBtn").disabled = false;
+    logLines.push(`수집 시작 · ${state.from} ~ ${state.to} · ${t0}일${redo ? " (받은 날도 다시)" : ""}`);
+    const step = () => {
+      if (i >= todo.length && retry.length) { todo.push(...retry.splice(0)); }
+      if (i >= todo.length) { finish(`<span class="ok">끝 · ${t0}일 받음</span>`); return; }
+      const d = todo[i++];
+      renderGrid(d);
+      const rows = byDate.get(d) || [];
+      const isRetry = i > t0;
+      if (!isRetry && rnd() < 0.03 && rows.length) {
+        failed.add(d); got.delete(d); retry.push(d);
+        logLines.push(`<span class="bad">${dlabel(d)} · 완료자 목록 1칸을 못 읽음 → 끝에 다시</span>`);
+      } else {
+        got.add(d); failed.delete(d);
+        const slots = new Set(rows.map((v) => v.slot)).size;
+        logLines.push(`${dlabel(d)} · 회차 ${slots}개 · 완료자 ${rows.length}명 · 저장${isRetry ? " (다시 받음)" : ""}`);
+      }
+      const doneN = Math.min(i, t0);
+      $("#barFill").style.width = `${Math.round((doneN / t0) * 100)}%`;
+      const left = Math.max(0, todo.length - i);
+      $("#progressText").textContent = `${t0}일 중 ${doneN}일 · ${dlabel(d)} 읽는 중 · 남은 시간 약 ${Math.max(1, Math.round((left * 30) / 60))}분 (실제 기준)`;
+      renderLog(); renderBand();
+      timer = setTimeout(step, 70);
+    };
+    const finish = (line) => {
+      clearTimeout(timer); timer = null;
+      logLines.push(line);
+      $("#startBtn").disabled = false; $("#stopBtn").disabled = true;
+      $("#progressText").textContent = line.replace(/<[^>]+>/g, "");
+      renderAll();
+    };
+    $("#stopBtn").onclick = () => finish(`멈춤 · ${Math.min(i, t0)}일 받음 · 다음에 [수집 시작]을 누르면 나머지를 받습니다`);
+    step();
+  }
+
+  /* ───────── 이어 붙이기 ───────── */
+  function renderAll() {
+    renderBand(); renderGrid(); renderLog();
+    if (state.tab === "data") renderData();
+    if (state.tab === "criteria") renderCriteria();
+    if (state.tab === "result") renderResult();
+    if (state.tab === "excel") renderExcel();
+    if (state.tab === "safety") renderSafety();
+  }
+  function setTab(t) {
+    state.tab = t;
+    document.querySelectorAll(".steps button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+    document.querySelectorAll("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== t));
+    renderAll();
+  }
+  document.querySelectorAll(".steps button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  const setPeriod = (a, z) => {
+    if (a < FIRST) a = FIRST;
+    if (z > LAST) z = LAST;
+    if (a > z) [a, z] = [z, a];
+    state.from = a; state.to = z; state.page = 0;
+    $("#from").value = a; $("#to").value = z;
+    renderAll();
+  };
+  $("#from").min = $("#to").min = FIRST;
+  $("#from").max = $("#to").max = LAST;
+  $("#from").addEventListener("change", (e) => e.target.value && setPeriod(e.target.value, state.to));
+  $("#to").addEventListener("change", (e) => e.target.value && setPeriod(state.from, e.target.value));
+  $("#quick").addEventListener("click", (e) => {
+    const q = e.target.dataset && e.target.dataset.q;
+    if (!q) return;
+    if (q === "lastMonth") setPeriod("2026-09-01", "2026-09-30");
+    if (q === "3m") setPeriod(addDays(LAST, -91), LAST);
+    if (q === "fee") setPeriod(CHANGE, LAST);
+    if (q === "y2026") setPeriod("2026-01-01", LAST);
+    if (q === "y2025") setPeriod("2025-01-01", "2025-12-31");
+    if (q === "all") setPeriod(FIRST, LAST);
+  });
+  $("#startBtn").addEventListener("click", startCollect);
+  $("#segVisits").addEventListener("click", () => { state.view = "visits"; state.page = 0; $("#segVisits").setAttribute("aria-pressed", "true"); $("#segCust").setAttribute("aria-pressed", "false"); renderData(); });
+  $("#segCust").addEventListener("click", () => { state.view = "cust"; state.page = 0; $("#segCust").setAttribute("aria-pressed", "true"); $("#segVisits").setAttribute("aria-pressed", "false"); renderData(); });
+  $("#q").addEventListener("input", (e) => { state.q = e.target.value; state.page = 0; renderData(); });
+  $("#prev").addEventListener("click", () => { state.page = Math.max(0, state.page - 1); renderData(); });
+  $("#next").addEventListener("click", () => { state.page++; renderData(); });
+  $("#critList").addEventListener("change", (e) => {
+    const k = e.target.dataset.on;
+    if (k) { critBy[k].on = e.target.checked; }
+  });
+  $("#critList").addEventListener("input", (e) => {
+    const k = e.target.dataset.param;
+    if (!k) return;
+    critBy[k].param = e.target.value;
+    reparse(critBy[k]);
+    // 입력 중인 칸은 두고, 미리보기 · 오류만 다시
+    const box = e.target.parentElement;
+    const old = box.querySelector(".err, .preview");
+    if (old) old.remove();
+    const div = document.createElement("div");
+    if (parseErr[k]) { div.className = "err"; div.textContent = parseErr[k]; }
+    else { div.className = "preview"; div.innerHTML = parsed[k].map((b) => `<span>${esc(b.label)}</span>`).join(""); }
+    box.appendChild(div);
+  });
+  $("#xRow").addEventListener("change", (e) => (crossSel.row = e.target.value));
+  $("#xCol").addEventListener("change", (e) => (crossSel.col = e.target.value));
+  $("#xVal").addEventListener("change", (e) => (crossSel.val = e.target.value));
+  $("#fname").addEventListener("input", (e) => (e.target.dataset.touched = "1"));
+  $("#xlsxBtn").addEventListener("click", saveXlsx);
+  ["#maskPhone", "#maskName"].forEach((s) => $(s).addEventListener("change", renderAll));
+  ["#owner", "#folder"].forEach((s) => $(s).addEventListener("input", renderSafety));
+  $("#keep").addEventListener("change", () => { purgeArmed = false; renderSafety(); });
+  $("#purgeBtn").addEventListener("click", () => {
+    if (!purgeArmed) { purgeArmed = true; renderSafety(); return; }
+    const { cut, days } = purgeTarget();
+    days.forEach((d) => got.delete(d));
+    logLines.push(`<span class="bad">${cut} 이전 원자료 ${days.length}일치를 지움</span>`);
+    purgeArmed = false; renderAll();
+  });
+  $("#resetBtn").addEventListener("click", () => { got = initialGot(); failed.clear(); failed.add("2026-07-14"); purgeArmed = false; logLines.push("체험판 처음 상태로 되돌림"); setPeriod(CHANGE, LAST); });
+
+  setPeriod(state.from, state.to);
+})();
+</script>
