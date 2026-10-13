@@ -4,8 +4,8 @@
    ② 오른쪽: 바리스타 · 베이커리 · 키친 · 키즈입장 · 기타 — 왼쪽 상자 높이를 다섯으로 나눈 긴 상자, 금액은 원 단위 (→ 섹터 상세)
       위치는 마감 전 · 후 모든 날 같게. 글자는 칸에 맞춰(줄 바꿈 · 잘림 없이) 가능한 크게
    ③ 당월 매출 합계 · 전년도 같은 기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
-   ④ 카페아스타나 방문인원 · 1인 평균소비 (상세 없음)
-   ⑤ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
+   ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
+   ⑤ 카페아스타나 방문인원 · 1인 평균소비 (방문인원 → 상세)
    ⑥ 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세)
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
@@ -93,23 +93,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         <SectorBars d={d} open={open} />
       </div>
 
-      {/* 그날 정보 — 방문인원 · 1인 평균소비 · 키즈 입장 (하루치라 섹터 바로 아래) */}
-      <div className="stats">
-        <button className="stat tap" onClick={() => open({ name: "visitors" })}>
-          <div className="stat-label">
-            카페아스타나 방문인원 <Chevron />
-          </div>
-          <div className="stat-value">{count(day.visitors, "명")}</div>
-          <span className="note">음료·맥주 {count(day.cups, "잔")} × 0.96</span>
-        </button>
-        <div className="stat">
-          <div className="stat-label">1인 평균소비</div>
-          <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
-          <span className="note">총 매출 ÷ 방문인원</span>
-        </div>
-      </div>
-
-      {/* 키즈 입장 4칸 한 줄 — 이름 · 장수 모두 가운데. 네이버 아래 회색 '(中 신규 41장)', 네 칸 같은 크기 */}
+      {/* 키즈 입장 4칸 한 줄 (섹터 바로 아래) — 이름 · 장수 모두 가운데. 네이버 아래 회색 '(中 신규 41장)', 네 칸 같은 크기 */}
       <div className="stats four">
         <div className="stat">
           <div className="stat-label">
@@ -138,6 +122,22 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <div className="stat-value">{count(day.eventFree, "장")}</div>
           <span className="note" />
         </button>
+      </div>
+
+      {/* 그날 정보 — 카페 방문인원 · 1인 평균소비 (키즈 입장 4칸 아래, 2026-10-13 사장님 지시로 순서 바꿈) */}
+      <div className="stats">
+        <button className="stat tap" onClick={() => open({ name: "visitors" })}>
+          <div className="stat-label">
+            카페아스타나 방문인원 <Chevron />
+          </div>
+          <div className="stat-value">{count(day.visitors, "명")}</div>
+          <span className="note">음료·맥주 {count(day.cups, "잔")} × 0.96</span>
+        </button>
+        <div className="stat">
+          <div className="stat-label">1인 평균소비</div>
+          <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
+          <span className="note">총 매출 ÷ 방문인원</span>
+        </div>
       </div>
 
       {/* 자금 현황 — 그날 정보 아래. 누르면 계좌 · 적요까지 자세히 */}
