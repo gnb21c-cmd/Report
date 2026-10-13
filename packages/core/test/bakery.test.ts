@@ -5,6 +5,7 @@ import {
   asPlan,
   bakeryProducts,
   Board,
+  breadTotals,
   dayKind,
   dayRange,
   dayResult,
@@ -313,6 +314,24 @@ describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금
     expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "06:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-09", time: "01:00" })).toBe(true);
     expect(productionStarted("2026-10-08", { date: "2026-10-07", time: "23:00" })).toBe(false);
+  });
+});
+
+describe("전날 산 빵을 오늘 환불 (그날 판매 개수가 마이너스) — 판매 · 할인 · 생산이 마이너스로 나오지 않음", () => {
+  // 10-13 마감 전: 소금빵 5개 팔림 · 크루아상은 아직 안 팔렸는데 전날 산 2개를 환불(−2) · 할인 줄은 아직 없음
+  const r = day("2026-10-13", 100, [["소금빵", 5], ["크루아상", -2]]);
+  const b = new Board([r]);
+  const st = { madeOn: "2026-10-10", asOf: "2026-10-09", kind: "평일" as const, visitors: 100, weather: "모름", total: 30 };
+  const plan: PlanDoc = { v: 2, date: "2026-10-13", final: { ...st, items: [{ name: "소금빵", qty: 20, base: 20 }, { name: "크루아상", qty: 10, base: 10 }] } };
+  const rows = dayResult(b, "2026-10-13", plan, null);
+  it("환불만 있는 빵은 판매 0 · 할인 0 · 남음 = 지시 수량", () => {
+    expect(rows.find((x) => x.name === "크루아상")).toMatchObject({ sold: 0, half: 0, full: 0, waste: 10 });
+    const t = breadTotals(rows);
+    expect(t).toEqual({ made: 30, full: 5, half: 0, waste: 25 });
+  });
+  it("상품 목록의 그날 · 4주 판매도 마이너스로 안 셈", () => {
+    const x = bakeryProducts(b, "2026-10-13", plan, null).find((p) => p.name === "크루아상")!;
+    expect([x.day, x.recent]).toEqual([0, 0]);
   });
 });
 
