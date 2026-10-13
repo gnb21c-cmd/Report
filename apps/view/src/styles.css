@@ -681,6 +681,21 @@ button.stat {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+/* 누계 칸 — 그 기간에 영업한 평일(파랑) · 휴일(빨강) 날 수 */
+.day-kinds {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.dk-weekday {
+  color: var(--sat);
+}
+.dk-holiday {
+  color: var(--sun);
+}
 .stats.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

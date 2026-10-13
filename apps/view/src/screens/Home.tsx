@@ -13,7 +13,7 @@ import { useRef } from "react";
 import { WeatherPanel } from "../ui/WeatherPanel";
 import { LiveWarn, useLive } from "../ui/Live";
 import { useFit } from "../ui/fit";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, type BoxKey, type CashSummary, type Dashboard, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -165,6 +165,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <div className="stat-label">
             당월 매출 합계 <Chevron />
           </div>
+          <DayKindsLine k={d.monthDays} />
           <div className="stat-value">{won(d.month.total)}</div>
           {/* 오늘 마감 전이면 누계는 어제까지 (d.cumTo) */}
           <span className="note period">({d.cumTo < d.month.from ? "오늘 마감 전 · 확정분 없음" : span(d.month.from, d.cumTo, true)})</span>
@@ -173,6 +174,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <div className="stat-label">
             전년 동기간 매출 합계 <Chevron />
           </div>
+          <DayKindsLine k={d.lyMonthDays} />
           <div className="stat-value">{hasData(d.lyMonth) ? won(d.lyMonth.total) : "—"}</div>
           <span className="note period">({span(d.lyMonth.from, d.lyMonth.to, true)})</span>
         </button>
@@ -194,6 +196,17 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         </button>
       </div>
     </>
+  );
+}
+
+/** 누계 기간에 영업한 날 — 평일(파랑) · 휴일(빨강, 토 · 일 · 공휴일) 날 수. 평일/휴일 차이로 매출이 다른지 감안하게 (2026-10-13 사장님) */
+function DayKindsLine({ k }: { k: DayKinds }) {
+  if (!k.weekday && !k.holiday) return null;
+  return (
+    <div className="day-kinds">
+      <span className="dk-weekday">평일 {k.weekday}일</span>
+      <span className="dk-holiday">휴일 {k.holiday}일</span>
+    </div>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   comparable,
   cupsPerItem,
   dashboard,
+  dayKinds,
   forecastNext,
   HOURS,
   hourDay,
@@ -169,6 +170,25 @@ describe("누계", () => {
     const part = new Board(reports.filter((r) => r.date >= "2025-12-01"));
     expect(comparable(part.range("2025-01-01", "2025-10-01"))).toBe(false);
     expect(yearView(part, "2026-10-01").estimate?.how).toBe("올해 하루 평균 기준");
+  });
+});
+
+describe("누계 기간의 평일 · 휴일 날 수 (영업한 날만, 토 · 일 · 공휴일 = 휴일)", () => {
+  // 올해 10/1 ~ 10/12 (10/7 은 자료 없음) · 작년 10/1 ~ 10/12 (추석 연휴가 들어 있음)
+  const reports: DayReport[] = [...days("2025-10-01", "2025-10-12"), ...days("2026-10-01", "2026-10-12").filter((d) => d !== "2026-10-07")].map((d) => ({ date: d, cafe: cafe(d, { 바리스타: 50000, cups: 10 }) }));
+  const b = new Board(reports);
+  it("당월(1일 ~ 마감일)과 전년 동기간(작년 같은 달 1일 ~ 같은 날짜)", () => {
+    const d = dashboard(b, "2026-10-12");
+    // 올해: 평일 10/1 · 2 · 6 · 8 · 12 (10/7 자료 없음) · 휴일 10/3 개천절 · 4 · 5 대체 · 9 한글날 · 10 · 11
+    expect(d.monthDays).toEqual({ weekday: 5, holiday: 6 });
+    // 작년: 평일 10/1 · 2 · 10 · 휴일 10/3 · 4 · 5 ~ 8 추석 · 9 한글날 · 11 · 12
+    expect(d.lyMonthDays).toEqual({ weekday: 3, holiday: 9 });
+  });
+  it("오늘 마감 전이라 누계가 어제까지면 날 수도 어제까지", () => {
+    const d = dashboard(b, "2026-10-12", { cumTo: "2026-10-11" });
+    expect(d.monthDays).toEqual({ weekday: 4, holiday: 6 });
+    expect(d.lyMonthDays).toEqual({ weekday: 3, holiday: 8 });
+    expect(dayKinds(b, "2026-10-12", "2026-10-11")).toEqual({ weekday: 0, holiday: 0 });
   });
 });
 

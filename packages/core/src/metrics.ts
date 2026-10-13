@@ -18,7 +18,7 @@
 import { dayRange, daysInMonth, lyCalendar, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
 import { EXTRA_KINDS, type ExtraKind } from "./extra";
 import { rentalIn } from "./cash";
-import { etcMove, isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
+import { etcMove, holidayName, isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
@@ -415,6 +415,28 @@ export interface Dashboard {
   price: { price: number; kind: "평일" | "휴일"; charged: boolean };
   /** 누계 · 작년 같은 기간의 끝날 (보통 date, 오늘 마감 전 영업정보인 날은 어제) */
   cumTo: string;
+  /** 당월 누계 기간 · 전년 동기간에 영업한 평일 · 휴일 날 수 (평일/휴일 차이로 매출이 다른지 감안하게) */
+  monthDays: DayKinds;
+  lyMonthDays: DayKinds;
+}
+
+export interface DayKinds {
+  weekday: number;
+  holiday: number;
+}
+
+/** 기간 안 영업한 날(카페 · 키즈 자료가 있는 날)의 평일 · 휴일 날 수 — 휴일 = 토 · 일 · 공휴일(설정의 휴일 더하기 · 빼기 포함) */
+export function dayKinds(board: Board, from: string, to: string): DayKinds {
+  const out: DayKinds = { weekday: 0, holiday: 0 };
+  if (from > to) return out;
+  for (const d of dayRange(from, to)) {
+    const r = board.report(d);
+    if (!r?.cafe && !r?.kids) continue;
+    const w = new Date(d + "T00:00:00Z").getUTCDay();
+    if (w === 0 || w === 6 || holidayName(d)) out.holiday++;
+    else out.weekday++;
+  }
+  return out;
 }
 
 export function dashboard(board: Board, date: string, opts: { cumTo?: string } = {}): Dashboard {
@@ -434,6 +456,8 @@ export function dashboard(board: Board, date: string, opts: { cumTo?: string } =
     year: board.range(y0, to),
     // 월간 비교는 달력 날짜 (작년 같은 달 1일 ~ 같은 날짜) — 하루 · 올해 누계는 364일
     lyMonth: to < m0 ? board.range(lyCalendar(m0), addDaysKey(lyCalendar(m0), -1)) : board.range(lyCalendar(m0), lyCalendar(to)),
+    monthDays: dayKinds(board, m0, to),
+    lyMonthDays: to < m0 ? { weekday: 0, holiday: 0 } : dayKinds(board, lyCalendar(m0), lyCalendar(to)),
     lyYear: to < y0 ? board.range(lyDay(y0), addDaysKey(lyDay(y0), -1)) : board.range(lyDay(y0), lyDay(to)),
     lyDate: ly,
     price: kidsPrice(date),
