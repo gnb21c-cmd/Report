@@ -338,7 +338,7 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
   return names
     .map((name) => {
       const m = made.get(name) ?? null;
-      // 전날 산 빵을 오늘 환불하면 그날 개수가 마이너스 — 오늘 판매는 0 으로 (환불은 그 빵을 오늘 만든 것과 상관없음)
+      // 그날 짝을 못 찾은 반품 줄 등으로 개수가 마이너스면 판매 0 으로 (판매 · 할인 · 생산이 마이너스로 보이지 않게)
       const s = Math.max(0, sold.get(name) || 0);
       const h = Math.max(0, Math.min(s, halfBy[name] || 0));
       return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: m == null ? null : Math.max(0, m - s), soldOut: m != null && m > 0 && s >= m && h === 0 };
@@ -390,7 +390,7 @@ export function bakeryProducts(board: Board, date: string, plan: PlanDoc | null 
     for (const p of board.products(d, d, "베이커리")) {
       if (NOT_BREAD.has(p.name)) continue;
       const r = row(p.name);
-      const q = Math.max(0, p.qty); // 전날 것 환불(마이너스)은 판매로 안 셈
+      const q = Math.max(0, p.qty); // 마이너스(짝 못 찾은 반품 등)는 판매로 안 셈
       if (q > 0) r.last = d;
       if (d >= from) r.recent += q;
       if (d === date) r.day += q;

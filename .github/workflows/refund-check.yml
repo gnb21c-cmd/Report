@@ -1,0 +1,29 @@
+# 반품 확인 (손으로 실행) — apps/collector/src/refundCheck.ts. 기록에는 개수만 (상품 이름 · 금액 없음)
+name: 반품 확인
+on:
+  push:
+    branches: ["feature/bakery-neg-fix"]
+    paths: ["apps/collector/src/refundCheck.ts", ".github/workflows/refund-check.yml"]
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "날짜 (YYYY-MM-DD, 비우면 오늘)"
+        required: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector refund-check
+        env:
+          CHECK_DATE: ${{ inputs.date }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
