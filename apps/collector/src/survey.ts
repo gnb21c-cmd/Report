@@ -15,15 +15,16 @@ import { fbLogin, readSettingsJson, writeSettingsJson } from "./firebase";
 import { say } from "./okpos";
 
 const env = (k: string) => process.env[k] || "";
-const DESK_DIR = "아스타나키즈 입장 데스크";
+/** 데스크 앱 폴더 이름 — 설치본은 productName, 혹시 몰라 package name 도 */
+const DESK_DIRS = ["아스타나키즈 입장 데스크", "astanakiz-desk"];
 const todayKst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
 /** 설문 보고 폴더 후보 — 정해 준 곳 · 이 사용자 · PC 의 다른 사용자들 */
 function outboxes(): string[] {
-  const out = [env("SURVEY_OUTBOX_DIR"), env("APPDATA") && join(env("APPDATA"), DESK_DIR, SURVEY_OUTBOX)].filter(Boolean);
+  const out = [env("SURVEY_OUTBOX_DIR"), ...DESK_DIRS.map((d) => env("APPDATA") && join(env("APPDATA"), d, SURVEY_OUTBOX))].filter(Boolean);
   if (process.platform === "win32" && existsSync("C:\\Users")) {
     try {
-      for (const u of readdirSync("C:\\Users")) out.push(join("C:\\Users", u, "AppData", "Roaming", DESK_DIR, SURVEY_OUTBOX));
+      for (const u of readdirSync("C:\\Users")) for (const d of DESK_DIRS) out.push(join("C:\\Users", u, "AppData", "Roaming", d, SURVEY_OUTBOX));
     } catch {
       /* 못 읽는 사용자 폴더는 건너뜀 */
     }
