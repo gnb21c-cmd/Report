@@ -18,6 +18,7 @@
     "extra": "tsx src/extra.ts",
     "naver": "tsx src/naver.ts",
     "live": "tsx src/live.ts",
+    "survey": "tsx src/survey.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },

@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, type DayReport, type DayWeather, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { asOrder, asPlan, cleanSettings, cleanSurveys, type DayReport, type DayWeather, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import type { Source } from "./source";
 
 export interface FirebaseConfig {
@@ -150,6 +150,15 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
         return f.json ? cleanSettings(JSON.parse(f.json)) : null;
       } catch {
         return null; // 아직 설정을 저장한 적 없음 (기본값)
+      }
+    },
+    async surveys() {
+      try {
+        const doc = await call(`${base(cfg, board)}/settings/surveys?key=${cfg.apiKey}`);
+        const f = fieldsOf(doc);
+        return f.json ? cleanSurveys(JSON.parse(f.json)) : null;
+      } catch {
+        return null; // 아직 통합데스크 설문을 받은 적 없음
       }
     },
   };

@@ -1,7 +1,7 @@
 /* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 클라우드에서
    → 폰 저장소 → 새로 온 것만 받기 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDays, cleanSettings, LIVE_FROM, sampleReports, sampleUntilYesterday, sum, todayKst, type DayReport, type LiveDoc, type ReportSettings, type StorePart, type WeatherKey, type WeatherMap } from "@report/core";
+import { addDays, cleanSettings, cleanSurveys, LIVE_FROM, sampleReports, sampleSurveys, sampleUntilYesterday, sum, todayKst, type DayReport, type LiveDoc, type ReportSettings, type StorePart, type SurveyDoc, type WeatherKey, type WeatherMap } from "@report/core";
 import { boardKey, firebaseConfig, firebaseSource } from "./firebase";
 import type { OfficeStatus, Source } from "./source";
 import demoWeatherRaw from "./demoWeather.json";
@@ -24,6 +24,8 @@ export interface DataState {
   settings: ReportSettings | null;
   /** 오늘 마감 전 영업정보 — 오늘 · 어제의 live 문서 (폰에 쌓지 않음, 열려 있는 동안 5분마다 확인) */
   live: Record<string, LiveDoc | null>;
+  /** 통합데스크 설문 집계 — 첫 화면 '설문조사' 칸 (없으면 null) */
+  surveys: SurveyDoc | null;
 }
 
 const SYNCED = "report.syncedAt";
@@ -31,6 +33,7 @@ const CURSOR = "report.reportCursor";
 const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
 const SETTINGS = "report.settings";
+const SURVEYS = "report.surveys";
 /** 마지막으로 받은 마감 전 영업정보 (오늘 · 어제) — 다시 열 때 바로 보이게 */
 const LIVE = "report.live";
 /** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
@@ -94,6 +97,7 @@ export function useData() {
       const c = local.get<ReportSettings>(SETTINGS);
       return c ? cleanSettings(c) : null;
     })(),
+    surveys: __DEMO__ ? sampleSurveys(todayKst()) : cleanSurveys(local.get<SurveyDoc>(SURVEYS)),
     // 체험판: 첫 수집 시각(10:15) 뒤에만 오늘 마감 전 숫자
     live: __DEMO__ ? (new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16) >= LIVE_FROM ? { [todayKst()]: demoLive(todayKst()) } : {}) : cachedLive(),
   }));
@@ -132,8 +136,9 @@ export function useData() {
       const got = await src.reports(local.get<string>(CURSOR));
       await saveCached(got.reports);
       if (got.last) local.set(CURSOR, got.last);
-      const [status, wx, settings] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null)]);
+      const [status, wx, settings, surveys] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null), src.surveys().catch(() => null)]);
       local.set(SETTINGS, settings);
+      if (surveys) local.set(SURVEYS, surveys);
       let weather = local.get<WeatherMap>(WEATHER) || {};
       if (wx.days.length) {
         weather = { ...weather };
@@ -143,7 +148,7 @@ export function useData() {
       }
       const now = new Date().toISOString();
       local.set(SYNCED, now);
-      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings }));
+      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings, surveys: surveys && JSON.stringify(surveys) !== JSON.stringify(p.surveys) ? surveys : p.surveys }));
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }

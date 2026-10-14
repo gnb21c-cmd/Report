@@ -248,3 +248,23 @@ export async function writeConfigJson(fb: Fb, doc: string, value: unknown): Prom
     body: JSON.stringify({ fields: { json: str(JSON.stringify(value)), at: { timestampValue: new Date().toISOString() } } }),
   });
 }
+
+/** 보고 설정 칸(settings/{doc}) 의 json 읽기 — 없으면 null (보고 앱이 열쇠만으로 읽는 곳) */
+export async function readSettingsJson(fb: Fb, doc: string): Promise<string | null> {
+  try {
+    const d = await http(`${base(fb)}/boards/${fb.board}/settings/${doc}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return d.fields?.json?.stringValue ?? null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
+/** 보고 설정 칸(settings/{doc}) 에 json 쓰기 — 설문조사 집계(settings/surveys) 등 */
+export async function writeSettingsJson(fb: Fb, doc: string, json: string): Promise<void> {
+  await http(`${base(fb)}/boards/${fb.board}/settings/${doc}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields: { json: str(json), at: { timestampValue: new Date().toISOString() } } }),
+  });
+}
