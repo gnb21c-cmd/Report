@@ -9,7 +9,7 @@
    베이커리만: 맨 위 총 생산 · 정가판매 · 할인판매 · 폐기 합계, 맨 아래 빵별 같은 표
      생산 = 그날 D 확정 수량(그날 생산 기록) · 판매 = 다음 날 아침 수집한 영수증 · 폐기 = 생산 − 정가 − 할인
    ============================================================ */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   count,
   bakeryProducts,
@@ -19,6 +19,7 @@ import {
   RECENT_DAYS,
   type BakeryProduct,
   type BreadResult,
+  etcDetail,
   extraTotal,
   hourDay,
   hourLabel,
@@ -32,6 +33,8 @@ import {
   wonShort,
   type Board,
   type BoxKey,
+  type EtcDetail as EtcLists,
+  type ExtraKind,
   type Metrics,
   type WeatherMap,
 } from "@report/core";
@@ -260,20 +263,25 @@ function kidsFormula(m: Metrics, date: string): string {
     : `교환권 방식(26년 3월까지) — 네이버 ${count(Math.round(m.fee.naver / 30000), "장")} × 3만원 + 현장 ${won(m.fee.walkIn)} − 카페 교환권 사용 ${won(m.kidsCoupon)} = 키즈입장 ${won(m.box.키즈입장료)}`;
 }
 
-/** 기타 — 그날 자판기 · 인생네컷 · 주차료 · 매장 소액 기타, 아래 회색 글씨 = 1/1 ~ 마감일 누적 */
+/** 기타 — 그날 자판기 · 인생네컷 · 주차료 · 매장 소액 기타, 아래 회색 글씨 = 1/1 ~ 마감일 누적
+    박스를 누르면 아래에서 올라오는 목록: 자판기 · 네컷사진 · 주차료 = 몇 시에 얼마(최근 것이 맨 위), 매장 소액 기타 = 상품별 개수 · 금액 */
+type EtcKey = ExtraKind | "small";
 function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
   const { board, date } = props;
   const m = board.day(date);
   const y = board.range(`${date.slice(0, 4)}-01-01`, date);
   const pw = board.day(addWeek(date, -1));
+  const lists = useMemo(() => etcDetail(board, date), [board, date]);
+  const [sheet, setSheet] = useState<EtcKey | null>(null);
   const small = (x: Metrics) => x.box.기타 - extraTotal(x.extra);
-  const rows: { label: string; day: number; ytd: number }[] = [
-    { label: "자판기", day: m.extra.vending, ytd: y.extra.vending },
-    { label: "네컷사진", day: m.extra.photo, ytd: y.extra.photo },
-    { label: "주차료", day: m.extra.parking, ytd: y.extra.parking },
-    { label: "매장 소액 기타", day: small(m), ytd: small(y) },
+  const rows: { id: EtcKey; label: string; day: number; ytd: number }[] = [
+    { id: "vending", label: "자판기", day: m.extra.vending, ytd: y.extra.vending },
+    { id: "photo", label: "네컷사진", day: m.extra.photo, ytd: y.extra.photo },
+    { id: "parking", label: "주차료", day: m.extra.parking, ytd: y.extra.parking },
+    { id: "small", label: "매장 소액 기타", day: small(m), ytd: small(y) },
   ];
   const per = `${date.slice(2, 4)}년 1월 1일 ~ ${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일`;
+  const open = rows.find((r) => r.id === sheet);
   return (
     <>
       <DetailHeader title="기타" {...props} />
@@ -282,30 +290,146 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
           <Delta now={m.box.기타} before={pw.has.cafe + pw.has.kids ? pw.box.기타 : null} label="지난주 같은 요일" money={false} />
           {m.total > 0 && <span className="note">총 매출의 {((m.box.기타 / m.total) * 100).toFixed(1)}%</span>}
         </HeroBox>
-        {/* 한 줄에 하나씩 길게 */}
+        {/* 한 줄에 하나씩 길게 — 누르면 목록 */}
         <div className="etc-list">
           {rows.map((r) => (
-            <EtcStat key={r.label} {...r} per={per} />
+            <EtcStat key={r.id} label={r.label} day={r.day} ytd={r.ytd} per={per} onOpen={() => setSheet(r.id)} />
           ))}
         </div>
         <p className="note center-note">
-          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 · 네컷사진 · 주차료 = 카드 단말기 승인 내역(나이스 · KIS) · 매장 소액 기타 = POS 기타 상품 (키즈 간식 · 연장 요금 등 포함)
+          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 = 카드 단말기 승인(나이스 · KIS) + 키즈 POS 음료 · 자판기 상품 · 네컷사진 · 주차료 = 카드 단말기 승인 · 매장 소액 기타 = 카페 POS 기타 상품 · 박스를 누르면 목록
         </p>
       </main>
+      {sheet && open && <EtcSheet k={sheet} label={open.label} total={open.day} date={date} lists={lists} onClose={() => setSheet(null)} />}
     </>
   );
 }
 
-function EtcStat({ label, day, ytd, per }: { label: string; day: number; ytd: number; per: string }) {
+function EtcStat({ label, day, ytd, per, onOpen }: { label: string; day: number; ytd: number; per: string; onOpen: () => void }) {
   return (
-    <div className="stat etc-row">
+    <button className="stat etc-row tap" onClick={onOpen} aria-haspopup="dialog" aria-label={`${label} ${won(day)} — 목록`}>
       <div className="etc-top">
-        <span className="stat-label">{label}</span>
+        <span className="stat-label">
+          {label} <span className="quad-more" aria-hidden>›</span>
+        </span>
         <span className="stat-value">{won(day)}</span>
       </div>
       <span className="note">
         {per} 누적 {label} 매출 {won(ytd)}
       </span>
+    </button>
+  );
+}
+
+/** 'HH:MM:SS' → 'HH:MM' */
+const hm = (t: string) => t.slice(0, 5);
+
+/** 아래에서 올라오는 목록 — 카드 단말기 칸은 몇 시에 얼마 (최근 것이 맨 위), 매장 소액 기타는 상품별 */
+function EtcSheet({ k, label, total, date, lists, onClose }: { k: EtcKey; label: string; total: number; date: string; lists: EtcLists; onClose: () => void }) {
+  const today = !!useLive()?.today;
+  const products = (xs: EtcLists["small"], storeTag: boolean) => (
+    <table className="bread-tbl etc-tbl">
+      <thead>
+        <tr>
+          <th>상품</th>
+          <th className="num">개수</th>
+          <th className="num">금액</th>
+        </tr>
+      </thead>
+      <tbody>
+        {xs.map((x) => (
+          <tr key={`${x.store}|${x.name}`} className={x.net === 0 ? "zero" : undefined}>
+            <td>
+              {x.name}
+              {storeTag && x.store === "kids" && <span className="muted"> · 키즈</span>}
+            </td>
+            <td className="num">{count(x.qty, "개")}</td>
+            <td className="num">{won(x.net)}</td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>합계 {xs.length}종</td>
+          <td className="num">{count(xs.reduce((a, x) => a + x.qty, 0), "개")}</td>
+          <td className="num">{won(xs.reduce((a, x) => a + x.net, 0))}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+  let body: ReactNode;
+  if (k === "small") {
+    const xs = lists.small;
+    body = xs.length ? (
+      <>
+        {products(xs, true)}
+        <p className="note muted">카페 POS 에서 '기타'로 분류된 상품 (키즈 표시는 키즈 POS) · 0원 상품은 개수만 세는 표시 (테이크아웃 · 캐리어 등)</p>
+      </>
+    ) : (
+      <p className="empty">이날은 매장 소액 기타 상품이 없습니다.</p>
+    );
+  } else {
+    const list = lists.card[k];
+    const cardSum = list ? list.reduce((a, x) => a + x[1], 0) : 0;
+    const card =
+      today && !list?.length ? (
+        <p className="empty">자판기 · 네컷 · 주차 카드 결제는 다음(근무일) 날 받습니다.</p>
+      ) : list === null ? (
+        <p className="empty">이날은 건별 시각 없이 하루 합계만 있습니다 (2026년 6월까지 KIS 자료 · 엑셀을 못 받은 날).</p>
+      ) : !list.length ? (
+        <p className="empty">이날은 카드 결제가 없습니다.</p>
+      ) : (
+        <table className="bread-tbl etc-tbl">
+          <thead>
+            <tr>
+              <th>시각</th>
+              <th className="num">금액</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(([t, amt], i) => (
+              <tr key={`${t}|${i}`} className={amt < 0 ? "neg" : undefined}>
+                <td>{hm(t)}</td>
+                <td className="num">{amt < 0 ? `취소 ${won(amt)}` : won(amt)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>합계 {count(list.length, "건")}</td>
+              <td className="num">{won(cardSum)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      );
+    body = (
+      <>
+        {k === "vending" && <h3 className="etc-sub">카드 단말기 (자판기 기계)</h3>}
+        {card}
+        {k === "vending" && lists.kidsVend.length > 0 && (
+          <>
+            <h3 className="etc-sub">키즈 POS 음료 · 자판기 상품</h3>
+            {products(lists.kidsVend, false)}
+          </>
+        )}
+        {list && list.length > 0 && <p className="note muted">최근 결제가 맨 위 · 취소는 − 로 빼서 합계</p>}
+      </>
+    );
+  }
+  return (
+    <div className="sheet-bg" onClick={onClose}>
+      <div className="sheet list-sheet" role="dialog" aria-label={`${label} 목록`} onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head etc-head">
+          <b>
+            {label} {won(total)}
+          </b>
+          <span className="muted">{shortLabel(date)}</span>
+        </div>
+        <div className="sheet-scroll">{body}</div>
+        <button className="ghost wide" onClick={onClose}>
+          닫기
+        </button>
+      </div>
     </div>
   );
 }

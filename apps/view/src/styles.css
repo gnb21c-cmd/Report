@@ -1541,3 +1541,11 @@ button.quad-box {
   color: #ffcf8a;
   border-color: #5c4318;
 }
+/* 기타 박스 목록 — 시각 · 금액 / 상품 · 개수 · 금액 */
+.etc-tbl tr.neg td { color: var(--bad); }
+.etc-tbl tr.zero td { color: var(--muted); }
+.etc-sub { font-size: 14px; margin: 4px 0 6px; color: var(--muted); font-weight: 600; }
+.etc-sub ~ .etc-sub { margin-top: 14px; }
+.etc-head { flex-wrap: wrap; gap: 2px 10px; }
+.etc-head b, .etc-head .muted { white-space: nowrap; }
+.etc-head .muted { font-size: 15px; }

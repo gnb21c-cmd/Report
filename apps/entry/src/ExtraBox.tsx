@@ -1,7 +1,7 @@
 /* 자판기 · 인생네컷 · 주차정산기 칸 — 나이스 '통합거래조회' 엑셀(비밀번호 걸린 채로)을 끌어다 놓기 또는 선택
    그 칸 단말기의 입력 날짜 매출(승인 − 취소)만 꺼냄. 인생네컷은 두 대라 파일 두 개를 함께 골라도 됨 */
 import { useRef, useState } from "react";
-import { count, EXTRA_LABEL, EXTRA_TERMINALS, mergeExtra, parseNiceSheet, won, type ExtraKind, type NiceSheet } from "@report/core";
+import { count, EXTRA_LABEL, EXTRA_TERMINALS, mergeExtra, parseNiceSheet, won, type ExtraItem, type ExtraKind, type NiceSheet } from "@report/core";
 import { readRows } from "./excel";
 import { decryptXlsx, isEncrypted } from "./officeCrypto";
 
@@ -11,6 +11,8 @@ export interface ExtraLoaded {
   value: number;
   /** 그날 건 수 */
   lines: number;
+  /** 그날 건별 [시각, 금액] — 보고 앱 기타 화면 목록 (엑셀에 시각이 없으면 없음) */
+  items?: ExtraItem[];
   error?: string;
   sheets: NiceSheet[];
 }
@@ -40,7 +42,7 @@ export async function loadExtra(kind: ExtraKind, files: File[], date: string, pa
   }
   const day = mergeExtra(sheets).get(date);
   const lines = sheets.reduce((a, s) => a + s.items.filter((it) => it.date === date && it.kind === kind).length, 0);
-  return { names, value: day ? day[kind] : 0, lines, sheets };
+  return { names, value: day ? day[kind] : 0, lines, sheets, ...(day?.items?.[kind] ? { items: day.items[kind] } : {}) };
 }
 
 export function ExtraBox(props: { kind: ExtraKind; loaded?: ExtraLoaded; busy?: boolean; onFiles: (fs: File[]) => void; onClear: () => void; serverValue?: number; locked?: boolean; date: string }) {

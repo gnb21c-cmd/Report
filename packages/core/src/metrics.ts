@@ -4,7 +4,7 @@
    한 날의 숫자
    - 바리스타 · 베이커리 · 키친 = 카페아스타나 분류별 실매출
    - 기타 = 카페아스타나 기타 + 아스타나키즈 입장권 외 매출 + 자판기 · 인생네컷 · 주차
-     기타로 잡히던 상품 중 사장님이 정한 것은 옮김 (rules.etcMove): 맥주 · 상품권 → 바리스타, 폭립할인 → 키친,
+     기타로 잡히던 상품 중 사장님이 정한 것은 옮김 (rules.etcMove): 맥주 · 상품권 · 원두 · 드립백 · 콜드브루 원액 → 바리스타, 수수부꾸미(빵) → 베이커리, 폭립할인 → 키친,
      키즈 음료 · 자판기상품 → 자판기, 키즈 퇴장 지연 · 열쇠 분실 · 인원추가 → 키즈입장료. 상품권 사용액은 그날 바리스타에서 뺌
    - 키즈입장료 = (네이버 입장권 + 현장 입장권) × 그날 단가 (평일 12,000 / 휴일 14,000)
        · 네이버 입장권 = A 에 넣은 시간대별 판매 입장권 합. 아직 안 넣은 날은 키즈 POS 로 추정 (0원 입장 발행 − 현장)
@@ -16,12 +16,13 @@
    여러 날(누계)은 날마다의 값을 더함 (1인 평균은 합계 ÷ 합계)
    ============================================================ */
 import { dayRange, daysInMonth, lyCalendar, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
-import { EXTRA_KINDS, type ExtraKind } from "./extra";
+import { EXTRA_KINDS, type ExtraItem, type ExtraKind } from "./extra";
 import { rentalIn } from "./cash";
 import { etcMove, holidayName, isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
+import type { StoreId } from "./types";
 
 export type BoxKey = "바리스타" | "베이커리" | "키친" | "키즈입장료" | "기타";
 export const BOXES: BoxKey[] = ["바리스타", "베이커리", "키친", "키즈입장료", "기타"];
@@ -237,7 +238,7 @@ export class Board {
       for (const p of cafe.products || []) {
         if (p[1] !== "기타") continue;
         const to = etcMove("cafe", p[0]);
-        if (to !== "바리스타" && to !== "키친") continue;
+        if (to !== "바리스타" && to !== "베이커리" && to !== "키친") continue;
         m.box.기타 -= p[3];
         m.box[to] += p[3];
       }
@@ -389,7 +390,7 @@ export class Board {
 /** 상품이 그 상자(섹터) 것인지 */
 export function productInBox(part: StorePart, p: ProductTuple, box: BoxKey): boolean {
   const to = p[1] === "기타" || p[1] === "추가인원" ? etcMove(part.store, p[0]) : null;
-  if (part.store === "cafe") return (to === "바리스타" || to === "키친" ? to : p[1]) === box;
+  if (part.store === "cafe") return (to === "바리스타" || to === "베이커리" || to === "키친" ? to : p[1]) === box;
   if (box === "키즈입장료") return p[1] === "현장결제" || p[1] === "입장발행" || to === "키즈입장료";
   if (box === "기타") return (p[1] === "추가인원" || p[1] === "기타") && to !== "키즈입장료";
   return false;
@@ -678,4 +679,50 @@ export function weeklyVisitors(board: Board, date: string): { starts: string[]; 
 
 function weekdayIndex(key: string): number {
   return new Date(key + "T00:00:00Z").getUTCDay();
+}
+
+/* ---------- 기타 화면 — 박스를 누르면 나오는 목록 (2026-10-14 사장님) ----------
+   자판기 · 네컷사진 · 주차료: 카드 단말기 건별 [시각, 금액] — 최근 것이 맨 위 (자판기는 키즈 POS 음료 · 자판기 상품도 따로)
+   매장 소액 기타: 상품별 개수 · 금액 — 카페 POS 기타 상품 + 키즈 POS 기타 중 옮기지 않은 것 (대관 · 음료 · 지연 · 열쇠 · 인원추가는 다른 칸) */
+export interface EtcProduct {
+  name: string;
+  store: StoreId;
+  qty: number;
+  net: number;
+}
+export interface EtcDetail {
+  /** 칸마다 건별 — 최근 것이 맨 위. 그날 0원이면 [], 건별 시각 없이 합계만 있는 날은 null */
+  card: Record<ExtraKind, ExtraItem[] | null>;
+  /** 키즈 POS 음료 · 자판기 상품 — 자판기 칸에 더해짐 (키즈 매출을 잡는 2026-04 부터) */
+  kidsVend: EtcProduct[];
+  /** 매장 소액 기타 상품 — 금액 많은 순 */
+  small: EtcProduct[];
+}
+export function etcDetail(board: Board, date: string): EtcDetail {
+  const r = board.report(date);
+  const card = {} as Record<ExtraKind, ExtraItem[] | null>;
+  for (const k of EXTRA_KINDS) {
+    const list = r?.extra?.items?.[k];
+    card[k] = list && list.length ? [...list].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0)) : Math.round(r?.extra?.[k] || 0) === 0 ? [] : null;
+  }
+  const small = new Map<string, EtcProduct>();
+  const vend = new Map<string, EtcProduct>();
+  const add = (to: Map<string, EtcProduct>, store: StoreId, p: ProductTuple) => {
+    const key = `${store}|${p[0]}`;
+    const x = to.get(key) || { name: p[0], store, qty: 0, net: 0 };
+    x.qty += p[2];
+    x.net += p[3];
+    to.set(key, x);
+  };
+  if (r?.cafe) for (const p of r.cafe.products || []) if (productInBox(r.cafe, p, "기타")) add(small, "cafe", p);
+  if (r?.kids && kidsSales(date))
+    for (const p of r.kids.products || []) {
+      if (p[1] !== "기타" && p[1] !== "추가인원") continue;
+      if (p[1] === "기타" && /대관/.test(p[0])) continue;
+      const to = etcMove("kids", p[0]);
+      if (to === "자판기") add(vend, "kids", p);
+      else if (!to) add(small, "kids", p);
+    }
+  const order = (xs: Map<string, EtcProduct>) => [...xs.values()].sort((a, b) => b.net - a.net || b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
+  return { card, kidsVend: order(vend), small: order(small) };
 }

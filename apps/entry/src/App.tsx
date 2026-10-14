@@ -260,7 +260,7 @@ export function App() {
     if (editing.cafe && results.cafe) parts.cafe = results.cafe.part;
     if (editing.kids && results.kids) parts.kids = results.kids.part;
     const xs = EXTRA_KINDS.filter((k) => xEditing[k] && xFiles[k] && !xFiles[k]!.error);
-    if (xs.length) parts.extra = applyExtra(server?.extra, { date, part: { v: 1, date, vending: xFiles.vending?.value || 0, photo: xFiles.photo?.value || 0, parking: xFiles.parking?.value || 0 }, kinds: xs });
+    if (xs.length) parts.extra = applyExtra(server?.extra, { date, part: { v: 1, date, vending: xFiles.vending?.value || 0, photo: xFiles.photo?.value || 0, parking: xFiles.parking?.value || 0, items: { vending: xFiles.vending?.items, photo: xFiles.photo?.items, parking: xFiles.parking?.items } }, kinds: xs });
     return new Board([mergeReport(server, date, me.name, parts)]).day(date);
   }, [server, date, me.name, editing, dirty, tickets, newVisitors, results, xEditing, xFiles, settings]);
 
@@ -332,7 +332,8 @@ export function App() {
     if (!me.name) return setAskMe(true);
     const l = xFiles[k];
     if (!l || l.error) return setMsg({ kind: "bad", text: `${EXTRA_LABEL[k]} 엑셀을 먼저 올려 주세요.` });
-    const part = applyExtra(server?.extra, { date, part: { v: 1, date, vending: 0, photo: 0, parking: 0, [k]: l.value }, kinds: [k] }, { by: me.name, at: new Date().toISOString(), file: l.names.join(", ") });
+    // 건별 시각도 같이 (보고 앱 기타 화면에서 몇 시에 얼마)
+    const part = applyExtra(server?.extra, { date, part: { v: 1, date, vending: 0, photo: 0, parking: 0, [k]: l.value, items: { [k]: l.items } }, kinds: [k] }, { by: me.name, at: new Date().toISOString(), file: l.names.join(", ") });
     const old = server?.extra?.files?.[k];
     setAsk({
       kind: k,

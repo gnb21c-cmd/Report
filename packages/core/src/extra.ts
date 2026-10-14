@@ -7,11 +7,15 @@ import { addDays, dayRange } from "./dates";
    - 구분 '승인' = +, '취소' = −, '승인거절' 은 돈이 안 오감 → 뺌
    - 2026-07-01 하루만 자판기 번호(3974466)가 카페 POS 와 같게 설정됨 → 카페 POS 단말기(HW 'TS-NC…') 결제는 카페 매출에 이미 있으므로 뺌
    매출은 '기타' 상자에 더함 (카드 대금은 카드가맹점 입금 = 정산완료 합계에 들어옴)
+   - 건마다 거래시간 · 금액도 남김(items) → 보고 앱 기타 화면에서 박스를 누르면 몇 시에 얼마 (2026-10-14)
+     시각이 없는 자료(KIS 시절 날짜별 합계 · 엑셀을 못 받아 합계표로 받은 날)는 건별 없이 합계만
    ============================================================ */
 
 export type ExtraKind = "vending" | "photo" | "parking";
 export const EXTRA_KINDS: ExtraKind[] = ["vending", "photo", "parking"];
 export const EXTRA_LABEL: Record<ExtraKind, string> = { vending: "자판기", photo: "인생네컷", parking: "주차" };
+/** 건 하나 — [거래시각 'HH:MM:SS', 금액 (취소는 −)] */
+export type ExtraItem = [string, number];
 
 /** 그날 POS 밖 매출 (원, 카드 승인 − 취소) */
 export interface ExtraPart {
@@ -20,6 +24,8 @@ export interface ExtraPart {
   vending: number;
   photo: number;
   parking: number;
+  /** 칸마다 건별 [시각, 금액] — 시각 순. 건별 시각을 받은 칸만 (없으면 합계만 있는 칸) */
+  items?: Partial<Record<ExtraKind, ExtraItem[]>>;
   /** 칸마다 누가 언제 어느 파일로 올렸는지 (A 의 자판기 · 네컷 · 주차 칸) */
   files?: Partial<Record<ExtraKind, { by: string; at: string; file?: string }>>;
 }
@@ -52,8 +58,10 @@ export interface NiceSheet {
   to: string;
   /** 이 파일에 든 매출 종류 (단말기별로 받은 파일이면 하나) */
   kinds: ExtraKind[];
-  /** 건별 (겹친 파일을 합칠 때 같은 건은 한 번만) */
-  items: { key: string; date: string; kind: ExtraKind; amt: number }[];
+  /** 건별 (겹친 파일을 합칠 때 같은 건은 한 번만) — time: 거래시각 'HH:MM:SS' (모르면 없음) */
+  items: { key: string; date: string; kind: ExtraKind; amt: number; time?: string }[];
+  /** 건마다 거래시각이 있는 엑셀인지 (합계표로 받은 것은 아님) */
+  timed?: boolean;
 }
 
 const toNum = (v: unknown) => {
@@ -62,6 +70,12 @@ const toNum = (v: unknown) => {
   return isFinite(n) ? n : 0;
 };
 const cell = (v: unknown) => String(v ?? "").trim();
+/** '10:00:00' · '100000' · '10:00' → 'HH:MM:SS' (모르면 '') */
+const clock = (v: unknown) => {
+  const t = cell(v);
+  const m = t.match(/^(\d{1,2}):?(\d{2}):?(\d{2})?$/);
+  return m && +m[1] < 24 && +m[2] < 60 ? `${m[1].padStart(2, "0")}:${m[2]}:${m[3] || "00"}` : "";
+};
 
 export const emptyExtra = (date: string): ExtraPart => ({ v: 1, date, vending: 0, photo: 0, parking: 0 });
 
@@ -71,7 +85,7 @@ export function parseNiceSheet(rows: unknown[][]): NiceSheet | null {
   if (hi < 0) return null;
   const H = rows[hi].map(cell);
   const col = (name: string) => H.indexOf(name);
-  const [cCat, cKind, cDate, cAmt, cHw, cSeq] = [col("CAT_ID"), col("구분"), col("거래일자"), col("금액"), col("HW식별번호"), col("나이스 일련번호")];
+  const [cCat, cKind, cDate, cAmt, cHw, cSeq, cTime] = [col("CAT_ID"), col("구분"), col("거래일자"), col("금액"), col("HW식별번호"), col("나이스 일련번호"), col("거래시간")];
   if (cCat < 0 || cKind < 0 || cDate < 0 || cAmt < 0) return null;
   // 위쪽 카드사별 표의 '합계' 줄 — 매출금액 = 다섯째 칸
   let summary: number | null = null;
@@ -110,7 +124,8 @@ export function parseNiceSheet(rows: unknown[][]): NiceSheet | null {
     let p = days.get(date);
     if (!p) days.set(date, (p = emptyExtra(date)));
     p[k] += amt;
-    items.push({ key: `${cat}|${kind}|${cSeq >= 0 ? cell(r[cSeq]) : r.map(cell).join("|")}`, date, kind: k, amt });
+    const time = cTime >= 0 ? clock(r[cTime]) : "";
+    items.push({ key: `${cat}|${kind}|${cSeq >= 0 ? cell(r[cSeq]) : r.map(cell).join("|")}`, date, kind: k, amt, ...(time ? { time } : {}) });
   }
   const ds = [...days.keys()].sort();
   let from = ds[0] || "";
@@ -123,21 +138,33 @@ export function parseNiceSheet(rows: unknown[][]): NiceSheet | null {
     }
   }
   const kinds = EXTRA_KINDS.filter((k) => items.some((it) => it.kind === k));
-  return { days, sum, summary, cafePos, unknown, lines, from, to, kinds, items };
+  return { days, sum, summary, cafePos, unknown, lines, from, to, kinds, items, timed: cTime >= 0 };
 }
 
-/** 여러 파일(단말기별 · 기간별)의 날짜별 매출 합치기 — 같은 건(일련번호)은 한 번만 */
+/** 여러 파일(단말기별 · 기간별)의 날짜별 매출 합치기 — 같은 건(일련번호)은 한 번만
+    건별 시각: 그날 · 그 종류의 건이 모두 시각을 가진 경우만 (하나라도 모르면 그 칸은 합계만) */
 export function mergeExtra(sheets: NiceSheet[]): Map<string, ExtraPart> {
   const out = new Map<string, ExtraPart>();
   const seen = new Set<string>();
+  const untimed = new Set<string>();
   for (const s of sheets)
     for (const it of s.items) {
       if (seen.has(it.key)) continue;
       seen.add(it.key);
       const o = out.get(it.date) || emptyExtra(it.date);
       o[it.kind] += it.amt;
+      if (s.timed && it.time) ((o.items ||= {})[it.kind] ||= []).push([it.time, it.amt]);
+      else untimed.add(`${it.date}|${it.kind}`);
       out.set(it.date, o);
     }
+  for (const o of out.values()) {
+    if (!o.items) continue;
+    for (const k of EXTRA_KINDS) {
+      if (untimed.has(`${o.date}|${k}`)) delete o.items[k];
+      else o.items[k]?.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    }
+    if (!Object.keys(o.items).length) delete o.items;
+  }
   return out;
 }
 
@@ -164,10 +191,22 @@ export function extraUpdates(sheets: NiceSheet[]): ExtraUpdate[] {
     .map(([date, c]) => ({ date, part: sums.get(date) || emptyExtra(date), kinds: EXTRA_KINDS.filter((k) => c.has(k)) }));
 }
 
-/** 이미 있는 값에 덮기 — 바꿀 종류만 */
+/** 칸 하나의 건별을 바꿈 (없으면 지움) — 옛 값은 고치지 않고 새로 만듦 */
+function setItems(out: ExtraPart, k: ExtraKind, list: ExtraItem[] | undefined) {
+  const items = { ...(out.items || {}) };
+  if (list && list.length) items[k] = list.map((x) => [x[0], x[1]] as ExtraItem);
+  else delete items[k];
+  if (Object.keys(items).length) out.items = items;
+  else delete out.items;
+}
+
+/** 이미 있는 값에 덮기 — 바꿀 종류만 (건별 시각도 그 종류만) */
 export function applyExtra(old: ExtraPart | undefined | null, u: ExtraUpdate, meta?: { by: string; at: string; file?: string }): ExtraPart {
   const out: ExtraPart = old ? { ...emptyExtra(u.date), ...old, v: 1, date: u.date } : emptyExtra(u.date);
-  for (const k of u.kinds) out[k] = u.part[k];
+  for (const k of u.kinds) {
+    out[k] = u.part[k];
+    setItems(out, k, u.part.items?.[k]);
+  }
   if (meta) {
     out.files = { ...(out.files || {}) };
     for (const k of u.kinds) out.files[k] = { by: meta.by, at: meta.at, ...(meta.file ? { file: meta.file } : {}) };
@@ -186,6 +225,25 @@ export function autoExtraKinds(old: ExtraPart | undefined | null, kinds: ExtraKi
   if (!old) return kinds;
   if (!old.files) return [];
   return kinds.filter((k) => !old.files![k] || old.files![k]!.by === EXTRA_AUTO_BY);
+}
+
+/** 사람이 올린 칸이라 값은 안 바꾸지만, 합계가 같으면 건별 시각만 붙일 칸 (이미 같은 건별이 붙어 있으면 빼고)
+    auto = 자동 수집이 바꿀 수 있는 칸 (autoExtraKinds) */
+export function extraItemsOnly(old: ExtraPart | undefined | null, u: ExtraUpdate, auto: ExtraKind[]): ExtraKind[] {
+  if (!old) return [];
+  return u.kinds.filter((k) => {
+    if (auto.includes(k)) return false;
+    const list = u.part.items?.[k];
+    if (!list || !list.length || Math.round(old[k] || 0) !== Math.round(u.part[k])) return false;
+    return JSON.stringify(old.items?.[k] || null) !== JSON.stringify(list);
+  });
+}
+
+/** 건별 시각만 붙임 — 값 · 올린 사람(files)은 그대로 */
+export function applyExtraItems(old: ExtraPart, u: ExtraUpdate, kinds: ExtraKind[]): ExtraPart {
+  const out: ExtraPart = { ...old };
+  for (const k of kinds) setItems(out, k, u.part.items?.[k]);
+  return out;
 }
 
 /** 자동 수집이 받을 기간 (한국 날짜 · 시각 기준)

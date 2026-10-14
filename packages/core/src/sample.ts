@@ -7,6 +7,7 @@ import { isOffDay, kidsPrice } from "./rules";
 import { HOURS, NAVER_SLOTS, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { Sector } from "./classify";
 import { CASH_ACCOUNTS, type CashPart, type CashRow } from "./cash";
+import type { ExtraItem, ExtraPart } from "./extra";
 
 interface Item {
   name: string;
@@ -165,14 +166,17 @@ function kidsDay(date: string): { kids: StorePart; naver: DayReport["naver"] } {
   if (extra) products.push([`인원추가 ${tag}`, "추가인원", extra, extra * 3000]);
   if (naverTotal + walk) products.push([`${tag} 무제한 이용`, "입장발행", naverTotal + walk, 0]);
   if (event) products.push([`${tag} 이벤트 무료 쿠폰`, "이벤트무료", event, 0]);
+  // 키즈 POS 음료 (자판기 칸에 더해짐)
+  const juice = Math.round(rand(date + "juice") * 3 * f);
+  if (juice) products.push(["딸기쥬스", "기타", juice, juice * 2500]);
   const kids: StorePart = {
     v: 1,
     store: "kids",
     date,
     basis: "receipt",
     file: "체험판",
-    sheetNet: walk * price + extra * 3000,
-    posNet: walk * price + extra * 3000,
+    sheetNet: walk * price + extra * 3000 + juice * 2500,
+    posNet: walk * price + extra * 3000 + juice * 2500,
     voucher: 0,
     sectors: { 바리스타: 0, 베이커리: 0, 키친: 0, 기타: 0 },
     cups: 0,
@@ -181,7 +185,7 @@ function kidsDay(date: string): { kids: StorePart; naver: DayReport["naver"] } {
     hourly: null,
     products,
     refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
-    kids: { issued: naverTotal + walk, walkIn: walk, walkInNet: walk * price, eventFree: event, other: extra * 3000, hourly: { issued: issuedH, walkIn: walkH, eventFree: eventH, other: otherH } },
+    kids: { issued: naverTotal + walk, walkIn: walk, walkInNet: walk * price, eventFree: event, other: extra * 3000 + juice * 2500, hourly: { issued: issuedH, walkIn: walkH, eventFree: eventH, other: otherH } },
   };
   return { kids, naver: { v: 1, date, tickets, newVisitors } };
 }
@@ -215,6 +219,28 @@ function cashDay(date: string): CashPart {
   };
 }
 
+/** 체험판 자판기 · 네컷 · 주차 카드 결제 (가짜) — 건마다 시각 · 금액, 가끔 취소 */
+function extraDay(date: string): ExtraPart {
+  const f = dayFactor(date);
+  const list = (salt: number, n: number, prices: number[]): ExtraItem[] => {
+    const out: ExtraItem[] = [];
+    for (let i = 0; i < n; i++) {
+      const min = 10 * 60 + Math.floor(rnd(date, salt * 100 + i) * 11 * 60);
+      const sec = Math.floor(rnd(date, salt * 100 + i + 50) * 60);
+      const t = `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+      const amt = prices[Math.floor(rnd(date, salt * 100 + i + 70) * prices.length)];
+      out.push([t, amt]);
+      if (rnd(date, salt * 100 + i + 90) > 0.93) out.push([t.replace(/:(\d\d)$/, (_, s) => `:${String(Math.min(59, +s + 1)).padStart(2, "0")}`), -amt]);
+    }
+    return out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  };
+  const items = { vending: list(1, Math.round(6 * f), [1500, 2000, 2500]), photo: list(2, Math.round(5 * f), [4000, 5000]), parking: list(3, Math.round(rnd(date, 9) * 3 * f), [1000, 2000, 3000]) };
+  const tot = (xs: ExtraItem[]) => xs.reduce((a, x) => a + x[1], 0);
+  const part: ExtraPart = { v: 1, date, vending: tot(items.vending), photo: tot(items.photo), parking: tot(items.parking) };
+  const has = Object.fromEntries(Object.entries(items).filter(([, xs]) => xs.length));
+  return Object.keys(has).length ? { ...part, items: has } : part;
+}
+
 /** from ~ to 의 체험판 보고 자료. 설날·추석 당일은 휴무로 뺌 */
 export function sampleReports(from: string, to: string): DayReport[] {
   const closed = new Set(["2025-01-29", "2025-10-06", "2026-02-17", "2026-09-25"]);
@@ -224,7 +250,9 @@ export function sampleReports(from: string, to: string): DayReport[] {
     const { kids, naver } = kidsDay(date);
     const at = `${addDays(date, 1)}T01:10:00.000Z`;
     const cash = date >= addDays(to, -45) ? cashDay(date) : undefined;
-    out.push({ date, cafe: cafePart(date), kids, naver, ...(cash ? { cash } : {}), meta: { cafe: { by: "체험판", at }, kids: { by: "체험판", at }, naver: { by: "체험판", at }, ...(cash ? { cash: { by: "체험판", at } } : {}) }, at });
+    // 자판기 · 네컷 · 주차 — 나이스로 바뀐 2026-07-01 부터 건별 시각까지
+    const extra = date >= "2026-07-01" ? extraDay(date) : undefined;
+    out.push({ date, cafe: cafePart(date), kids, naver, ...(cash ? { cash } : {}), ...(extra ? { extra } : {}), meta: { cafe: { by: "체험판", at }, kids: { by: "체험판", at }, naver: { by: "체험판", at }, ...(cash ? { cash: { by: "체험판", at } } : {}), ...(extra ? { extra: { by: "체험판", at } } : {}) }, at });
   }
   return out;
 }
