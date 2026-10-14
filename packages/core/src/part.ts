@@ -253,9 +253,9 @@ function addLine(
   let sector: Sector | KidsKind;
   let cups = 0;
   if (store === "cafe") {
-    // 사장님이 정한 옮김(맥주 · 상품권 → 바리스타, 폭립할인 → 키친)이 분류표 · OK포스 대분류보다 먼저
+    // 사장님이 정한 옮김(맥주 · 상품권 · 원두 · 드립백 · 원액 → 바리스타, 수수부꾸미 → 베이커리, 폭립할인 → 키친)이 분류표 · OK포스 대분류보다 먼저
     const mv = etcMove("cafe", l.name);
-    const s: Sector = mv === "바리스타" || mv === "키친" ? mv : NOT_BREAD.has(l.name) ? "기타" : sectorOf(l.name);
+    const s: Sector = mv === "바리스타" || mv === "베이커리" || mv === "키친" ? mv : NOT_BREAD.has(l.name) ? "기타" : sectorOf(l.name);
     sector = s;
     part.sectors[s] += l.net;
     if (isCup("cafe", { name: l.name, cat1, gross: l.gross, net: l.net }, s)) cups = l.qty * cupsPerItem(l.name);

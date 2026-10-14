@@ -48,6 +48,53 @@ describe("기타로 잡히던 상품 옮기기 (2026-10-06 사장님 기준)", (
     expect(productInBox(old, old.products.find((x) => x[0] === "C5 [바이젠]")!, "기타")).toBe(false);
   });
 
+  it("원두 · 드립백 · 콜드브루 원액 → 바리스타, 흑미로만든수수부꾸미(빵) → 베이커리 (2026-10-14 사장님)", () => {
+    for (const n of ["[원액500ml]콜드브루", "[원두200g]블랙수트", "[드립백]블랙수트", "[드립백]블랙수트1ea", "[드립백]디카프1ea", "[원두200g]디카프", "[드립백]디카프"])
+      expect(etcMove("cafe", n)).toBe("바리스타");
+    expect(etcMove("cafe", "흑미로만든수수부꾸미")).toBe("베이커리");
+    // 정하지 않은 것은 그대로 기타
+    for (const n of ["[5월]드립백/머그세트", "딸기잼", "몽블랑박스", "이벤트 초", "머그컵(13oz)"]) expect(etcMove("cafe", n)).toBeNull();
+    // 키즈 POS 에는 이 규칙을 쓰지 않음
+    expect(etcMove("kids", "[드립백]블랙수트")).toBeNull();
+  });
+
+  it("새로 올린 날: 원두 · 드립백 · 원액은 바리스타지만 잔이 아님, 수수부꾸미는 베이커리 · 빵 목록", () => {
+    const p = day("cafe", "2026-10-13", [
+      sold("[ICE] 아메리카노", 2, 4500),
+      sold("[원액500ml]콜드브루", 1, 13728),
+      sold("[원두200g]블랙수트", 1, 16500),
+      sold("[드립백]블랙수트1ea", 2, 1500),
+      sold("흑미로만든수수부꾸미", 12, 2704),
+      sold("딸기잼", 1, 1500),
+      sold("포장백(종이)", 1, 100),
+    ], (n) => (/아메리카노/.test(n) ? "바리스타" : "기타"));
+    expect(p.sectors.바리스타).toBe(9000 + 13728 + 16500 + 3000);
+    expect(p.sectors.베이커리).toBe(12 * 2704);
+    expect(p.sectors.기타).toBe(1500 + 100);
+    expect(p.cups).toBe(2); // 아메리카노 2잔만 — 원액 · 원두 · 드립백은 잔이 아님
+    const b = new Board([{ date: "2026-10-13", cafe: p }]);
+    const m = b.day("2026-10-13");
+    expect([m.box.바리스타, m.box.베이커리, m.box.기타]).toEqual([42228, 32448, 1600]);
+    expect(b.products("2026-10-13", "2026-10-13", "베이커리").map((x) => x.name)).toEqual(["흑미로만든수수부꾸미"]);
+  });
+
+  it("예전에 올린 날(원두 · 드립백 · 원액 · 수수부꾸미가 기타로 저장됨)도 볼 때 옮김 — 합계는 그대로", () => {
+    const now = day("cafe", "2026-09-01", [sold("[원액500ml]콜드브루", 2, 13728), sold("[드립백]디카프", 1, 14000), sold("흑미로만든수수부꾸미", 3, 2704), sold("이벤트 초", 1, 3500)]);
+    const old: StorePart = {
+      ...now,
+      sectors: { 바리스타: 0, 베이커리: 0, 키친: 0, 기타: 27456 + 14000 + 8112 + 3500 },
+      products: now.products.map((p) => [p[0], "기타", p[2], p[3]]),
+    };
+    const b = new Board([{ date: "2026-09-01", cafe: old }]);
+    const m = b.day("2026-09-01");
+    expect([m.box.바리스타, m.box.베이커리, m.box.기타]).toEqual([27456 + 14000, 8112, 3500]);
+    expect(m.total).toBe(27456 + 14000 + 8112 + 3500);
+    const bun = old.products.find((x) => x[0] === "흑미로만든수수부꾸미")!;
+    expect([productInBox(old, bun, "베이커리"), productInBox(old, bun, "기타")]).toEqual([true, false]);
+    expect(b.products("2026-09-01", "2026-09-01", "기타").map((x) => x.name)).toEqual(["이벤트 초"]);
+    expect(b.products("2026-09-01", "2026-09-01", "바리스타").map((x) => x.name).sort()).toEqual(["[드립백]디카프", "[원액500ml]콜드브루"]);
+  });
+
   it("키즈: 음료 · 스티커 → 자판기, 퇴장 지연 · 열쇠 · 인원추가 → 키즈입장료 (키즈 매출을 잡는 4월부터)", () => {
     const lines = [
       sold("딸기쥬스", 2, 2500),

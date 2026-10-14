@@ -4,7 +4,7 @@
    한 날의 숫자
    - 바리스타 · 베이커리 · 키친 = 카페아스타나 분류별 실매출
    - 기타 = 카페아스타나 기타 + 아스타나키즈 입장권 외 매출 + 자판기 · 인생네컷 · 주차
-     기타로 잡히던 상품 중 사장님이 정한 것은 옮김 (rules.etcMove): 맥주 · 상품권 → 바리스타, 폭립할인 → 키친,
+     기타로 잡히던 상품 중 사장님이 정한 것은 옮김 (rules.etcMove): 맥주 · 상품권 · 원두 · 드립백 · 콜드브루 원액 → 바리스타, 수수부꾸미(빵) → 베이커리, 폭립할인 → 키친,
      키즈 음료 · 자판기상품 → 자판기, 키즈 퇴장 지연 · 열쇠 분실 · 인원추가 → 키즈입장료. 상품권 사용액은 그날 바리스타에서 뺌
    - 키즈입장료 = (네이버 입장권 + 현장 입장권) × 그날 단가 (평일 12,000 / 휴일 14,000)
        · 네이버 입장권 = A 에 넣은 시간대별 판매 입장권 합. 아직 안 넣은 날은 키즈 POS 로 추정 (0원 입장 발행 − 현장)
@@ -237,7 +237,7 @@ export class Board {
       for (const p of cafe.products || []) {
         if (p[1] !== "기타") continue;
         const to = etcMove("cafe", p[0]);
-        if (to !== "바리스타" && to !== "키친") continue;
+        if (to !== "바리스타" && to !== "베이커리" && to !== "키친") continue;
         m.box.기타 -= p[3];
         m.box[to] += p[3];
       }
@@ -389,7 +389,7 @@ export class Board {
 /** 상품이 그 상자(섹터) 것인지 */
 export function productInBox(part: StorePart, p: ProductTuple, box: BoxKey): boolean {
   const to = p[1] === "기타" || p[1] === "추가인원" ? etcMove(part.store, p[0]) : null;
-  if (part.store === "cafe") return (to === "바리스타" || to === "키친" ? to : p[1]) === box;
+  if (part.store === "cafe") return (to === "바리스타" || to === "베이커리" || to === "키친" ? to : p[1]) === box;
   if (box === "키즈입장료") return p[1] === "현장결제" || p[1] === "입장발행" || to === "키즈입장료";
   if (box === "기타") return (p[1] === "추가인원" || p[1] === "기타") && to !== "키즈입장료";
   return false;
