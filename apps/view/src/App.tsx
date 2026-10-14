@@ -159,7 +159,7 @@ export function App() {
           {d.error && <div className="banner">{d.error}</div>}
         </header>
         <main className={`content${d.syncing ? " busy" : ""}`}>
-          {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date, liveState?.today ? { cumTo: addDays(date, -1) } : {})} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} />}
+          {d.phase === "loading" && !d.reports.length ? <p className="empty">자료를 받는 중입니다…</p> : <Home d={dashboard(board, date, liveState?.today ? { cumTo: addDays(date, -1) } : {})} open={open} weather={d.weather[date]} cash={cashDay?.sum} cashFrom={cashDay?.carriedFrom} settle={settlements(cashParts, `${date.slice(0, 4)}-01-01`, date)} surveys={d.surveys} />}
         </main>
       </div>
     </LiveCtx.Provider>

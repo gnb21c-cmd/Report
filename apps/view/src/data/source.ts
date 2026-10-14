@@ -1,5 +1,5 @@
 /* 자료를 어디서 받는지 — 클라우드 보관함(Firebase) · 체험판(가짜) */
-import type { DayReport, DayWeather, LiveDoc, ReportSettings } from "@report/core";
+import type { DayReport, DayWeather, LiveDoc, ReportSettings, SurveyDoc } from "@report/core";
 
 /** (예전 C 상태 — 지금은 쓰지 않음) */
 export interface OfficeStatus {
@@ -21,5 +21,7 @@ export interface Source {
   settings(): Promise<ReportSettings | null>;
   /** 오늘 마감 전 영업정보 — 그날 live 문서 (없으면 null) */
   live(date: string): Promise<LiveDoc | null>;
+  /** 통합데스크 설문 집계 (settings/surveys, 없으면 null) */
+  surveys(): Promise<SurveyDoc | null>;
 }
 

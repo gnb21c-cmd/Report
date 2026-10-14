@@ -4,6 +4,7 @@
 # apps/collector/src/live.ts · 규칙은 packages/core/src/live.ts. 확정 칸(reports)은 그대로 — 다음 날 아침 09:12 확정 수집
 # GitHub 클라우드에서는 돌리지 않음 (사용자 지시 — POS 에서만). POS PC 가 꺼져 있으면 켜질 때까지 기다렸다가 돎(그날 영수증이 없으면 올리지 않음)
 # GitHub 예약 실행은 5 ~ 30분 늦게 시작할 때가 있음 — B 에는 실제로 받은 시각을 보여 줌
+# + 통합데스크 설문 집계 파일(20시) → settings/surveys (보고 앱 첫 화면 '설문조사')
 # 공개 저장소라 기록에는 줄 수 · 일치 여부만 (매출 숫자 · 매장 이름 없음)
 name: 오늘 마감 전 영업정보
 on:
@@ -63,6 +64,18 @@ jobs:
           NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
           OKPOS_ID: ${{ secrets.OKPOS_ID }}
           OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+      # 통합데스크 설문 집계(매일 20시, 항목별 응답 수만) → 클라우드 settings/surveys → 보고 앱 첫 화면 '설문조사'
+      # 파일이 없으면 건너뜀 · 바뀌었을 때만 올림 · 마감 전 수집이 실패해도 돎 (apps/collector/src/survey.ts, docs/SURVEY.md)
+      - name: 통합데스크 설문 → 클라우드
+        if: always()
+        run: pnpm --filter @report/collector survey
+        env:
+          COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}

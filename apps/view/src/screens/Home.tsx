@@ -5,15 +5,16 @@
       위치는 마감 전 · 후 모든 날 같게. 글자는 칸에 맞춰(줄 바꿈 · 잘림 없이) 가능한 크게
    ③ 당월 매출 합계 · 전년 동기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
-   ⑤ 카페 소비 인원 · 1인 평균소비 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
+   ⑤ 카페 소비 인원 · 1인 평균소비 · 설문조사 세 칸 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
+      설문조사(2026-10-14): 통합데스크가 20시에 남기는 설문 집계 — '현재 진행중 N건', 누르면 설문마다 항목 · 응답 수 · %(합 100%), 진행 중 · 최근 것이 맨 위
    ⑥ 당월 · 전년 동기간 줄 다음에 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세), 그 아래 OO년 총 매출 · 정산완료 줄
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { WeatherPanel } from "../ui/WeatherPanel";
 import { LiveWarn, useLive } from "../ui/Live";
 import { useFit } from "../ui/fit";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyShares, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind, type SurveyDoc } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -64,7 +65,7 @@ export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타",
 
 export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
 
-export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle }) {
+export function Home({ d, open, weather, cash, cashFrom, settle, surveys }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle; surveys?: SurveyDoc | null }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
@@ -124,8 +125,8 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
         </button>
       </div>
 
-      {/* 그날 정보 — 카페 소비 인원 · 1인 평균소비 (키즈 입장 4칸 아래, 2026-10-13 사장님 지시로 순서 바꿈) */}
-      <div className="stats">
+      {/* 그날 정보 — 카페 소비 인원 · 1인 평균소비 · 설문조사 세 칸 (키즈 입장 4칸 아래, 2026-10-13 사장님 지시로 순서 바꿈, 설문조사 2026-10-14) */}
+      <div className="stats three trio">
         <button className="stat tap" onClick={() => open({ name: "visitors" })}>
           <div className="stat-label">
             카페 소비 인원 <Chevron />
@@ -138,6 +139,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle }: { d: Dashboar
           <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
           <span className="note">총 매출 ÷ 카페 소비 인원</span>
         </div>
+        <SurveyBox doc={surveys ?? null} />
       </div>
 
       {/* 1. 당월 매출 합계 · 2. 전년 동기간 매출 합계 (좌우 비교) — 카페 소비 인원 줄 아래 */}
@@ -325,3 +327,92 @@ function SectorBars({ d, open }: { d: Dashboard; open: Open }) {
     </div>
   );
 }
+
+/** 설문조사 칸 — 통합데스크가 20시에 남기는 설문 집계. '현재 진행중 N건', 누르면 아래에서 올라오는 목록 */
+function SurveyBox({ doc }: { doc: SurveyDoc | null }) {
+  const [show, setShow] = useState(false);
+  const today = todayKst();
+  const list = surveyList(doc, today);
+  const openN = list.filter((x) => x.open).length;
+  return (
+    <>
+      <button className="stat tap" onClick={() => setShow(true)} aria-haspopup="dialog">
+        <div className="stat-label">
+          설문조사 <Chevron />
+        </div>
+        <div className="stat-value survey-value">
+          <span className="sv-sub">현재 진행중</span>
+          {count(openN, "건")}
+        </div>
+        <span className="note">통합데스크 · 매일 20시</span>
+      </button>
+      {show && <SurveySheet doc={doc} list={list} onClose={() => setShow(false)} />}
+    </>
+  );
+}
+
+/** 설문마다 항목(번호 · 내용) · 응답 수 · % (합 100%) — 진행 중이 위, 그 안에서 최근 시작한 것이 맨 위 */
+function SurveySheet({ doc, list, onClose }: { doc: SurveyDoc | null; list: ReturnType<typeof surveyList>; onClose: () => void }) {
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  const at = doc?.at && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(doc.at) ? `${md(doc.at.slice(0, 10))} ${doc.at.slice(11, 16)}` : "";
+  return (
+    <div className="sheet-bg" onClick={onClose}>
+      <div className="sheet list-sheet" role="dialog" aria-label="설문조사" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head etc-head">
+          <b>설문조사</b>
+          <span className="muted">{at ? `${at} 집계` : "통합데스크 · 매일 20시"}</span>
+        </div>
+        <div className="sheet-scroll">
+          {!list.length ? (
+            <p className="empty">통합데스크에서 아직 받은 설문이 없습니다. 설문을 시작하면 매일 20시 집계가 여기에 보입니다.</p>
+          ) : (
+            list.map(({ survey: s, open }) => {
+              const total = s.options.reduce((a, o) => a + o.n, 0);
+              const shares = surveyShares(s.options);
+              const max = Math.max(1, ...s.options.map((o) => o.n));
+              return (
+                <section key={s.id} className={`survey${open ? "" : " closed"}`}>
+                  <div className="survey-head">
+                    <b>{s.title}</b>
+                    <span className={`survey-tag${open ? " on" : ""}`}>{open ? "진행 중" : s.from > todayKst() ? "시작 전" : "끝남"}</span>
+                  </div>
+                  <div className="note">
+                    {md(s.from)} ~ {s.to ? md(s.to) : ""} · 응답 {count(total, "명")}
+                  </div>
+                  <table className="bread-tbl survey-tbl">
+                    <tbody>
+                      {s.options.map((o, i) => (
+                        <tr key={o.no}>
+                          <td className="survey-no">{o.no}</td>
+                          <td>
+                            {o.label}
+                            <span className="survey-bar" style={{ width: `${(o.n / max) * 100}%` }} aria-hidden />
+                          </td>
+                          <td className="num">{count(o.n, "명")}</td>
+                          <td className="num strong-num">{shares[i].toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td />
+                        <td>합계</td>
+                        <td className="num">{count(total, "명")}</td>
+                        <td className="num">{total ? "100.0%" : "—"}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </section>
+              );
+            })
+          )}
+          <p className="note muted">아스타나키즈 통합데스크가 매일 20시에 남기는 집계 (손님 이름 · 전화번호 없이 항목별 응답 수만)</p>
+        </div>
+        <button className="ghost wide" onClick={onClose}>
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+}
+
