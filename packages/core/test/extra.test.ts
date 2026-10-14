@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyExtra, autoExtraKinds, Board, niceRange, EXTRA_AUTO_BY, extraTotal, extraUpdates, mergeExtra, parseNiceSheet } from "../src";
+import { applyExtra, applyExtraItems, autoExtraKinds, Board, emptyExtra, niceRange, EXTRA_AUTO_BY, EXTRA_KINDS, extraItemsOnly, extraTotal, extraUpdates, mergeExtra, parseNiceSheet, type ExtraPart, type NiceSheet } from "../src";
 
 /** 나이스 '통합거래조회' 모양 (위 카드사별 합계 · 아래 건별) */
 function sheet(lines: (string | number)[][], summary: number): unknown[][] {
@@ -53,7 +53,7 @@ describe("POS 밖 매출 — 나이스 통합거래조회 (자판기 · 인생�
     expect(ups.map((u) => u.date)).toEqual(["2026-07-01", "2026-07-02"]);
     const old = { v: 1 as const, date: "2026-07-01", vending: 9000, photo: 8000, parking: 7000 };
     expect(applyExtra(old, ups[0])).toEqual({ v: 1, date: "2026-07-01", vending: 9000, photo: 8000, parking: 0 });
-    expect(applyExtra(undefined, ups[1])).toEqual({ v: 1, date: "2026-07-02", vending: 0, photo: 0, parking: 2000 });
+    expect(applyExtra(undefined, ups[1])).toEqual({ v: 1, date: "2026-07-02", vending: 0, photo: 0, parking: 2000, items: { parking: [["01:00:00", 2000]] } });
     // 누가 언제 올렸는지 — 바꾼 칸만
     const withMeta = applyExtra({ ...old, files: { vending: { by: "가", at: "t0" } } }, ups[0], { by: "나", at: "t1", file: "주차.xlsx" });
     expect(withMeta.files).toEqual({ vending: { by: "가", at: "t0" }, parking: { by: "나", at: "t1", file: "주차.xlsx" } });
@@ -71,6 +71,61 @@ describe("POS 밖 매출 — 나이스 통합거래조회 (자판기 · 인생�
     const r = new Board([{ date, extra }, { date: "2026-07-03", extra: { ...extra, date: "2026-07-03" } }]).range("2026-07-01", "2026-07-31");
     expect(r.extra.vending).toBe(20000);
     expect(r.box.기타).toBe(34000);
+  });
+});
+
+describe("건별 시각 — 기타 화면에서 자판기 · 네컷 · 주차를 누르면 몇 시에 얼마 (2026-10-14)", () => {
+  const rows = sheet(
+    [
+      ["3974466", "001", "자판기", "승인", "2026-07-01", "10:00:00", 2500, "a1", "SM-P100NI-V41001"],
+      ["3974466", "001", "자판기", "취소", "2026-07-01", "10:01:00", 2500, "a2", "SM-P100NI-V41001"],
+      ["3974466", "001", "자판기", "승인", "2026-07-01", "11:00:00", 1500, "a3", "SM-P100NI-V41001"],
+      ["3974466", "001", "카페", "승인", "2026-07-01", "12:00:00", 26200, "a4", "TS-NC-RA00012601"],
+      ["3974466", "001", "자판기", "승인거절", "2026-07-01", "12:30:00", 2000, "a5", "SM-P100NI-V41001"],
+      ["3974963", "001", "사진1", "승인", "2026-07-01", "13:00:00", 4000, "b1", "NR"],
+      ["3974964", "001", "사진2", "승인", "2026-07-02", "13:00:00", 5000, "c1", "NR"],
+      ["3974965", "001", "주차", "승인", "2026-07-02", "01:00:00", 2000, "d1", "TDR"],
+    ],
+    2500 - 2500 + 1500 + 26200 + 4000 + 5000 + 2000,
+  );
+  const at = "2026-10-14T00:10:00Z";
+  it("엑셀의 거래시간을 건마다 남김 — 취소는 −, 승인거절 · 카페 POS 결제는 뺌, 시각 순 · 건 합 = 그날 값", () => {
+    const s = parseNiceSheet(rows)!;
+    expect(s.timed).toBe(true);
+    const ups = extraUpdates([s]);
+    expect(ups.find((u) => u.date === "2026-07-01")!.part.items).toEqual({ vending: [["10:00:00", 2500], ["10:01:00", -2500], ["11:00:00", 1500]], photo: [["13:00:00", 4000]] });
+    expect(ups.find((u) => u.date === "2026-07-02")!.part.items).toEqual({ photo: [["13:00:00", 5000]], parking: [["01:00:00", 2000]] });
+    for (const u of ups) for (const k of EXTRA_KINDS) expect((u.part.items?.[k] || []).reduce((a, x) => a + x[1], 0)).toBe(u.part[k]);
+  });
+  it("같은 파일을 두 번 넣어도 건은 한 번만", () => {
+    const s = parseNiceSheet(rows)!;
+    expect(extraUpdates([s, s]).find((u) => u.date === "2026-07-01")!.part.items!.vending).toHaveLength(3);
+  });
+  it("시각이 없는 자료(엑셀을 못 받아 합계표로 받은 날)는 건별 없음 — 합계만", () => {
+    const sum: NiceSheet = { days: new Map(), sum: 7000, summary: null, cafePos: 0, unknown: {}, lines: 3, from: "2026-07-01", to: "2026-07-01", kinds: ["vending"], items: [{ key: "합계표|v|1", date: "2026-07-01", kind: "vending", amt: 7000 }] };
+    const u = extraUpdates([sum])[0];
+    expect(u.part.vending).toBe(7000);
+    expect(u.part.items).toBeUndefined();
+  });
+  it("바꾼 칸의 건별만 바꾸고 다른 칸 건별은 그대로, 건이 없어지면 지움", () => {
+    const old: ExtraPart = { v: 1, date: "2026-07-02", vending: 1500, photo: 0, parking: 0, items: { vending: [["11:00:00", 1500]] } };
+    const park = extraUpdates([parseNiceSheet(sheet([["3974965", "001", "주차", "승인", "2026-07-02", "01:00:00", 2000, "p1", "TDR"]], 2000))!]);
+    const out = applyExtra(old, park[1]);
+    expect(out.items).toEqual({ vending: [["11:00:00", 1500]], parking: [["01:00:00", 2000]] });
+    expect(old.items).toEqual({ vending: [["11:00:00", 1500]] }); // 옛 값은 그대로 (고쳐 쓰지 않음)
+    expect(applyExtra(out, { date: "2026-07-02", part: emptyExtra("2026-07-02"), kinds: ["vending", "parking"] }).items).toBeUndefined();
+  });
+  it("사람이 올린 칸도 합계가 같으면 건별 시각만 붙임 (값 · 올린 사람은 그대로), 합계가 다르면 안 붙임", () => {
+    const u = extraUpdates([parseNiceSheet(rows)!]).find((x) => x.date === "2026-07-02")!;
+    const human: ExtraPart = { v: 1, date: "2026-07-02", vending: 0, photo: 5000, parking: 2000, files: { photo: { by: "송", at }, parking: { by: "송", at } } };
+    const auto = autoExtraKinds(human, u.kinds);
+    expect(auto).toEqual(["vending"]);
+    expect(extraItemsOnly(human, u, auto)).toEqual(["photo", "parking"]);
+    const x = applyExtraItems(human, u, ["photo", "parking"]);
+    expect([x.photo, x.parking, x.files]).toEqual([5000, 2000, human.files]);
+    expect(x.items).toEqual({ photo: [["13:00:00", 5000]], parking: [["01:00:00", 2000]] });
+    expect(extraItemsOnly(x, u, auto)).toEqual([]); // 이미 붙었으면 다시 쓰지 않음
+    expect(extraItemsOnly({ ...human, parking: 999 }, u, auto)).toEqual(["photo"]);
   });
 });
 

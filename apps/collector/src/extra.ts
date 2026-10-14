@@ -5,9 +5,10 @@
    - COLLECT_DRY=1 이면 올리지 않고 확인만
    - 사람이 A 에서 엑셀로 올린 칸은 덮지 않음 (packages/core/src/extra.ts autoExtraKinds)
    - 인생네컷은 두 대 합 — 한 대라도 못 받으면 그 기간 네컷 칸은 올리지 않음
+   - 건마다 거래시각 · 금액도 올림 (보고 앱 기타 화면 목록) — 사람이 올린 칸도 합계가 같으면 건별 시각만 붙임 (2026-10-14)
    공개 저장소라 기록(로그)에는 건수 · 일치 여부만 남김 (매출 숫자 · 가맹점 이름 없음)
    ============================================================ */
-import { addDays, applyExtra, autoExtraKinds, dayRange, EXTRA_AUTO_BY, EXTRA_LABEL, EXTRA_TERMINALS, extraUpdates, NICE_FROM, niceRange, parseNiceSheet, type ExtraKind, type ExtraPart, type NiceSheet } from "@report/core";
+import { addDays, applyExtra, applyExtraItems, autoExtraKinds, dayRange, EXTRA_AUTO_BY, EXTRA_LABEL, EXTRA_TERMINALS, extraItemsOnly, extraUpdates, NICE_FROM, niceRange, parseNiceSheet, type ExtraKind, type ExtraPart, type NiceSheet } from "@report/core";
 // 비밀번호 걸린 엑셀 풀기 — 입력 화면(A)과 같은 것을 씀
 import { decryptXlsx, isEncrypted } from "../../entry/src/officeCrypto";
 import { fbLogin, readExtraPiece, writeExtraPieces } from "./firebase";
@@ -91,7 +92,7 @@ async function main() {
         const count = total?.count ?? null;
         let s: NiceSheet | null;
         if (count === 0) {
-          s = { days: new Map(), sum: 0, summary: 0, cafePos: 0, unknown: {}, lines: 0, from: a, to: b, kinds: [], items: [] };
+          s = { days: new Map(), sum: 0, summary: 0, cafePos: 0, unknown: {}, lines: 0, from: a, to: b, kinds: [], items: [], timed: true };
         } else {
           try {
             const { buf, password } = await nb.excelAll();
@@ -122,7 +123,8 @@ async function main() {
               lines += t.count;
               if (t.sales) items.push({ key: `합계표|${cat}|${d}`, date: d, kind, amt: t.sales });
             }
-            s = { days: new Map(), sum: items.reduce((x, it) => x + it.amt, 0), summary: null, cafePos: 0, unknown: {}, lines, from: a, to: b, kinds: [kind], items };
+            // 합계표에는 건별 시각이 없음 → 이 칸은 합계만 (보고 앱 목록은 '건별 없음')
+            s = { days: new Map(), sum: items.reduce((x, it) => x + it.amt, 0), summary: null, cafePos: 0, unknown: {}, lines, from: a, to: b, kinds: [kind], items, timed: false };
             say(`  ${catLabel(cat)}: 합계표 ${dayRange(a, b).length}일 · 건 ${lines}개`);
           }
         }
@@ -170,10 +172,15 @@ async function main() {
         const old = fb ? ((await readExtraPiece(fb, u.date))?.p as ExtraPart | undefined) : undefined;
         const kinds = autoExtraKinds(old, u.kinds);
         const kept = u.kinds.filter((k) => !kinds.includes(k));
+        // 사람이 올린 칸 — 값은 그대로, 합계가 같으면 건별 시각만 붙임
+        const attach = extraItemsOnly(old, u, kinds);
         const diff = old ? kinds.filter((k) => Math.round(old[k] || 0) !== Math.round(u.part[k])) : kinds;
-        say(`  ${u.date}: ${kinds.length ? `${kinds.map((k) => EXTRA_LABEL[k]).join(" · ")} ${old ? (diff.length ? `바뀜(${diff.map((k) => EXTRA_LABEL[k]).join(" · ")})` : "같음") : "새로"}` : "바꿀 칸 없음"}${kept.length ? ` · 사람이 올린 ${kept.map((k) => EXTRA_LABEL[k]).join(" · ")} 그대로` : ""}`);
-        if (!kinds.length) continue;
-        items.push({ date: u.date, part: applyExtra(old, { ...u, kinds }, { by: EXTRA_AUTO_BY, at }) });
+        const timed = u.kinds.filter((k) => u.part.items?.[k]?.length).length;
+        say(`  ${u.date}: ${kinds.length ? `${kinds.map((k) => EXTRA_LABEL[k]).join(" · ")} ${old ? (diff.length ? `바뀜(${diff.map((k) => EXTRA_LABEL[k]).join(" · ")})` : "같음") : "새로"}` : "바꿀 칸 없음"}${kept.length ? ` · 사람이 올린 ${kept.map((k) => EXTRA_LABEL[k]).join(" · ")} 그대로${attach.length ? `(건별 시각만 붙임: ${attach.map((k) => EXTRA_LABEL[k]).join(" · ")})` : ""}` : ""} · 건별 시각 ${timed}칸`);
+        if (!kinds.length && !attach.length) continue;
+        let part = kinds.length ? applyExtra(old, { ...u, kinds }, { by: EXTRA_AUTO_BY, at }) : old!;
+        if (attach.length) part = applyExtraItems(part, u, attach);
+        items.push({ date: u.date, part });
       }
       if (fb && !dry && items.length) {
         await writeExtraPieces(fb, EXTRA_AUTO_BY, items);

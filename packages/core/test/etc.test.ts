@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Board, buildStorePart, etcMove, productInBox, type ReceiptLine, type StorePart } from "../src";
+import { Board, buildStorePart, etcDetail, etcMove, extraTotal, productInBox, type ExtraPart, type ReceiptLine, type StorePart } from "../src";
 
 const line = (o: Partial<ReceiptLine>): ReceiptLine => ({ pos: "01", receipt: "0001", refund: false, time: "12:00:00", name: "", qty: 1, gross: 0, discount: 0, net: 0, ...o });
 const sold = (name: string, qty: number, price: number) => line({ name, qty, gross: qty * price, net: qty * price });
@@ -113,6 +113,35 @@ describe("기타로 잡히던 상품 옮기기 (2026-10-06 사장님 기준)", (
     expect(m.total).toBe(59000);
     const before = new Board([{ date: "2026-03-13", kids: day("kids", "2026-03-13", lines) }]).day("2026-03-13");
     expect([before.extra.vending, before.box.키즈입장료, before.box.기타]).toEqual([0, 0, 0]);
+  });
+});
+
+describe("기타 화면 박스를 누르면 — 자판기 · 네컷 · 주차는 건별(최근 것 먼저), 매장 소액 기타는 상품별 (2026-10-14)", () => {
+  const date = "2026-10-13";
+  const cafeP = day("cafe", date, [sold("[ICE] 아메리카노", 1, 4500), sold("포장백(종이)", 2, 100), sold("이벤트 초", 1, 3500), sold("흑미로만든수수부꾸미", 1, 2704), line({ name: "테이크아웃", qty: 3 })], (n) => (/아메리카노/.test(n) ? "바리스타" : "기타"));
+  const kidsP = day("kids", date, [sold("딸기쥬스", 2, 2500), sold("키링", 1, 2000), sold("퇴장시간 + 10~19분 지연", 1, 5000)]);
+  it("건별은 최근 시각이 맨 위, 0원인 칸은 빈 목록, 자판기 칸의 키즈 POS 음료 · 매장 소액 기타 상품 — 합이 화면 금액과 같음", () => {
+    const extra: ExtraPart = { v: 1, date, vending: 4000, photo: 8000, parking: 0, items: { vending: [["10:05:00", 2500], ["15:30:00", 1500]], photo: [["12:00:00", 4000], ["18:10:00", 4000]] } };
+    const b = new Board([{ date, cafe: cafeP, kids: kidsP, extra }]);
+    const e = etcDetail(b, date);
+    expect(e.card.vending).toEqual([["15:30:00", 1500], ["10:05:00", 2500]]);
+    expect(e.card.photo).toEqual([["18:10:00", 4000], ["12:00:00", 4000]]);
+    expect(e.card.parking).toEqual([]);
+    expect(e.kidsVend).toEqual([{ name: "딸기쥬스", store: "kids", qty: 2, net: 5000 }]);
+    expect(e.small.map((x) => [x.name, x.store, x.qty, x.net])).toEqual([["이벤트 초", "cafe", 1, 3500], ["키링", "kids", 1, 2000], ["포장백(종이)", "cafe", 2, 200], ["테이크아웃", "cafe", 3, 0]]);
+    const m = b.day(date);
+    expect(e.small.reduce((a, x) => a + x.net, 0)).toBe(m.box.기타 - extraTotal(m.extra));
+    expect(e.kidsVend.reduce((a, x) => a + x.net, 0) + 4000).toBe(m.extra.vending);
+  });
+  it("건별 시각이 없는 날(합계만 있음)은 null — 키즈 매출을 안 잡는 3월까지는 키즈 상품도 없음", () => {
+    const d = "2026-03-13";
+    const b = new Board([{ date: d, cafe: { ...cafeP, date: d }, kids: { ...kidsP, date: d }, extra: { v: 1, date: d, vending: 3000, photo: 0, parking: 0 } }]);
+    const e = etcDetail(b, d);
+    expect([e.card.vending, e.card.photo, e.card.parking]).toEqual([null, [], []]);
+    expect(e.kidsVend).toEqual([]);
+    expect(e.small.every((x) => x.store === "cafe")).toBe(true);
+    const m = b.day(d);
+    expect(e.small.reduce((a, x) => a + x.net, 0)).toBe(m.box.기타 - extraTotal(m.extra));
   });
 });
 
