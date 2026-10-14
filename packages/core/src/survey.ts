@@ -1,15 +1,17 @@
 /* ============================================================
    설문조사 — 아스타나키즈 통합데스크(gnb21c-cmd/astanakiz)가 손님에게 묻는 설문의 집계 (2026-10-14 사장님)
-   - 통합데스크가 매일 20시에 POS PC 데스크 폴더에 집계 파일을 남김 (SURVEY_FILE) — 항목별 응답 수만, 손님 이름 · 전화 없음
-   - POS 메인 PC 의 마감 전 수집(live-collect)이 그 파일을 읽어 클라우드 settings/surveys 에 올림 (apps/collector/src/survey.ts)
-   - 보고 앱 첫 화면 '설문조사' 칸: 현재 진행 중 N건 → 누르면 설문마다 항목(번호 · 내용) · 응답 수 · %(합 100%)
-     진행 중인 설문이 위, 그 안에서 최근 시작한 것이 맨 위 (다른 설문을 더해도 같은 순서)
+   - 통합데스크(1.38~)가 매일 20:00 POS PC 데스크 폴더 report-outbox\survey-날짜.json 에 그날까지의 기간 누적을 남김
+     (질문 하나 · 기간 · 대상 · 번호별 오늘 · 누적 · 제외 · 응답 수 — 손님 이름 · 전화 없음, astanakiz docs/SHARE.md 3장)
+   - POS 메인 PC 의 마감 전 수집(live-collect)이 그 파일들을 읽어(설문마다 가장 최근 날) 클라우드 settings/surveys 에 올림 (apps/collector/src/survey.ts)
+   - 보고 앱 첫 화면 '설문조사' 칸: 현재 진행 중 N건 → 누르면 설문마다 항목 · 응답 수 · %(응답 합 = 100%)
+     항목은 순위 순(응답이 많은 것이 1위로 맨 위), 설문은 진행 중인 것이 위 · 그 안에서 최근 시작한 것이 맨 위
    파일 모양은 docs/SURVEY.md
    ============================================================ */
 import { addDays } from "./dates";
 
-/** POS PC 데스크 폴더(%APPDATA%\아스타나키즈 입장 데스크\) 안 파일 이름 */
-export const SURVEY_FILE = "survey-state.json";
+/** POS PC 데스크 폴더(%APPDATA%\아스타나키즈 입장 데스크\) 안 설문 보고 폴더 · 파일 이름 */
+export const SURVEY_OUTBOX = "report-outbox";
+export const SURVEY_FILE_RE = /^survey-.*\.json$/i;
 
 export interface SurveyOption {
   /** 화면에 보이는 번호 (1, 2, 3 …) */
@@ -27,6 +29,12 @@ export interface Survey {
   /** 끝일 (진행 중이면 null) */
   to: string | null;
   options: SurveyOption[];
+  /** 통합데스크 보고 — 누적 기준 날 · 응답 수 · 제외 수 · 그날 응답 수 · 대상 (신규고객 · 현장구매자 · 전체고객) */
+  asOf?: string;
+  answered?: number;
+  excluded?: number;
+  todayAnswered?: number;
+  targets?: string[];
 }
 export interface SurveyDoc {
   v: 1;
@@ -66,9 +74,59 @@ export function cleanSurveys(x: unknown): SurveyDoc | null {
       options.push({ no, label, n: Number.isFinite(n) && n > 0 ? Math.round(n) : 0 });
     }
     options.sort((a, b) => a.no - b.no);
-    surveys.push({ id, title, from: r.from, to, options });
+    const sv: Survey = { id, title, from: r.from, to, options };
+    const cnt = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : undefined);
+    if (isDate(r.asOf)) sv.asOf = r.asOf;
+    for (const k of ["answered", "excluded", "todayAnswered"] as const) {
+      const v = cnt(r[k]);
+      if (v !== undefined) sv[k] = v;
+    }
+    if (Array.isArray(r.targets)) sv.targets = r.targets.map((t) => text(t, 20)).filter(Boolean).slice(0, 5);
+    surveys.push(sv);
   }
   return { v: 1, at: typeof o.at === "string" ? o.at.slice(0, 40) : "", surveys };
+}
+
+/** 통합데스크 report-outbox\survey-날짜.json 들 → 설문 묶음 (질문 · 기간 시작일이 같으면 같은 설문, 가장 최근 날의 누적, 맞는 파일이 없으면 null)
+    빈 선택지(이름 없고 응답 0)는 뺌 · 손님 정보는 원래 없음 */
+export function surveysFromDesk(files: unknown[]): SurveyDoc | null {
+  const latest = new Map<string, Record<string, any>>();
+  for (const f of files) {
+    if (!f || typeof f !== "object") continue;
+    const o = f as Record<string, any>;
+    const question = text(o.question, 120);
+    if (o.type !== "astanakiz-survey" || !isDate(o.day) || !question || !o.period || !isDate(o.period.from) || !Array.isArray(o.options)) continue;
+    const key = `${o.period.from}|${question}`;
+    const had = latest.get(key);
+    if (!had || o.day > had.day || (o.day === had.day && String(o.sentAt || "") > String(had.sentAt || ""))) latest.set(key, o);
+  }
+  if (!latest.size) return null;
+  const hash = (t: string) => {
+    let h = 5381;
+    for (const ch of t) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0;
+    return h.toString(36);
+  };
+  const T: [string, string][] = [["naverNew", "신규고객"], ["walkin", "현장구매자"], ["all", "전체고객"]];
+  let at = "";
+  const raw = [...latest.values()].map((o) => {
+    if (String(o.sentAt || "") > at) at = String(o.sentAt || "");
+    const question = text(o.question, 120);
+    return {
+      id: `desk-${o.period.from}-${hash(question)}`,
+      title: question,
+      from: o.period.from,
+      to: isDate(o.period.to) ? o.period.to : null,
+      options: (o.options as any[])
+        .filter((x) => x && (text(x.label, 80) || Number(x.total) > 0))
+        .map((x) => ({ no: x.no, label: text(x.label, 80) || `${x.no}번`, n: x.total })),
+      asOf: o.day,
+      answered: o.answered?.total,
+      excluded: o.excluded?.total,
+      todayAnswered: o.answered?.today,
+      targets: T.filter(([k]) => o.targets?.[k]).map(([, v]) => v),
+    };
+  });
+  return cleanSurveys({ v: 1, at, surveys: raw });
 }
 
 /** 그날 진행 중인지 — 시작일 ~ 끝일(없으면 계속) */
@@ -82,20 +140,18 @@ export function surveyList(doc: SurveyDoc | null, today: string): { survey: Surv
     .sort((a, b) => Number(b.open) - Number(a.open) || (a.survey.from < b.survey.from ? 1 : a.survey.from > b.survey.from ? -1 : a.survey.id.localeCompare(b.survey.id)));
 }
 
-/** 항목별 % (소수 한 자리) — 응답 합을 100% 로, 버림한 뒤 남는 0.1 은 나머지가 큰 항목부터 더해 합이 꼭 100.0 */
+/** 항목별 % (소수 한 자리) — 응답 합을 100% 로 항목마다 반올림. 같은 응답 수는 늘 같은 % (더하면 100% 에서 0.1 정도 다를 수 있음) */
 export function surveyShares(options: SurveyOption[]): number[] {
   const total = options.reduce((a, o) => a + o.n, 0);
-  if (!total) return options.map(() => 0);
-  const raw = options.map((o) => (o.n / total) * 1000);
-  const base = raw.map((x) => Math.floor(x + 1e-9));
-  let left = 1000 - base.reduce((a, x) => a + x, 0);
-  const order = raw.map((x, i) => ({ i, r: x - base[i] })).sort((a, b) => b.r - a.r || a.i - b.i);
-  for (const { i } of order) {
-    if (left <= 0) break;
-    base[i]++;
-    left--;
-  }
-  return base.map((x) => x / 10);
+  return options.map((o) => (total ? Math.round((o.n / total) * 1000 + 1e-9) / 10 : 0));
+}
+
+/** 보여 줄 순서 — 응답이 많은 항목이 1위로 맨 위 (2026-10-14 사장님), 같은 수는 같은 순위 · 번호 순 */
+export function surveyRanked(options: SurveyOption[]): (SurveyOption & { rank: number; share: number })[] {
+  const shares = surveyShares(options);
+  const rows = options.map((o, i) => ({ ...o, share: shares[i], rank: 0 })).sort((a, b) => b.n - a.n || a.no - b.no);
+  rows.forEach((r, i) => (r.rank = i > 0 && rows[i - 1].n === r.n ? rows[i - 1].rank : i + 1));
+  return rows;
 }
 
 /** 체험판 설문 (가짜) — 보고 앱 체험판 · 시험. 날짜는 today 기준 (진행 중 2건 · 끝난 1건) */
@@ -109,7 +165,10 @@ export function sampleSurveys(today: string = SURVEY_SAMPLE_TODAY): SurveyDoc {
         id: "how-know",
         title: "아스타나키즈를 어떻게 알게 되셨나요?",
         from: addDays(today, -5),
-        to: null,
+        to: addDays(today, 25),
+        targets: ["신규고객", "현장구매자"],
+        answered: 104,
+        excluded: 9,
         options: [
           { no: 1, label: "네이버 검색 · 지도", n: 46 },
           { no: 2, label: "인스타그램", n: 21 },
@@ -124,6 +183,8 @@ export function sampleSurveys(today: string = SURVEY_SAMPLE_TODAY): SurveyDoc {
         title: "함께 온 아이 나이는?",
         from: addDays(today, -12),
         to: null,
+        targets: ["전체고객"],
+        answered: 158,
         options: [
           { no: 1, label: "3세 이하", n: 38 },
           { no: 2, label: "4 ~ 6세", n: 71 },

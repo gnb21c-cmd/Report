@@ -1595,6 +1595,6 @@ button.quad-box {
 .survey-tag { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
 .survey-tag.on { color: var(--accent); border-color: var(--accent); }
 .survey-tbl td { vertical-align: middle; }
-.survey-tbl td.survey-no { width: 1.6em; color: var(--muted); }
+.survey-tbl td.survey-no { width: 2.4em; color: var(--muted); white-space: nowrap; }
 .survey-tbl .survey-bar { display: block; height: 4px; border-radius: 99px; background: var(--accent); opacity: 0.6; margin-top: 3px; }
 .survey-tbl td.strong-num { font-weight: 700; }

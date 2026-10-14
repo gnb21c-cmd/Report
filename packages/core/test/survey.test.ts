@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanSurveys, sampleSurveys, SURVEY_SAMPLE_TODAY, surveyList, surveyOpen, surveyShares, type Survey } from "../src";
+import { cleanSurveys, sampleSurveys, SURVEY_SAMPLE_TODAY, surveyList, surveyOpen, surveyRanked, surveysFromDesk, surveyShares, type Survey } from "../src";
 
 const s = (o: Partial<Survey>): Survey => ({ id: "a", title: "아스타나를 어떻게 알게 되셨나요?", from: "2026-10-15", to: null, options: [], ...o });
 
@@ -48,17 +48,68 @@ describe("설문조사 — 통합데스크가 20시에 남기는 집계 (2026-10
       ["old", false],
     ]);
   });
-  it("항목별 % — 응답 합 = 100%, 소수 한 자리, 나머지가 큰 항목부터 0.1 씩 더해 합이 꼭 100.0", () => {
-    const p = surveyShares([{ no: 1, label: "가", n: 1 }, { no: 2, label: "나", n: 1 }, { no: 3, label: "다", n: 1 }]);
-    expect(p).toEqual([33.4, 33.3, 33.3]);
-    expect(Math.round(p.reduce((a, x) => a + x, 0) * 10)).toBe(1000);
+  it("항목별 % — 응답 합을 100% 로, 항목마다 소수 한 자리 반올림 (같은 응답 수는 늘 같은 %)", () => {
+    expect(surveyShares([{ no: 1, label: "가", n: 1 }, { no: 2, label: "나", n: 1 }, { no: 3, label: "다", n: 1 }])).toEqual([33.3, 33.3, 33.3]);
+    expect(surveyShares([{ no: 1, label: "가", n: 1 }, { no: 2, label: "나", n: 2 }])).toEqual([33.3, 66.7]);
     expect(surveyShares([{ no: 1, label: "가", n: 12 }, { no: 2, label: "나", n: 5 }, { no: 3, label: "다", n: 3 }])).toEqual([60, 25, 15]);
     expect(surveyShares([{ no: 1, label: "가", n: 0 }, { no: 2, label: "나", n: 0 }])).toEqual([0, 0]);
   });
-  it("체험판 설문 — 진행 중 1건 이상, 합 100%", () => {
+  it("보여 줄 때는 순위 순 — 응답이 많은 항목이 1위로 맨 위, 같은 수는 같은 순위 · 같은 %(번호 순)", () => {
+    const r = surveyRanked([
+      { no: 1, label: "네이버", n: 5 },
+      { no: 2, label: "인스타", n: 12 },
+      { no: 3, label: "지인", n: 5 },
+      { no: 4, label: "간판", n: 0 },
+      { no: 5, label: "블로그", n: 8 },
+    ]);
+    expect(r.map((x) => [x.rank, x.label, x.n, x.share])).toEqual([
+      [1, "인스타", 12, 40],
+      [2, "블로그", 8, 26.7],
+      [3, "네이버", 5, 16.7],
+      [3, "지인", 5, 16.7],
+      [5, "간판", 0, 0],
+    ]);
+  });
+  it("통합데스크 report-outbox 파일들 → 설문마다 가장 최근 날의 기간 누적 (질문 · 기간 시작일이 같으면 같은 설문)", () => {
+    const f = (day: string, totals: number[], o: Record<string, unknown> = {}) => ({
+      type: "astanakiz-survey",
+      v: 1,
+      day,
+      sentAt: `${day} 20:00`,
+      question: "아스타나키즈를 어떻게 알게 되었나요",
+      period: { from: "2026-11-01", to: "2026-11-30" },
+      targets: { naverNew: true, walkin: true, all: false },
+      options: [
+        { no: 1, label: "네이버 검색", today: 1, total: totals[0] },
+        { no: 2, label: "인스타그램", today: 0, total: totals[1] },
+        { no: 3, label: "", today: 0, total: 0 },
+      ],
+      excluded: { today: 1, total: 5 },
+      answered: { today: 3, total: totals[0] + totals[1] },
+      ...o,
+    });
+    const doc = surveysFromDesk([
+      f("2026-11-02", [8, 4]),
+      f("2026-11-03", [12, 5]),
+      f("2026-11-01", [3, 1]),
+      f("2026-10-20", [7, 9], { question: "다음에 또 오실 건가요?", period: { from: "2026-10-10", to: "2026-10-20" } }),
+      { type: "다른 것", v: 1 },
+      f("날짜 아님", [1, 1]),
+    ])!;
+    expect(doc.at).toBe("2026-11-03 20:00");
+    expect(doc.surveys).toHaveLength(2);
+    const a = doc.surveys.find((x) => x.from === "2026-11-01")!;
+    expect([a.title, a.to, a.asOf, a.answered, a.excluded, a.targets]).toEqual(["아스타나키즈를 어떻게 알게 되었나요", "2026-11-30", "2026-11-03", 17, 5, ["신규고객", "현장구매자"]]);
+    expect(a.options).toEqual([{ no: 1, label: "네이버 검색", n: 12 }, { no: 2, label: "인스타그램", n: 5 }]); // 빈 선택지는 뺌
+    expect(doc.surveys.find((x) => x.from === "2026-10-10")!.options.map((o) => o.n)).toEqual([7, 9]);
+    // 클라우드에 올렸다 다시 읽어도 같음
+    expect(cleanSurveys(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
+    expect(surveysFromDesk([])).toBeNull();
+  });
+  it("체험판 설문 — 진행 중 2건 · 끝난 1건, % 를 더하면 100% 에서 0.1 안쪽", () => {
     const doc = cleanSurveys(sampleSurveys())!;
     const list = surveyList(doc, SURVEY_SAMPLE_TODAY);
     expect(list.map((x) => [x.survey.id, x.open])).toEqual([["how-know", true], ["kids-age", true], ["visit-again", false]]);
-    for (const { survey } of list) if (survey.options.some((o) => o.n)) expect(Math.round(surveyShares(survey.options).reduce((a, x) => a + x, 0) * 10)).toBe(1000);
+    for (const { survey } of list) expect(Math.abs(surveyShares(survey.options).reduce((a, x) => a + x, 0) - 100)).toBeLessThanOrEqual(0.1 + 1e-9);
   });
 });

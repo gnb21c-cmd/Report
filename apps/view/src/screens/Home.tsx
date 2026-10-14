@@ -6,7 +6,7 @@
    ③ 당월 매출 합계 · 전년 동기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
    ⑤ 카페 소비 인원 · 1인 평균소비 · 설문조사 세 칸 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
-      설문조사(2026-10-14): 통합데스크가 20시에 남기는 설문 집계 — '현재 진행중 N건', 누르면 설문마다 항목 · 응답 수 · %(합 100%), 진행 중 · 최근 것이 맨 위
+      설문조사(2026-10-14): 통합데스크가 20시에 남기는 설문 보고 — '현재 진행중 N건', 누르면 설문마다 항목을 순위 순(1위가 맨 위) · 응답 수 · %, 진행 중 · 최근 설문이 맨 위
    ⑥ 당월 · 전년 동기간 줄 다음에 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세), 그 아래 OO년 총 매출 · 정산완료 줄
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
@@ -14,7 +14,7 @@ import { useRef, useState } from "react";
 import { WeatherPanel } from "../ui/WeatherPanel";
 import { LiveWarn, useLive } from "../ui/Live";
 import { useFit } from "../ui/fit";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyShares, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind, type SurveyDoc } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyRanked, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind, type SurveyDoc } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -351,10 +351,10 @@ function SurveyBox({ doc }: { doc: SurveyDoc | null }) {
   );
 }
 
-/** 설문마다 항목(번호 · 내용) · 응답 수 · % (합 100%) — 진행 중이 위, 그 안에서 최근 시작한 것이 맨 위 */
+/** 설문마다 항목을 순위 순(응답이 많은 것이 1위로 맨 위) · 응답 수 · % — 설문은 진행 중이 위, 그 안에서 최근 시작한 것이 맨 위 */
 function SurveySheet({ doc, list, onClose }: { doc: SurveyDoc | null; list: ReturnType<typeof surveyList>; onClose: () => void }) {
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
-  const at = doc?.at && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(doc.at) ? `${md(doc.at.slice(0, 10))} ${doc.at.slice(11, 16)}` : "";
+  const at = doc?.at && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(doc.at) ? `${md(doc.at.slice(0, 10))} ${doc.at.slice(11, 16)}` : "";
   return (
     <div className="sheet-bg" onClick={onClose}>
       <div className="sheet list-sheet" role="dialog" aria-label="설문조사" onClick={(e) => e.stopPropagation()}>
@@ -368,28 +368,27 @@ function SurveySheet({ doc, list, onClose }: { doc: SurveyDoc | null; list: Retu
           ) : (
             list.map(({ survey: s, open }) => {
               const total = s.options.reduce((a, o) => a + o.n, 0);
-              const shares = surveyShares(s.options);
+              const rows = surveyRanked(s.options);
               const max = Math.max(1, ...s.options.map((o) => o.n));
+              const sub = [`${md(s.from)} ~ ${s.to ? md(s.to) : ""}`, s.targets?.length ? s.targets.join(" · ") : "", `응답 ${count(total, "명")}`, s.excluded ? `제외 ${count(s.excluded, "명")}` : ""].filter(Boolean).join(" · ");
               return (
                 <section key={s.id} className={`survey${open ? "" : " closed"}`}>
                   <div className="survey-head">
                     <b>{s.title}</b>
                     <span className={`survey-tag${open ? " on" : ""}`}>{open ? "진행 중" : s.from > todayKst() ? "시작 전" : "끝남"}</span>
                   </div>
-                  <div className="note">
-                    {md(s.from)} ~ {s.to ? md(s.to) : ""} · 응답 {count(total, "명")}
-                  </div>
+                  <div className="note">{sub}</div>
                   <table className="bread-tbl survey-tbl">
                     <tbody>
-                      {s.options.map((o, i) => (
+                      {rows.map((o) => (
                         <tr key={o.no}>
-                          <td className="survey-no">{o.no}</td>
+                          <td className="survey-no">{o.rank}위</td>
                           <td>
                             {o.label}
                             <span className="survey-bar" style={{ width: `${(o.n / max) * 100}%` }} aria-hidden />
                           </td>
                           <td className="num">{count(o.n, "명")}</td>
-                          <td className="num strong-num">{shares[i].toFixed(1)}%</td>
+                          <td className="num strong-num">{o.share.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -406,7 +405,7 @@ function SurveySheet({ doc, list, onClose }: { doc: SurveyDoc | null; list: Retu
               );
             })
           )}
-          <p className="note muted">아스타나키즈 통합데스크가 매일 20시에 남기는 집계 (손님 이름 · 전화번호 없이 항목별 응답 수만)</p>
+          <p className="note muted">아스타나키즈 통합데스크가 매일 20시에 남기는 기간 누적 (손님 이름 · 전화번호 없이 항목별 응답 수만) · 순위 순 · % 는 응답 합 기준 반올림 (제외는 빼고)</p>
         </div>
         <button className="ghost wide" onClick={onClose}>
           닫기
