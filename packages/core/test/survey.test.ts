@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanSurveys, sampleSurveys, SURVEY_SAMPLE_TODAY, surveyList, surveyOpen, surveyRanked, surveysFromDesk, surveyShares, type Survey } from "../src";
+import { cleanSurveys, mergeSurveyDocs, sampleSurveys, SURVEY_INBOX, SURVEY_SAMPLE_TODAY, surveyList, surveyOpen, surveyRanked, surveysFromDesk, surveysFromInbox, surveyShares, type Survey, type SurveyDoc } from "../src";
 
 const s = (o: Partial<Survey>): Survey => ({ id: "a", title: "아스타나를 어떻게 알게 되셨나요?", from: "2026-10-15", to: null, options: [], ...o });
 
@@ -111,5 +111,58 @@ describe("설문조사 — 통합데스크가 20시에 남기는 집계 (2026-10
     const list = surveyList(doc, SURVEY_SAMPLE_TODAY);
     expect(list.map((x) => [x.survey.id, x.open])).toEqual([["how-know", true], ["kids-age", true], ["visit-again", false]]);
     for (const { survey } of list) expect(Math.abs(surveyShares(survey.options).reduce((a, x) => a + x, 0) - 100)).toBeLessThanOrEqual(0.1 + 1e-9);
+  });
+});
+
+describe("설문 보고함 — 키즈 POS 통합데스크가 클라우드에 바로 씀 (2026-10-15 사장님: 통합데스크는 키즈 POS, 메인 서버는 바리스타 POS)", () => {
+  const desk = (day: string, total: number, extra: Record<string, unknown> = {}) => ({
+    type: "astanakiz-survey",
+    v: 1,
+    day,
+    sentAt: `${day} 20:00`,
+    question: "아스타나키즈를 어떻게 알게 되었나요",
+    period: { from: "2026-10-15", to: "2026-10-31" },
+    targets: { naverNew: true, walkin: false, all: false },
+    options: [
+      { no: 1, label: "네이버 검색", today: 1, total },
+      { no: 2, label: "인스타그램", today: 0, total: 2 },
+    ],
+    excluded: { today: 0, total: 1 },
+    answered: { today: 1, total: total + 2 },
+    ...extra,
+  });
+
+  it("보고함 이름 · 문서 json = 통합데스크 보고 파일과 같은 글 → 파일을 읽을 때와 같은 설문", () => {
+    expect(SURVEY_INBOX).toBe("surveyInbox");
+    const files = [desk("2026-10-15", 3), desk("2026-10-16", 5)];
+    const doc = surveysFromInbox(files.map((f) => ({ json: JSON.stringify(f), at: `${f.day} 20:00` })))!;
+    expect(doc).toEqual(surveysFromDesk(files));
+    expect(doc.surveys).toHaveLength(1);
+    expect(doc.surveys[0].asOf).toBe("2026-10-16");
+    expect(doc.surveys[0].options.map((o) => o.n)).toEqual([5, 2]);
+  });
+
+  it("깨진 글 · 글이 아닌 값 · 다른 모양은 건너뜀, 맞는 것이 없으면 null", () => {
+    const ok = desk("2026-10-15", 3);
+    const doc = surveysFromInbox([{ json: "{깨짐" }, { json: 12 }, {}, { json: JSON.stringify({ type: "astanakiz-survey-test" }) }, { json: JSON.stringify(ok) }])!;
+    expect(doc.surveys).toHaveLength(1);
+    expect(surveysFromInbox([{ json: "{깨짐" }, { json: JSON.stringify({ type: "astanakiz-survey-test" }) }])).toBeNull();
+    expect(surveysFromInbox([])).toBeNull();
+  });
+
+  it("두 묶음 합치기 — 같은 설문은 누적 기준 날이 늦은 것 (같으면 뒤의 것) · 다른 설문은 모두 · 시각은 늦은 것", () => {
+    const a: SurveyDoc = { v: 1, at: "2026-10-16 20:00", surveys: [s({ id: "x", asOf: "2026-10-16", options: [{ no: 1, label: "가", n: 5 }] }), s({ id: "only-a", from: "2026-09-01" })] };
+    const b: SurveyDoc = { v: 1, at: "2026-10-15 20:00", surveys: [s({ id: "x", asOf: "2026-10-15", options: [{ no: 1, label: "가", n: 3 }] }), s({ id: "only-b", from: "2026-10-01" })] };
+    const m = mergeSurveyDocs(a, b)!;
+    expect(m.at).toBe("2026-10-16 20:00");
+    expect(m.surveys.map((x) => x.id).sort()).toEqual(["only-a", "only-b", "x"]);
+    expect(m.surveys.find((x) => x.id === "x")!.options[0].n).toBe(5);
+    expect(mergeSurveyDocs(b, a)!.surveys.find((x) => x.id === "x")!.options[0].n).toBe(5);
+    // 같은 날이면 뒤의 것
+    const c: SurveyDoc = { v: 1, at: "", surveys: [s({ id: "x", asOf: "2026-10-16", options: [{ no: 1, label: "가", n: 7 }] })] };
+    expect(mergeSurveyDocs(a, c)!.surveys.find((x) => x.id === "x")!.options[0].n).toBe(7);
+    expect(mergeSurveyDocs(null, b)).toBe(b);
+    expect(mergeSurveyDocs(a, null)).toBe(a);
+    expect(mergeSurveyDocs(null, null)).toBeNull();
   });
 });
