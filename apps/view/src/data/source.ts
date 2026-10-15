@@ -21,7 +21,7 @@ export interface Source {
   settings(): Promise<ReportSettings | null>;
   /** 오늘 마감 전 영업정보 — 그날 live 문서 (없으면 null) */
   live(date: string): Promise<LiveDoc | null>;
-  /** 통합데스크 설문 집계 (settings/surveys, 없으면 null) */
+  /** 통합데스크 설문 집계 (설문 보고함 surveyInbox + 예전 settings/surveys, 없으면 null) */
   surveys(): Promise<SurveyDoc | null>;
 }
 

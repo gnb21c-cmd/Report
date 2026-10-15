@@ -59,6 +59,20 @@ service cloud.firestore {
         allow write: if isSender(board) && piece("json");
       }
 
+      // 통합데스크 설문 보고함 (2026-10-15) — 키즈 POS 통합데스크가 로그인 없이 매일 20:00(뒤에 숫자가 바뀌면 다시) 씀 · 보고 앱은 읽기만
+      //   문서 이름 = 설문 기간 시작일, json = 통합데스크 보고 파일(report-outbox\survey-날짜.json)과 같은 글 (손님 정보 없음, docs/SURVEY.md)
+      //   이 매장 열쇠를 아는 곳만(보고 설정이 있는 매장) · 설문 보고 모양 · 크기만 · 지우기는 입력 계정만
+      match /surveyInbox/{from} {
+        allow read: if true;
+        allow create, update: if from.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && exists(/databases/$(database)/documents/boards/$(board)/settings/main)
+          && request.resource.data.keys().hasOnly(["json", "at"])
+          && request.resource.data.json is string && request.resource.data.json.size() < 20000
+          && request.resource.data.json.matches("(?s)^[{].*astanakiz-survey.*$")
+          && request.resource.data.at is string && request.resource.data.at.size() < 40;
+        allow delete: if isSender(board);
+      }
+
       // 베이커리 작업지시 — 계획(plans: 매일 16시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
       match /plans/{date} {
         allow read: if true;

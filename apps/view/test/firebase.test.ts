@@ -39,3 +39,52 @@ describe("보고 앱 — 클라우드에서 받기 (같은 시각에 한꺼번�
     vi.unstubAllGlobals();
   });
 });
+
+describe("보고 앱 — 통합데스크 설문 보고함 (키즈 POS 가 바로 씀, 2026-10-15)", () => {
+  const desk = (day: string, total: number) =>
+    JSON.stringify({
+      type: "astanakiz-survey",
+      v: 1,
+      day,
+      sentAt: `${day} 20:00`,
+      question: "아스타나키즈를 어떻게 알게 되었나요",
+      period: { from: "2026-10-15", to: "2026-10-31" },
+      targets: { naverNew: true, walkin: false, all: false },
+      options: [
+        { no: 1, label: "네이버 검색", today: 1, total },
+        { no: 2, label: "인스타그램", today: 0, total: 2 },
+      ],
+      excluded: { today: 0, total: 1 },
+      answered: { today: 1, total: total + 2 },
+    });
+  const fake = (inbox: { name: string; json: string }[] | "error", legacy: unknown | null) =>
+    vi.fn(async (url: string) => {
+      if (url.includes("/settings/surveys")) return legacy ? ({ ok: true, json: async () => ({ fields: { json: { stringValue: JSON.stringify(legacy) } } }) } as any) : ({ ok: false, status: 404, json: async () => ({}) } as any);
+      if (url.includes("/surveyInbox?")) {
+        if (inbox === "error") throw new Error("인터넷 없음");
+        return { ok: true, json: async () => (inbox.length ? { documents: inbox.map((d) => ({ name: d.name, fields: { json: { stringValue: d.json }, at: { stringValue: "x" } } })) } : {}) } as any;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as any;
+    });
+
+  it("보고함 문서(설문마다 하나)를 읽어 설문 묶음으로 · 예전 settings/surveys 가 없어도", async () => {
+    vi.stubGlobal("fetch", fake([{ name: "p/surveyInbox/2026-10-15", json: desk("2026-10-16", 5) }, { name: "p/surveyInbox/2000-01-01", json: "{깨짐" }], null));
+    const doc = await firebaseSource({ apiKey: "k", projectId: "p" }, "board").surveys();
+    expect(doc?.surveys).toHaveLength(1);
+    expect(doc?.surveys[0].asOf).toBe("2026-10-16");
+    expect(doc?.surveys[0].options.map((o) => [o.label, o.n])).toEqual([["네이버 검색", 5], ["인스타그램", 2]]);
+    vi.unstubAllGlobals();
+  });
+
+  it("보고함과 예전 길이 같은 설문이면 늦은 날 것 · 보고함이 비었거나 못 읽으면 예전 것 · 둘 다 없으면 null", async () => {
+    const src = () => firebaseSource({ apiKey: "k", projectId: "p" }, "board");
+    const oldDoc = { v: 1, at: "2026-10-15 20:00", surveys: [{ id: "desk-2026-10-15-x", title: "예전", from: "2026-10-15", to: null, asOf: "2026-10-15", options: [{ no: 1, label: "가", n: 1 }] }] };
+    vi.stubGlobal("fetch", fake([], oldDoc));
+    expect((await src().surveys())?.surveys.map((x) => x.title)).toEqual(["예전"]);
+    vi.stubGlobal("fetch", fake("error", oldDoc));
+    expect((await src().surveys())?.surveys.map((x) => x.title)).toEqual(["예전"]);
+    vi.stubGlobal("fetch", fake([], null));
+    expect(await src().surveys()).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});

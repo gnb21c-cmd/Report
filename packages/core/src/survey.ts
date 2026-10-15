@@ -1,8 +1,10 @@
 /* ============================================================
    설문조사 — 아스타나키즈 통합데스크(gnb21c-cmd/astanakiz)가 손님에게 묻는 설문의 집계 (2026-10-14 사장님)
-   - 통합데스크(1.38~)가 매일 20:00 POS PC 데스크 폴더 report-outbox\survey-날짜.json 에 그날까지의 기간 누적을 남김
+   - 통합데스크(1.38~)가 매일 20:00 키즈 POS 데스크 폴더 report-outbox\survey-날짜.json 에 그날까지의 기간 누적을 남김
      (질문 하나 · 기간 · 대상 · 번호별 오늘 · 누적 · 제외 · 응답 수 — 손님 이름 · 전화 없음, astanakiz docs/SHARE.md 3장)
-   - POS 메인 PC 의 마감 전 수집(live-collect)이 그 파일들을 읽어(설문마다 가장 최근 날) 클라우드 settings/surveys 에 올림 (apps/collector/src/survey.ts)
+   - 통합데스크는 키즈 POS, 메인 서버(수집)는 바리스타 POS 라 서로 다른 PC (2026-10-15 사장님) → 그 파일과 같은 글을
+     통합데스크가 클라우드 설문 보고함 boards/{열쇠}/surveyInbox/{기간 시작일} 에 바로 씀 → 보고 앱이 바로 읽음 (surveysFromInbox)
+   - 예전 길: 메인 서버 마감 전 수집이 파일을 읽어 settings/surveys 에 올림 (apps/collector/src/survey.ts — 같은 PC 일 때만) → 보고 앱이 두 곳을 합침
    - 보고 앱 첫 화면 '설문조사' 칸: 현재 진행 중 N건 → 누르면 설문마다 항목 · 응답 수 · %(응답 합 = 100%)
      항목은 순위 순(응답이 많은 것이 1위로 맨 위), 설문은 진행 중인 것이 위 · 그 안에서 최근 시작한 것이 맨 위
    파일 모양은 docs/SURVEY.md
@@ -127,6 +129,35 @@ export function surveysFromDesk(files: unknown[]): SurveyDoc | null {
     };
   });
   return cleanSurveys({ v: 1, at, surveys: raw });
+}
+
+/** 클라우드 설문 보고함 컬렉션 (boards/{열쇠}/surveyInbox/{기간 시작일} = { json: 보고 파일과 같은 글, at }) — 통합데스크가 로그인 없이 씀 (firebase/firestore.rules) */
+export const SURVEY_INBOX = "surveyInbox";
+
+/** 보고함 문서들 → 설문 묶음 (json 이 깨졌거나 모양이 틀린 문서는 건너뜀, 맞는 것이 없으면 null) */
+export function surveysFromInbox(docs: { json?: unknown }[]): SurveyDoc | null {
+  const files: unknown[] = [];
+  for (const d of docs) {
+    if (!d || typeof d.json !== "string") continue;
+    try {
+      files.push(JSON.parse(d.json));
+    } catch {
+      /* 깨진 글은 건너뜀 */
+    }
+  }
+  return surveysFromDesk(files);
+}
+
+/** 두 설문 묶음 합치기 (보고함 · 예전 파일 수집) — 같은 설문(이름표)은 누적 기준 날(asOf)이 늦은 것, 같으면 뒤의 것 · 시각은 늦은 것 */
+export function mergeSurveyDocs(a: SurveyDoc | null, b: SurveyDoc | null): SurveyDoc | null {
+  if (!a) return b;
+  if (!b) return a;
+  const byId = new Map(a.surveys.map((x) => [x.id, x] as const));
+  for (const x of b.surveys) {
+    const had = byId.get(x.id);
+    if (!had || (x.asOf ?? "") >= (had.asOf ?? "")) byId.set(x.id, x);
+  }
+  return { v: 1, at: a.at > b.at ? a.at : b.at, surveys: [...byId.values()] };
 }
 
 /** 그날 진행 중인지 — 시작일 ~ 끝일(없으면 계속) */

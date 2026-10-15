@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, cleanSurveys, type DayReport, type DayWeather, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { asOrder, asPlan, cleanSettings, cleanSurveys, mergeSurveyDocs, SURVEY_INBOX, surveysFromInbox, type DayReport, type DayWeather, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import type { Source } from "./source";
 
 export interface FirebaseConfig {
@@ -152,14 +152,26 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
         return null; // 아직 설정을 저장한 적 없음 (기본값)
       }
     },
+    // 통합데스크 설문 — 키즈 POS 통합데스크가 바로 쓰는 보고함(surveyInbox, 설문마다 한 문서) + 예전 파일 수집(settings/surveys) 을 합침
     async surveys() {
-      try {
-        const doc = await call(`${base(cfg, board)}/settings/surveys?key=${cfg.apiKey}`);
-        const f = fieldsOf(doc);
-        return f.json ? cleanSurveys(JSON.parse(f.json)) : null;
-      } catch {
-        return null; // 아직 통합데스크 설문을 받은 적 없음
-      }
+      const legacy = async () => {
+        try {
+          const f = fieldsOf(await call(`${base(cfg, board)}/settings/surveys?key=${cfg.apiKey}`));
+          return f.json ? cleanSurveys(JSON.parse(f.json)) : null;
+        } catch {
+          return null; // 예전 길로는 받은 적 없음
+        }
+      };
+      const inbox = async () => {
+        try {
+          const res = await call(`${base(cfg, board)}/${SURVEY_INBOX}?pageSize=300&key=${cfg.apiKey}`, { cache: "no-store" });
+          return surveysFromInbox((res?.documents || []).map(fieldsOf));
+        } catch {
+          return null; // 아직 통합데스크가 보낸 적 없음
+        }
+      };
+      const [a, b] = await Promise.all([legacy(), inbox()]);
+      return mergeSurveyDocs(a, b);
     },
   };
 }
