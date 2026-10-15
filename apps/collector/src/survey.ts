@@ -9,12 +9,13 @@
    - COLLECT_DRY=1 이면 확인만
    공개 저장소라 기록에는 파일 수 · 설문 수 · 항목 수 · 폴더 수만 (설문 내용 · 응답 수 · 폴더 이름 없음)
    ============================================================ */
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { SURVEY_FILE_RE, surveyList, surveysFromDesk } from "@report/core";
 import { fbLogin, readSettingsJson, writeSettingsJson } from "./firebase";
 import { say } from "./okpos";
-import { noFileHint, probeDir, scanOutboxes, SHARE_CMD, shareCmd } from "./surveyShare";
+import { DESK_DIRS, noFileHint, probeDir, scanOutboxes, SHARE_CMD, shareCmd } from "./surveyShare";
 
 const env = (k: string) => process.env[k] || "";
 const todayKst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -33,6 +34,16 @@ function roamings(): string[] {
     }
   }
   return out;
+}
+
+/** 이 PC 에서 통합데스크 프로그램이 돌고 있는지 (프로그램 이름만 봄 — 다른 계정의 것도 보임). Windows 가 아니거나 못 보면 undefined */
+function deskRunning(): boolean | undefined {
+  if (process.platform !== "win32") return undefined;
+  try {
+    return DESK_DIRS.some((n) => execFileSync("tasklist", ["/FI", `IMAGENAME eq ${n}.exe`, "/FO", "CSV", "/NH"], { timeout: 15000 }).toString().trim().startsWith('"'));
+  } catch {
+    return undefined;
+  }
 }
 
 /** 연결 도우미(survey-share.cmd)를 실행기 폴더 맨 위에 (…\_work\_tool → 두 단계 위, naver-login.cmd 옆) — 못 쓰면 도구 폴더에. 깐 폴더를 돌려줌 */
@@ -56,7 +67,8 @@ function installShareHelper(): string | undefined {
 
 async function main() {
   const helperDir = installShareHelper();
-  const scan = scanOutboxes([env("SURVEY_OUTBOX_DIR")], roamings(), (d) => probeDir(() => statSync(d)), join);
+  const roams = roamings();
+  const scan = scanOutboxes([env("SURVEY_OUTBOX_DIR")], roams, (d) => probeDir(() => statSync(d)), join);
   const files: unknown[] = [];
   let bad = 0;
   for (const dir of scan.found) {
@@ -78,6 +90,8 @@ async function main() {
   if (!files.length) {
     const hint = noFileHint(scan, bad, helperDir);
     say(hint.text);
+    const run = deskRunning();
+    say(`  살핀 Windows 사용자 폴더 ${roams.filter((r) => /^C:\\Users\\/i.test(r)).length}개 · 이 PC 에서 통합데스크 실행 중: ${run === undefined ? "모름" : run ? "예" : "아니오"}`);
     // 실행 기록 맨 위 요약에도 보이게 (실패로 끝내지는 않음 — 마감 전 수집은 그대로)
     if (hint.warn) console.log(`::warning title=설문조사::${hint.text}`);
     return;
