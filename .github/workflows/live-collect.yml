@@ -71,6 +71,7 @@ jobs:
           WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
       # 통합데스크 설문 보고(매일 20:00 report-outbox\survey-날짜.json, 항목별 응답 수만) → 클라우드 settings/surveys → 보고 앱 첫 화면 '설문조사'
       # 폴더가 없으면 건너뜀 · 바뀌었을 때만 올림 · 마감 전 수집이 실패해도 돎 (apps/collector/src/survey.ts, docs/SURVEY.md)
+      # 실행기(서비스 계정)가 데스크 폴더에 못 들어가면 C:\actions-runner\survey-share.cmd 를 데스크 계정으로 한 번 더블클릭하라고 노란 경고
       - name: 통합데스크 설문 → 클라우드
         if: always()
         run: pnpm --filter @report/collector survey
