@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 import { SURVEY_FILE_RE, surveyList, surveysFromDesk } from "@report/core";
 import { fbLogin, readSettingsJson, writeSettingsJson } from "./firebase";
 import { say } from "./okpos";
-import { noFileHint, probeDir, scanOutboxes, SHARE_CMD, SHARE_PS1, shareCmd, shareScript } from "./surveyShare";
+import { noFileHint, probeDir, scanOutboxes, SHARE_CMD, shareCmd } from "./surveyShare";
 
 const env = (k: string) => process.env[k] || "";
 const todayKst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -35,17 +35,14 @@ function roamings(): string[] {
   return out;
 }
 
-/** 연결 도우미(survey-share.cmd · .ps1)를 실행기 폴더 맨 위에 (…\_work\_tool → 두 단계 위, naver-login.cmd 옆) — 못 쓰면 도구 폴더에. 깐 폴더를 돌려줌 */
+/** 연결 도우미(survey-share.cmd)를 실행기 폴더 맨 위에 (…\_work\_tool → 두 단계 위, naver-login.cmd 옆) — 못 쓰면 도구 폴더에. 깐 폴더를 돌려줌 */
 function installShareHelper(): string | undefined {
   if (process.platform !== "win32" || !env("RUNNER_TOOL_CACHE")) return undefined;
   const put = (dir: string) => {
     mkdirSync(dir, { recursive: true });
-    const write = (name: string, body: string) => {
-      const f = join(dir, name);
-      if (!existsSync(f) || readFileSync(f, "utf8") !== body) writeFileSync(f, body, "utf8");
-    };
-    write(SHARE_PS1, "\uFEFF" + shareScript());
-    write(SHARE_CMD, shareCmd());
+    const f = join(dir, SHARE_CMD);
+    const body = shareCmd();
+    if (!existsSync(f) || readFileSync(f, "utf8") !== body) writeFileSync(f, body, "utf8");
   };
   for (const dir of [resolve(env("RUNNER_TOOL_CACHE"), "..", ".."), join(env("RUNNER_TOOL_CACHE"), "survey")])
     try {

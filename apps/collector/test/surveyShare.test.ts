@@ -1,6 +1,6 @@
 import { join } from "node:path/win32";
 import { describe, expect, it } from "vitest";
-import { DESK_DIRS, NETWORK_SERVICE_SID, noFileHint, probeDir, scanOutboxes, SHARE_PS1, shareCmd, shareScript, type Probe } from "../src/surveyShare";
+import { DESK_DIRS, NETWORK_SERVICE_SID, noFileHint, probeDir, scanOutboxes, shareCmd, type Probe } from "../src/surveyShare";
 
 const err = (code: string) => () => {
   throw Object.assign(new Error(code), { code });
@@ -60,24 +60,29 @@ describe("설문 보고 폴더 — 실행기(서비스 계정)가 들어가는�
   });
 });
 
-describe("연결 도우미 (survey-share.cmd → survey-share.ps1)", () => {
-  it("더블클릭 파일은 영어만 · 옆의 .ps1 을 돌리고 창을 멈춰 둠", () => {
-    const cmd = shareCmd();
-    expect(/^[\x00-\x7f]*$/.test(cmd)).toBe(true);
-    expect(cmd).toContain(`-File "%~dp0${SHARE_PS1}"`);
-    expect(cmd).toContain("-ExecutionPolicy Bypass");
-    expect(cmd).toContain("\r\npause\r\n");
+describe("연결 도우미 (survey-share.cmd — PowerShell 없이 cmd 만)", () => {
+  const cmd = shareCmd();
+  const lines = cmd.split("\r\n");
+
+  it("명령 줄은 영어만 (한글 폴더 이름을 쓰지 않음) · 안내 글만 한글(UTF-8) · 줄바꿈은 CRLF", () => {
+    expect(lines[0]).toBe("@echo off");
+    expect(lines[1]).toBe("chcp 65001 >nul");
+    for (const l of lines.filter((x) => !/^\s*(rem|echo) /.test(x))) expect(/^[\x00-\x7f]*$/.test(l)).toBe(true);
+    expect(cmd).not.toMatch(/[^\r]\n/);
+    expect(cmd).not.toMatch(/powershell/i);
+    for (const n of DESK_DIRS) expect(cmd).not.toContain(n);
   });
 
-  it("두 데스크 폴더 이름 · 보고 폴더 하나만 · NETWORK SERVICE 읽기(하위 파일까지)", () => {
-    const ps = shareScript();
-    for (const n of DESK_DIRS) expect(ps).toContain(`'${n}'`);
-    expect(ps).toContain("Join-Path $env:APPDATA $n");
-    expect(ps).toContain("Join-Path $app 'report-outbox'");
-    expect(ps).toContain(`icacls.exe "$box" /grant '*${NETWORK_SERVICE_SID}:(OI)(CI)RX' /T /Q`);
-    // 쓰기 · 지우기 권한은 주지 않음, 데스크 폴더 전체도 아님
-    expect(ps).not.toMatch(/:\(OI\)\(CI\)(F|M|W)/);
-    expect(ps).not.toMatch(/icacls\.exe "\$app"/);
-    expect(ps.split("\r\n").length).toBeGreaterThan(5);
+  it("이 계정 %APPDATA% 에서 report-outbox 가 있는 폴더만 · NETWORK SERVICE 읽기(하위 파일까지)만", () => {
+    expect(cmd).toContain('for /d %%D in ("%APPDATA%\\*") do if exist "%%D\\report-outbox\\" (');
+    expect(cmd).toContain(`icacls "%%D\\report-outbox" /grant "*${NETWORK_SERVICE_SID}:(OI)(CI)RX" /T /Q`);
+    // 쓰기 · 지우기 권한은 주지 않음, 데스크 폴더 전체(%%D)에도 아님
+    expect(cmd).not.toMatch(/:\(OI\)\(CI\)(F|M|W)/);
+    expect(cmd).not.toMatch(/icacls "%%D"/);
+  });
+
+  it("괄호 묶음 안의 안내 글 괄호는 ^ 로 막음 · 끝에 창을 멈춰 둠", () => {
+    for (const l of lines.filter((x) => /^\s+echo /.test(x))) expect(l.replace(/\^[()]/g, "")).not.toMatch(/[()]/);
+    expect(lines.at(-2)).toBe("pause");
   });
 });
