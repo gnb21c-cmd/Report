@@ -2,7 +2,7 @@
    키즈 실시간 (2026-10-16 사장님) — 첫 화면 '입장권 판매 총 수량' 칸을 누르면
    키즈 POS 통합데스크가 1분마다 · 바뀌면 바로 클라우드 deskLive/now 에 올리는 지금 현황 (astanakiz docs/LIVE.md · docs/KIDS_LIVE.md)
    - 열 때 · 아래로 당겼다 놓을 때 · [새로고침] · 앱으로 돌아올 때 다시 읽음
-   - 위에서 아래로: 기준 시각 → 오늘 입장(총 = 네이버 + 현장) → 입장료 매출 → 네이버 예약(시간 칸) → 열쇠 45칸
+   - 위에서 아래로: 기준 시각 → 오늘 입장(총 = 네이버 + 현장) → 열쇠 45칸 → 입장료 매출 → 네이버 예약(시간 칸) (열쇠를 오늘 입장 바로 밑으로 — 사장님 10/16)
    - 열쇠는 번호 · 색(반납 조건)만, 번호를 누르면 손님 이름 · 전화번호 그대로 (열쇠 미반납 때 관리자가 전화 — 사장님 지시)
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -171,6 +171,58 @@ function Body({ live, now, all, onAll, onPick }: { live: DeskLive; now: Date; al
 
       <section className="card klive-card">
         <h2>
+          열쇠 운용 <span className="note">번호를 누르면 손님 · 전화</span>
+        </h2>
+        <div className="klive-ksum">
+          <span>
+            사용 <b className="num">{k.used}</b>/{k.total}
+          </span>
+          <span>
+            빈 열쇠 <b className="num">{k.free}</b>
+          </span>
+          <span>
+            현장 판매 가능 <b className="num">{k.walkable}</b>
+            {k.flex ? ` +유동 ${k.flex}` : ""}
+          </span>
+        </div>
+        <div className="klive-keys">
+          {Array.from({ length: k.total }, (_, i) => {
+            const no = i + 1;
+            const m = k.map[no];
+            if (!m)
+              return (
+                <button key={no} className="klive-key num" disabled aria-label={`${no}번 빈 열쇠`}>
+                  {no}
+                </button>
+              );
+            const h = k.holders[m.h];
+            return (
+              <button key={no} className={`klive-key num ${m.c}${h.kind === "s" ? " svc" : ""}`} onClick={() => onPick(no)} aria-label={`${no}번 ${KIND[h.kind]} ${COLOR[m.c]}`}>
+                {no}
+              </button>
+            );
+          })}
+        </div>
+        <div className="klive-legend">
+          <span>
+            <i /> 빈 열쇠
+          </span>
+          <span>
+            <i className="in" /> 이용 중
+          </span>
+          <span>
+            <i className="pink" /> 반납 시간(10분 안)
+          </span>
+          <span>
+            <i className="red" /> 반납 시간 넘음
+          </span>
+          <span>
+            <i className="svc" /> 서비스 키
+          </span>
+        </div>
+      </section>
+      <section className="card klive-card">
+        <h2>
           입장료 매출 <span className="note">{live.at.slice(11, 16)} 기준 · {s.kind} 단가</span>
         </h2>
         <div className="klive-rows">
@@ -243,58 +295,6 @@ function Body({ live, now, all, onAll, onPick }: { live: DeskLive; now: Date; al
         {n.products.length > 1 && <p className="note">상품별 완료: {n.products.map((x) => `${x.name} ${x.done}`).join(" · ")}</p>}
       </section>
 
-      <section className="card klive-card">
-        <h2>
-          열쇠 운용 <span className="note">번호를 누르면 손님 · 전화</span>
-        </h2>
-        <div className="klive-ksum">
-          <span>
-            사용 <b className="num">{k.used}</b>/{k.total}
-          </span>
-          <span>
-            빈 열쇠 <b className="num">{k.free}</b>
-          </span>
-          <span>
-            현장 판매 가능 <b className="num">{k.walkable}</b>
-            {k.flex ? ` +유동 ${k.flex}` : ""}
-          </span>
-        </div>
-        <div className="klive-keys">
-          {Array.from({ length: k.total }, (_, i) => {
-            const no = i + 1;
-            const m = k.map[no];
-            if (!m)
-              return (
-                <button key={no} className="klive-key num" disabled aria-label={`${no}번 빈 열쇠`}>
-                  {no}
-                </button>
-              );
-            const h = k.holders[m.h];
-            return (
-              <button key={no} className={`klive-key num ${m.c}${h.kind === "s" ? " svc" : ""}`} onClick={() => onPick(no)} aria-label={`${no}번 ${KIND[h.kind]} ${COLOR[m.c]}`}>
-                {no}
-              </button>
-            );
-          })}
-        </div>
-        <div className="klive-legend">
-          <span>
-            <i /> 빈 열쇠
-          </span>
-          <span>
-            <i className="in" /> 이용 중
-          </span>
-          <span>
-            <i className="pink" /> 반납 시간(10분 안)
-          </span>
-          <span>
-            <i className="red" /> 반납 시간 넘음
-          </span>
-          <span>
-            <i className="svc" /> 서비스 키
-          </span>
-        </div>
-      </section>
     </>
   );
 }
