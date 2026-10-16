@@ -15,6 +15,7 @@
     "export-daily": "tsx src/exportDaily.ts",
     "plan": "tsx src/plan.ts",
     "halfoff": "tsx src/halfoff.ts",
+    "sellout": "tsx src/sellout.ts",
     "extra": "tsx src/extra.ts",
     "naver": "tsx src/naver.ts",
     "live": "tsx src/live.ts",

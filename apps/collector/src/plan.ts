@@ -6,11 +6,13 @@
    - 매일 15시: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
      목요일 15시에는 주간 잠정안을 다시 세지 않음(매니저가 확정하는 중에 숫자가 바뀌지 않게) — 새벽 계산이 빠졌을 때만 그때 만듦
    - 같은 요일 결과로 ±1 (2026-10-12 사장님 규칙, core bakery.ts nextSteps): 날짜마다 앞선 같은 요일(평일에 낀 공휴일은 공휴일끼리) 계획의 칸 +
-     그날 결과(할인 없이 매진 +1 · 할인 있으며 매진 그대로 · 폐기 −1)를 손님 예측 위에 더함. 최종안(3일 전)에는 7일 전 결과가 늘 들어옴
+     그날 결과(매진 목표 20:40 — 그 전에 다 팔림 +1 · 그 뒤 다 팔림 그대로 · 폐기 −1, 2026-10-16)를 손님 예측 위에 더함. 최종안(3일 전)에는 7일 전 결과가 늘 들어옴
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
+   - 규칙이 바뀌었을 때(2026-10-16 매진 목표 20:40) 이미 센 주간 잠정안에 같은 요일 칸만 다시: PLAN_RESTEP=1 · PLAN_TODAY = 그 주간안을 센 목요일
+     예측(base) · 매니저 잠정 확정 · 있던 최종안은 그대로 (최종안은 3일 전에 잠정 확정 ±10% 안에서 새 칸을 씀)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -56,6 +58,24 @@ async function main() {
 
   const out = new Map<string, PlanDoc>();
   const load = async (d: string): Promise<PlanDoc> => out.get(d) || asPlan(parse(await readPlan(fb, d))) || { v: 2, date: d };
+
+  // 규칙이 바뀌었을 때 — 이미 센 주간 잠정안에 같은 요일 칸만 다시 (그 주간안을 셀 때 쓴 실적 날까지로)
+  if (env("PLAN_RESTEP") === "1") {
+    if (weekday(today) !== WEEK_PLAN_WEEKDAY) throw new Error("칸 다시(PLAN_RESTEP)는 주간안을 센 목요일 날짜로 (PLAN_TODAY)");
+    for (const d of weekDates(today)) {
+      const doc = await load(d);
+      if (!doc.week) {
+        console.log(`칸 다시: ${d} — 주간 잠정안이 없어 건너뜀`);
+        continue;
+      }
+      const week = restep(doc.week, await stepsFor(d, board, doc.week.asOf));
+      const changed = week.items.filter((it, i) => it.qty !== doc.week!.items[i].qty);
+      console.log(`칸 다시: ${d} · 바뀐 빵 ${changed.length}종 (늘림 ${changed.filter((it) => it.qty > doc.week!.items.find((x) => x.name === it.name)!.qty).length}종)`);
+      if (changed.length) out.set(d, { ...doc, week });
+    }
+    await save(out);
+    return;
+  }
 
   // 목요일 — 다음 주 주간 잠정안 (있던 최종안은 그대로). 새벽(week)에 셈, 오늘 이미 셌으면 다시 세지 않음
   const weekOnly = env("PLAN_MODE") === "week";

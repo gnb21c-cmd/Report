@@ -11,8 +11,7 @@ import {
   removeRefunds,
   sectorLookup,
   SheetError,
-  type ReceiptLine,
-} from "../src";
+  type ReceiptLine, breadLastTimes } from "../src";
 
 // 2026-10-02 카페아스타나 '영수증별 매출 상세현황' 모양 (실제 파일의 머리글 · 줄 몇 개를 그대로 옮김)
 const HEAD = ["포스번호", "영수증번호", "구분", "테이블명", "최초주문", "결제시각", "상품코드", "바코드", "상품명", "수량", "총매출액", "ERP 매핑코드", "비고", "할인액", "할인구분", "실매출액", "가액", "부가세"];
@@ -198,6 +197,28 @@ describe("베이커리 50% 할인 (저녁 8시 30분 뒤)", () => {
     const { part } = buildStorePart({ store: "cafe", date: "2026-10-02", file: "t.xls", sheet: s, sectorOf: sectorLookup({}) });
     expect(part.bakeryHalf).toBe(6);
     expect(part.bakeryHalfBy).toEqual({ 소금빵: 3, 크루아상: 3 });
+    // 빵별 마지막 판매 시각 (매진 목표 20:40 판단용, 2026-10-16) — 음료는 뺌
+    expect(part.bakeryLastBy).toEqual({ 소금빵: "20:40:00", 크루아상: "20:50:00" });
+  });
+});
+
+describe("빵별 마지막 판매 시각 (매진 목표 20:40, 2026-10-16 사장님)", () => {
+  it("빵 줄 중 가장 늦은 시각 — 반품 · 0개 이하 · 시각 없음 · 빵 아닌 상품은 뺌", () => {
+    const isBread = (n: string) => n !== "아메리카노";
+    expect(
+      breadLastTimes(
+        [
+          { name: "소금빵", time: "19:10:00", qty: 2 },
+          { name: "소금빵", time: "20:35:10", qty: 1 },
+          { name: "소금빵", time: "20:58:00", qty: 1, refund: true },
+          { name: "소금빵", time: "21:00:00", qty: -1 },
+          { name: "크루아상", time: "", qty: 1 },
+          { name: "크루아상", time: "18:02", qty: 1 },
+          { name: "아메리카노", time: "20:59:00", qty: 1 },
+        ],
+        isBread,
+      ),
+    ).toEqual({ 소금빵: "20:35:10", 크루아상: "18:02" });
   });
 });
 
