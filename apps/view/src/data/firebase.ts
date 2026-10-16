@@ -7,7 +7,8 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, cleanSurveys, mergeSurveyDocs, SURVEY_INBOX, surveysFromInbox, type DayReport, type DayWeather, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { asOrder, asPlan, cleanSettings, cleanSurveys, DESK_LIVE, mergeSurveyDocs, parseDeskLive, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import demoDeskLive from "./demoDeskLive.json";
 import type { Source } from "./source";
 
 export interface FirebaseConfig {
@@ -213,4 +214,29 @@ export async function liveDoc(cfg: FirebaseConfig, board: string, date: string):
     }
   }
   return doc;
+}
+
+/** 키즈 실시간 — 키즈 POS 통합데스크가 1분마다 · 바뀌면 바로 덮어쓰는 deskLive/now (astanakiz docs/LIVE.md)
+    없으면 live: null · 모양이 틀리면 bad · 인터넷 · 권한 오류는 throw (화면이 갖고 있던 것을 그대로 두게) */
+export async function deskLiveNow(): Promise<{ live: DeskLive | null; bad?: boolean }> {
+  if (__DEMO__) {
+    // 체험판: 통합데스크 체험판(10/5 13:50) 글을 오늘 · 지금 받은 것처럼
+    const k = new Date(Date.now() + 9 * 3600e3).toISOString();
+    return { live: parseDeskLive({ ...demoDeskLive, day: todayKst(), at: `${k.slice(0, 10)} ${k.slice(11, 19)}` }) };
+  }
+  const cfg = firebaseConfig();
+  const board = boardKey();
+  if (!cfg || !board) return { live: null };
+  let res: Response;
+  try {
+    res = await fetch(`${base(cfg, board)}/${DESK_LIVE}/now?key=${cfg.apiKey}`, { cache: "no-store" });
+  } catch {
+    throw new Error("인터넷에 연결하지 못했습니다. 연결을 확인하고 다시 당겨 주세요.");
+  }
+  if (res.status === 404) return { live: null };
+  if (res.status === 403) throw new Error("키즈 실시간을 읽을 수 없습니다 — 클라우드 보안 규칙에 deskLive 가 들어갔는지 확인해 주세요 (docs/KIDS_LIVE.md).");
+  if (!res.ok) throw new Error(`키즈 실시간 받기 오류 (${res.status})`);
+  const f = fieldsOf(await res.json());
+  const live = parseDeskLive(f.json);
+  return live ? { live } : { live: null, bad: true };
 }

@@ -73,6 +73,20 @@ service cloud.firestore {
         allow delete: if isSender(board);
       }
 
+      // 키즈 실시간 (2026-10-16) — 키즈 POS 통합데스크가 1분마다 · 바뀌면 바로 지금 현황을 씀 → B '입장권 판매 총 수량' → 키즈 실시간 (docs/KIDS_LIVE.md)
+      //   문서 하나(now)만 계속 덮어씀 · json = 통합데스크 현황 글(astanakiz-live). 열쇠를 가진 손님 이름 · 전화 포함(열쇠 미반납 때 관리자 전화 — 사장님 지시)이라 지난 기록은 안 쌓음
+      //   이 매장 열쇠를 아는 곳만(보고 설정이 있는 매장) · 현황 모양 · 크기만 · 지우기는 입력 계정만
+      match /deskLive/{doc} {
+        allow read: if true;
+        allow create, update: if doc == "now"
+          && exists(/databases/$(database)/documents/boards/$(board)/settings/main)
+          && request.resource.data.keys().hasOnly(["json", "at"])
+          && request.resource.data.json is string && request.resource.data.json.size() < 100000
+          && request.resource.data.json.matches("(?s)^[{].*astanakiz-live.*$")
+          && request.resource.data.at is string && request.resource.data.at.size() < 40;
+        allow delete: if isSender(board);
+      }
+
       // 베이커리 작업지시 — 계획(plans: 매일 16시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
       match /plans/{date} {
         allow read: if true;

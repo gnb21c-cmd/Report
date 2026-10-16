@@ -1598,3 +1598,297 @@ button.quad-box {
 .survey-tbl td.survey-no { width: 2.4em; color: var(--muted); white-space: nowrap; }
 .survey-tbl .survey-bar { display: block; height: 4px; border-radius: 99px; background: var(--accent); opacity: 0.6; margin-top: 3px; }
 .survey-tbl td.strong-num { font-weight: 700; }
+
+/* ---------- 키즈 실시간 (2026-10-16 · KidsLive.tsx) — 통합데스크 지금 현황 ---------- */
+.klive-pull {
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14.5px;
+  transition: height 0.15s;
+}
+.klive-pull.on {
+  height: 44px;
+}
+.klive-spin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--grid);
+  border-top-color: var(--accent);
+  animation: klive-spin 0.8s linear infinite;
+}
+@keyframes klive-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .klive-spin {
+    animation: none;
+  }
+  .klive-pull {
+    transition: none;
+  }
+}
+.klive-stamp {
+  font-size: 15px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.klive-stamp b {
+  color: var(--text-primary);
+}
+.klive-stamp .chip {
+  padding: 1px 9px;
+  font-size: 13.5px;
+}
+.klive-card {
+  display: grid;
+  gap: 10px;
+}
+.klive-card h2 {
+  font-size: 16px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.klive-card h2 .note {
+  font-weight: 400;
+  margin: 0;
+}
+.klive-card > h2 + * {
+  margin-top: 0;
+}
+.klive-big {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.klive-big > .num {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+}
+.klive-big small {
+  font-size: 19px;
+  font-weight: 700;
+}
+.klive-split,
+.klive-ntot {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.klive-split div,
+.klive-ntot div {
+  background: var(--page);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.klive-ntot div {
+  text-align: center;
+}
+.klive-split span,
+.klive-ntot span {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+.klive-split b,
+.klive-ntot b {
+  font-size: 22px;
+}
+.klive .good {
+  color: var(--good);
+}
+.klive-rows {
+  display: grid;
+  gap: 6px;
+}
+.klive-rows div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.klive-rows span {
+  color: var(--text-secondary);
+}
+.klive-rows .sum {
+  border-top: 1px solid var(--grid);
+  padding-top: 8px;
+  font-size: 19px;
+  font-weight: 800;
+}
+.klive-rows .sum span {
+  color: var(--text-primary);
+}
+.klive-slots th {
+  position: static;
+}
+.klive-slots td {
+  padding: 5px 4px;
+}
+.klive-slots th:first-child,
+.klive-slots td:first-child {
+  text-align: left;
+}
+.klive-ksum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--text-secondary);
+}
+.klive-ksum b {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+.klive-keys {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 5px;
+}
+.klive-key {
+  aspect-ratio: 1;
+  max-width: 100%;
+  padding: 0;
+  border-radius: 8px;
+  background: none;
+  border: 1.5px solid var(--grid);
+  color: var(--muted);
+  font-size: 15.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.klive-key:disabled {
+  opacity: 1;
+}
+.klive-key.in {
+  border: 2px solid var(--text-primary);
+  color: var(--text-primary);
+}
+.klive-key.pink {
+  border: 2px solid var(--pink);
+  background: var(--pink);
+  color: #fff;
+}
+.klive-key.red {
+  border: 2px solid var(--bad);
+  background: var(--bad);
+  color: #fff;
+}
+.klive-key.svc {
+  border-style: dashed;
+}
+.klive-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.klive-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: -2px;
+  border: 1.5px solid var(--grid);
+}
+.klive-legend i.in {
+  border: 2px solid var(--text-primary);
+}
+.klive-legend i.pink {
+  background: var(--pink);
+  border-color: var(--pink);
+}
+.klive-legend i.red {
+  background: var(--bad);
+  border-color: var(--bad);
+}
+.klive-legend i.svc {
+  border: 1.5px dashed var(--text-primary);
+}
+.klive-sheet {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.klive-kind {
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 2px 7px;
+  margin-left: 8px;
+  background: var(--track);
+  color: var(--accent);
+  vertical-align: 3px;
+}
+.klive-kind.svc {
+  background: var(--page);
+  color: var(--text-primary);
+  border: 1.5px dashed var(--muted);
+}
+.klive-phone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.klive-phone > .num {
+  font-size: 23px;
+  font-weight: 700;
+  user-select: all;
+}
+.klive-call {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.klive-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+}
+.klive-kv dt {
+  color: var(--text-secondary);
+}
+.klive-kv dd {
+  margin: 0;
+  min-width: 0;
+  text-align: left;
+}
+.klive-chip {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 0 7px;
+  margin-right: 4px;
+  border: 1.5px solid var(--text-primary);
+}
+.klive-chip.pink {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #fff;
+}
+.klive-chip.red {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}

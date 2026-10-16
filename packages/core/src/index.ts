@@ -21,3 +21,4 @@ export * from "./forecast";
 export * from "./bakery";
 export * from "./live";
 export * from "./survey";
+export * from "./deskLive";
