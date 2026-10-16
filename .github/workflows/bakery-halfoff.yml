@@ -1,6 +1,7 @@
-# 베이커리 50% 할인 개수 채우기 (손으로 실행) — 이미 올린 날의 영수증 줄로 다시 셈 (apps/collector/src/halfoff.ts)
-# 공개 저장소라 기록에는 날짜 · 처리 여부만
-name: 50% 할인 채우기
+# 베이커리 지난 날 다시 셈 (손으로 실행) — 이미 올린 날의 영수증 줄로
+#   50% 할인 개수 (apps/collector/src/halfoff.ts) · 빵별 매진 시각(마지막 판매, 매진 목표 20:40 — apps/collector/src/sellout.ts, 2026-10-16)
+# 공개 저장소라 기록에는 날짜 · 처리 여부 · 종류 수만
+name: 50% 할인 · 매진 시각 채우기
 on:
   push:
     branches: ["feature/bakery-feedback"]
@@ -13,6 +14,15 @@ on:
       to:
         description: "끝 (YYYY-MM-DD, 비우면 어제)"
         required: false
+      what:
+        description: "무엇을 (halfoff = 50% 할인 개수 · sellout = 빵별 매진 시각)"
+        type: choice
+        options: ["halfoff", "sellout"]
+        default: "halfoff"
+      dry:
+        description: "확인만 (매진 시각 — 쓰지 않음)"
+        type: boolean
+        default: false
 jobs:
   fill:
     runs-on: ubuntu-latest
@@ -25,8 +35,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @report/collector halfoff
+      - run: pnpm --filter @report/collector ${{ inputs.what == 'sellout' && 'sellout' || 'halfoff' }}
         env:
+          SELLOUT_FROM: ${{ inputs.from }}
+          SELLOUT_TO: ${{ inputs.to }}
+          SELLOUT_DRY: ${{ inputs.dry == true && '1' || '' }}
           HALF_FROM: ${{ inputs.from }}
           HALF_TO: ${{ inputs.to }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

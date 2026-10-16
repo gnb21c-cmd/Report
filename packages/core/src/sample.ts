@@ -104,10 +104,16 @@ function cafePart(date: string): StorePart {
   const hs: Record<Sector, number[]> = { 바리스타: HOURS.map(() => 0), 베이커리: HOURS.map(() => 0), 키친: HOURS.map(() => 0), 기타: HOURS.map(() => 0) };
   const cupsH = HOURS.map(() => 0);
   const products: ProductTuple[] = [];
+  const bakeryLastBy: Record<string, string> = {};
   let cups = 0;
   for (const it of MENU) {
     const qty = Math.max(0, Math.round(it.base * f * (0.6 + rand(date + it.name) * 0.8)));
     if (!qty) continue;
+    // 빵 마지막 판매 시각 (체험판 — 19:30 ~ 21:00 사이, 매진 목표 20:40 화면용)
+    if (it.sector === "베이커리") {
+      const m = 19 * 60 + 30 + Math.floor(rand(date + it.name + "t") * 90);
+      bakeryLastBy[it.name] = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00`;
+    }
     const disc = rand(date + it.name + "d") < 0.2 ? 0.95 : 1;
     const net = Math.round((qty * it.price * disc) / 100) * 100;
     sectors[it.sector] += net;
@@ -140,6 +146,7 @@ function cafePart(date: string): StorePart {
     products: products.sort((a, b) => b[3] - a[3]),
     refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
     kids: null,
+    bakeryLastBy,
   };
 }
 

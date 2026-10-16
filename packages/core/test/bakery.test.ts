@@ -16,6 +16,8 @@ import {
   stepGroup,
   stepOf,
   STEP_LIMIT,
+  SELL_OUT_TARGET,
+  restep,
   displayDays,
   finalDay,
   floorCopy,
@@ -416,6 +418,46 @@ describe("같은 요일 결과로 ±1 (2026-10-12 사장님 규칙)", () => {
     expect(stepOf(R(60, 59))).toBe(-1);
     expect(stepOf(R(null, 5))).toBeNull(); // 작업지시에 없던 상품
     expect(stepOf(R(0, 0))).toBeNull();
+  });
+  const RT = (made: number, sold: number, half: number, last: string | null): BreadResult => ({ ...R(made, sold, half), last });
+  it("매진 목표 20:40 (2026-10-16 사장님, 20:30 → 20:40) — 20:40 전에 다 팔림 +1 · 20:40 뒤 다 팔림 그대로 · 폐기 −1", () => {
+    expect(SELL_OUT_TARGET).toBe("20:40");
+    expect(stepOf(RT(20, 20, 0, "19:50:12"))).toBe(1); // 할인 전에 다 팔림
+    expect(stepOf(RT(20, 20, 3, "20:33:00"))).toBe(1); // 할인으로 다 팔렸지만 20:40 전 (예전 규칙은 그대로)
+    expect(stepOf(RT(20, 20, 3, "20:39:59"))).toBe(1);
+    expect(stepOf(RT(20, 20, 3, "20:40:00"))).toBe(0); // 목표 시각에 다 팔림
+    expect(stepOf(RT(20, 20, 5, "20:52"))).toBe(0);
+    expect(stepOf(RT(20, 22, 0, "20:45:00"))).toBe(0); // 할인 없이 20:40 뒤 다 팔림
+    expect(stepOf(RT(60, 59, 0, "20:59:00"))).toBe(-1); // 남음
+    // 마지막 판매 시각을 모르는 예전 날은 예전 규칙 (할인 없이 매진 +1 · 할인 있으며 매진 그대로)
+    expect(stepOf(RT(20, 20, 3, null))).toBe(0);
+    expect(stepOf(RT(20, 20, 0, null))).toBe(1);
+  });
+  it("그날 결과에 빵별 마지막 판매 시각 (분까지, 모르면 null)", () => {
+    const d = day("2026-10-13", 100, [["소금빵", 20], ["크루아상", 5]]);
+    d.cafe!.bakeryLastBy = { 소금빵: "20:36:10" };
+    const st0 = { madeOn: "2026-10-10", asOf: "2026-10-09", kind: "평일" as const, visitors: 100, weather: "모름", total: 25 };
+    const rows = dayResult(new Board([d]), "2026-10-13", { v: 2, date: "2026-10-13", final: { ...st0, items: [{ name: "소금빵", qty: 20 }, { name: "크루아상", qty: 5 }] } }, null);
+    expect(rows.map((x) => [x.name, x.last])).toEqual([["소금빵", "20:36"], ["크루아상", null]]);
+    expect(stepOf(rows[0])).toBe(1);
+  });
+  it("이미 센 계획에 칸만 다시 (규칙이 바뀐 주간안 고치기) — 예측(base)은 그대로, 칸 × 단위 · ±30% · 합계 다시", () => {
+    const st1 = {
+      madeOn: "2026-10-15", asOf: "2026-10-14", kind: "평일" as const, visitors: 100, weather: "모름",
+      items: [{ name: "소금빵", qty: 21, base: 20, step: 1 }, { name: "몽블랑", qty: 15, base: 15 }, { name: "크루아상", qty: 9, base: 10, step: -1 }, { name: "바게트", qty: 4, base: 4 }],
+      total: 49,
+    };
+    const out = restep(st1, { 소금빵: 2, 몽블랑: 1, 크루아상: -1, 바게트: 9 });
+    expect(out.items).toEqual([
+      { name: "소금빵", qty: 22, base: 20, step: 2 },
+      { name: "몽블랑", qty: 20, base: 15, step: 1 }, // 5개 단위
+      { name: "크루아상", qty: 9, base: 10, step: -1 },
+      { name: "바게트", qty: 5, base: 4, step: 1 }, // ±30% (적어도 1칸)
+    ]);
+    expect(out.total).toBe(56);
+    expect(out.madeOn).toBe("2026-10-15");
+    // 칸이 0 이 되면 step 은 뺌 · base 가 없던 예전 줄은 qty 를 예측으로
+    expect(restep({ ...st1, items: [{ name: "소금빵", qty: 21, base: 20, step: 1 }, { name: "식빵", qty: 6 }] }, {}).items).toEqual([{ name: "소금빵", qty: 20, base: 20 }, { name: "식빵", qty: 6, base: 6 }]);
   });
   // 10-12(월): 소금빵 지시 60(칸 +2) → 50 팔림(폐기) · 크루아상 20 → 20 다 팔림(할인 없음) · 시나몬롤 10(칸 −1) → 10 팔림 중 2개 50% · 바게트 5 → 하나도 안 팔림
   const r = day("2026-10-12", 100, [["소금빵", 50], ["크루아상", 20], ["시나몬롤", 10]]);

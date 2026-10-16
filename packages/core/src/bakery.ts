@@ -323,6 +323,8 @@ export interface BreadResult {
   waste: number | null;
   /** 다 팔림 (판매 ≥ 생산 · 할인 없음) */
   soldOut: boolean;
+  /** 마지막 판매 시각 HH:MM (다 팔렸으면 = 매진 시각). 모르는 날(2026-10-16 전에 올리고 다시 세지 않은 날)은 null */
+  last?: string | null;
 }
 
 export function dayResult(board: Board, date: string, plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): BreadResult[] {
@@ -331,6 +333,7 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
   const made = new Map(rows.map((r) => [r.name, r.qty]));
   const sold = new Map(board.products(date, date, "베이커리").filter((p) => !NOT_BREAD.has(p.name)).map((p) => [p.name, p.qty]));
   const halfBy = board.report(date)?.cafe?.bakeryHalfBy || {};
+  const lastBy = board.report(date)?.cafe?.bakeryLastBy || {};
   const baseOf = new Map<string, number>();
   for (const it of plan?.week?.items || []) baseOf.set(it.name, it.base ?? it.qty);
   for (const it of plan?.final?.items || []) baseOf.set(it.name, it.base ?? it.qty);
@@ -341,7 +344,7 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
       // 그날 짝을 못 찾은 반품 줄 등으로 개수가 마이너스면 판매 0 으로 (판매 · 할인 · 생산이 마이너스로 보이지 않게)
       const s = Math.max(0, sold.get(name) || 0);
       const h = Math.max(0, Math.min(s, halfBy[name] || 0));
-      return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: m == null ? null : Math.max(0, m - s), soldOut: m != null && m > 0 && s >= m && h === 0 };
+      return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: m == null ? null : Math.max(0, m - s), soldOut: m != null && m > 0 && s >= m && h === 0, last: lastBy[name] ? lastBy[name].slice(0, 5) : null };
     })
     .sort((a, b) => (b.made ?? b.sold) - (a.made ?? a.sold) || a.name.localeCompare(b.name, "ko"));
 }
@@ -415,14 +418,18 @@ export function productionStarted(date: string, now: Now): boolean {
 }
 
 /* ---------- 같은 요일 결과로 ±1 (2026-10-12 사장님 규칙) ----------
-   남은 빵은 그날 모두 폐기. 빵마다 그날 결과 한 칸:
-   - 할인 없이 매진(지시 수량 이상 팔림 · 50% 할인 없음) → +1
-   - 할인 있으며 매진(다 팔렸지만 저녁 50% 할인으로) → 그대로
+   남은 빵은 그날 모두 폐기. 빵마다 그날 결과 한 칸 — 매진 목표 20:40 (2026-10-16 사장님: 20:30 → 20:40, 상황에 따라 다시 정함):
+   결제가 20:30 부터 몰려 20:40 쯤 끝나므로, 20:30 할인 때 빵이 조금 남아 있다가 20:40 쯤 다 팔리는 것이 목표
+   - 20:40 전에 다 팔림(지시 수량 이상 팔림 · 마지막 판매가 20:40 전) → +1
+   - 20:40 뒤에 다 팔림 → 그대로
    - 폐기가 생김(지시 수량보다 덜 팔림) → −1
+   마지막 판매 시각을 모르는 예전 날은 예전 규칙(할인 없이 매진 +1 · 할인 있으며 매진 그대로)
    칸은 다음 같은 요일에만 씀 (월요일 결과 → 다음 월요일. 평일에 낀 공휴일은 공휴일끼리) — 손님 예측 위에 칸 × 생산 단위(몽블랑 5개)를 더함
    칸은 계획(plans 의 step)에 남겨 다음 같은 요일이 이어 받음 · 예측의 ±30% 안으로 묶음
    최종안은 3일 전에 정하므로 7일 전 같은 요일 결과는 늘 들어옴 */
 export const STEP_LIMIT = 0.3;
+/** 매진 목표 시각 (한국 시간) — 이보다 일찍 다 팔리면 다음 같은 요일 +1 */
+export const SELL_OUT_TARGET = "20:40";
 
 /** 같은 요일 묶음 — 요일마다 따로, 평일에 낀 공휴일 · 대체 휴일은 '공휴일'끼리 (주말은 그 요일) */
 export function stepGroup(date: string): string {
@@ -444,7 +451,19 @@ export function sameGroupBefore(date: string, n = 8): string[] {
 export function stepOf(r: BreadResult): number | null {
   if (!r.made) return null;
   if (r.sold < r.made) return -1;
+  if (r.last) return r.last.slice(0, 5) < SELL_OUT_TARGET ? 1 : 0;
   return r.half > 0 ? 0 : 1;
+}
+
+/** 이미 센 계획 단계에 칸만 다시 (규칙이 바뀌어 같은 요일 칸이 달라졌을 때 — 예측 base 는 그대로) · 칸 × 단위 · ±30% · 합계 다시 */
+export function restep(st: PlanStep, steps: Record<string, number>): PlanStep {
+  const items = st.items.map((it) => {
+    const base = it.base ?? it.qty;
+    const k = clampStep(it.name, base, steps[it.name] ?? 0);
+    const { step: _old, ...rest } = it;
+    return { ...rest, qty: snapUnit(it.name, base + k * breadUnit(it.name)), base, ...(k ? { step: k } : {}) };
+  });
+  return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 
 /** 칸을 예측의 ±30% 안으로 (적어도 ±1 칸은 허용) */

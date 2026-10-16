@@ -25,6 +25,7 @@ import {
   breadUnit,
   stepGroup,
   stepOf,
+  SELL_OUT_TARGET,
   producedOf,
   weekday,
   weekDates,
@@ -718,7 +719,7 @@ function Result({ api, today }: { api: Api; today: string }) {
           </button>
         </div>
         <p className="muted">
-          생산 = 생산 명령 수량, 더 팔렸으면 판매만큼(현장에서 더 만든 것) · 폐기 = 명령 − 판매(남은 빵은 모두 폐기) · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 다음 날 아침 9시 10분 실적 수집 뒤 채워짐. 다음 {stepGroup(date) === "공휴일" ? "공휴일" : `${stepGroup(date)}요일`} 수량: 할인 없이 매진 +1 · 할인 있으며 매진 그대로 · 폐기 −1 (몽블랑은 5개 단위)
+          생산 = 생산 명령 수량, 더 팔렸으면 판매만큼(현장에서 더 만든 것) · 폐기 = 명령 − 판매(남은 빵은 모두 폐기) · 50% 할인 = 저녁 8시 30분 뒤 반값 판매 · 다음 날 아침 9시 10분 실적 수집 뒤 채워짐. 다음 {stepGroup(date) === "공휴일" ? "공휴일" : `${stepGroup(date)}요일`} 수량 (매진 목표 저녁 {Number(SELL_OUT_TARGET.slice(0, 2)) - 12}시 {SELL_OUT_TARGET.slice(3)}분): 그 전에 다 팔림 +1 · 그 뒤 다 팔림 그대로 · 폐기 −1 (몽블랑은 5개 단위, 매진 시각을 모르는 지난 날은 할인 없이 매진 +1 · 할인 있으며 매진 그대로)
         </p>
         {err && <p className="error">{err}</p>}
         {rows && !rows.length && <p className="empty">이날 실적이 아직 없습니다.</p>}
@@ -739,7 +740,7 @@ function Result({ api, today }: { api: Api; today: string }) {
                 <tr key={r.name}>
                   <td>
                     {r.name}
-                    {r.soldOut && <span className="sold-out">다 팔림</span>}
+                    {r.made != null && r.made > 0 && r.sold >= r.made && (r.soldOut || r.last) && <span className="sold-out">다 팔림{r.last ? ` ${r.last}` : ""}</span>}
                   </td>
                   <td className="num">{r.made == null ? "—" : producedOf(r)}</td>
                   <td className="num">{r.sold}</td>

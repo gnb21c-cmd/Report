@@ -69,6 +69,8 @@ export interface StorePart {
   bakeryHalf?: number;
   /** 빵별 50% 할인 개수 (작업지시 폐기 · 오차 계산용) */
   bakeryHalfBy?: Record<string, number>;
+  /** 빵별 마지막 판매 시각 HH:MM:SS (다 팔린 빵은 = 매진 시각, 매진 목표 20:40 판단 — bakery.ts stepOf). 이 칸이 생기기 전 날은 없음 = 모름 (2026-10-16) */
+  bakeryLastBy?: Record<string, string>;
   /** 분류별 실매출 (카페아스타나). 아스타나키즈는 모두 0 (kids 칸에) */
   sectors: Record<Sector, number>;
   cups: number;
@@ -137,6 +139,19 @@ export interface BuildResult {
   lines: ReceiptLine[];
 }
 
+/** 빵 줄 하나 → 빵별 마지막 판매 시각 (반품 · 0개 이하 · 시각 없는 줄은 뺌) */
+function addBreadLast(by: Record<string, string>, l: { name: string; time: string; qty: number; refund?: boolean }) {
+  if (l.refund || !(l.qty > 0) || !l.time) return;
+  if (!by[l.name] || l.time > by[l.name]) by[l.name] = l.time;
+}
+
+/** 정리한 영수증 줄 → 빵별 마지막 판매 시각 (이미 올린 날 다시 셀 때 — apps/collector/src/sellout.ts). isBread = 베이커리로 셈한 상품인지 */
+export function breadLastTimes(lines: { name: string; time: string; qty: number; refund?: boolean }[], isBread: (name: string) => boolean): Record<string, string> {
+  const by: Record<string, string> = {};
+  for (const l of lines) if (isBread(l.name)) addBreadLast(by, l);
+  return by;
+}
+
 /** 영수증별 엑셀 → 매장 하루치 */
 export function buildStorePart(input: { store: StoreId; date: string; file: string; sheet: ReceiptSheet; sectorOf: SectorOf }): BuildResult {
   const { store, date, file, sheet, sectorOf } = input;
@@ -145,6 +160,7 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
   if (store === "cafe") {
     part.bakeryHalf = 0;
     part.bakeryHalfBy = {};
+    part.bakeryLastBy = {};
   }
   const hourly = (part.hourly = { sectors: bySector(() => zeros()), cups: zeros(), teams: zeros() });
   const kh = store === "kids" ? (part.kids!.hourly = { issued: zeros(), walkIn: zeros(), eventFree: zeros(), other: zeros() }) : null;
@@ -165,6 +181,7 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
       continue;
     }
     const cls = addLine(part, store, l, sectorOf, products);
+    if (store === "cafe" && cls.sector === "베이커리") addBreadLast(part.bakeryLastBy!, l);
     if (store === "cafe" && cls.sector === "베이커리" && isHalfOff(l)) {
       part.bakeryHalf = (part.bakeryHalf || 0) + l.qty;
       const by = (part.bakeryHalfBy ||= {});
