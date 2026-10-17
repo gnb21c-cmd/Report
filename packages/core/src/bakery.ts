@@ -423,13 +423,17 @@ export function productionStarted(date: string, now: Now): boolean {
    - 20:40 전에 다 팔림(지시 수량 이상 팔림 · 마지막 판매가 20:40 전) → +1
    - 20:40 뒤에 다 팔림 → 그대로
    - 폐기가 생김(지시 수량보다 덜 팔림) → −1
-   마지막 판매 시각을 모르는 예전 날은 예전 규칙(할인 없이 매진 +1 · 할인 있으며 매진 그대로)
+   10-26 계획부터 적용 (2026-10-17 사장님 — 10-19 ~ 10-25 는 근무자가 이미 준비를 시작해 예전 기준 그대로)
+   → 10-19 결과부터 20:40 으로 봄(SELL_OUT_RULE_FROM, 7일 뒤 같은 요일 = 10-26 계획). 그 전 결과 · 마지막 판매 시각을 모르는 날은
+   예전 규칙(할인 없이 매진 +1 · 할인 있으며 매진 그대로)
    칸은 다음 같은 요일에만 씀 (월요일 결과 → 다음 월요일. 평일에 낀 공휴일은 공휴일끼리) — 손님 예측 위에 칸 × 생산 단위(몽블랑 5개)를 더함
    칸은 계획(plans 의 step)에 남겨 다음 같은 요일이 이어 받음 · 예측의 ±30% 안으로 묶음
    최종안은 3일 전에 정하므로 7일 전 같은 요일 결과는 늘 들어옴 */
 export const STEP_LIMIT = 0.3;
 /** 매진 목표 시각 (한국 시간) — 이보다 일찍 다 팔리면 다음 같은 요일 +1 */
 export const SELL_OUT_TARGET = "20:40";
+/** 매진 목표로 보는 첫 결과 날 — 10-19 결과 → 10-26 계획부터 (그 전 결과는 예전 규칙) */
+export const SELL_OUT_RULE_FROM = "2026-10-19";
 
 /** 같은 요일 묶음 — 요일마다 따로, 평일에 낀 공휴일 · 대체 휴일은 '공휴일'끼리 (주말은 그 요일) */
 export function stepGroup(date: string): string {
@@ -447,11 +451,11 @@ export function sameGroupBefore(date: string, n = 8): string[] {
   return out;
 }
 
-/** 빵 하나의 그날 결과 → 한 칸 (+1 · 0 · −1). 작업지시에 없었거나 0개면 null */
-export function stepOf(r: BreadResult): number | null {
+/** 빵 하나의 그 날(date) 결과 → 한 칸 (+1 · 0 · −1). 작업지시에 없었거나 0개면 null */
+export function stepOf(r: BreadResult, date: string): number | null {
   if (!r.made) return null;
   if (r.sold < r.made) return -1;
-  if (r.last) return r.last.slice(0, 5) < SELL_OUT_TARGET ? 1 : 0;
+  if (r.last && date >= SELL_OUT_RULE_FROM) return r.last.slice(0, 5) < SELL_OUT_TARGET ? 1 : 0;
   return r.half > 0 ? 0 : 1;
 }
 
@@ -485,7 +489,7 @@ export function nextSteps(board: Board, asOf: string, prev: { date: string; plan
   const out = planSteps(prev.plan);
   if (prev.date <= asOf && board.report(prev.date)?.cafe)
     for (const r of dayResult(board, prev.date, prev.plan, prev.order)) {
-      const k = stepOf(r);
+      const k = stepOf(r, prev.date);
       if (k) out[r.name] = (out[r.name] || 0) + k;
     }
   for (const n of Object.keys(out)) if (!out[n]) delete out[n];
