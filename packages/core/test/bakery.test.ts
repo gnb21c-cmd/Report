@@ -17,6 +17,7 @@ import {
   stepOf,
   STEP_LIMIT,
   SELL_OUT_TARGET,
+  SELL_OUT_RULE_FROM,
   restep,
   displayDays,
   finalDay,
@@ -411,27 +412,34 @@ describe("같은 요일 결과로 ±1 (2026-10-12 사장님 규칙)", () => {
   });
   const R = (made: number | null, sold: number, half = 0): BreadResult => ({ name: "x", made, base: made, sold, half, full: sold - half, waste: made == null ? null : Math.max(0, made - sold), soldOut: false });
   it("한 칸 — 할인 없이 매진 +1 · 할인 있으며 매진 그대로 · 폐기 −1", () => {
-    expect(stepOf(R(20, 20))).toBe(1);
-    expect(stepOf(R(20, 25))).toBe(1); // 더 만들어 다 팔림
-    expect(stepOf(R(20, 20, 3))).toBe(0);
-    expect(stepOf(R(60, 50, 8))).toBe(-1);
-    expect(stepOf(R(60, 59))).toBe(-1);
-    expect(stepOf(R(null, 5))).toBeNull(); // 작업지시에 없던 상품
-    expect(stepOf(R(0, 0))).toBeNull();
+    expect(stepOf(R(20, 20), "2026-10-12")).toBe(1);
+    expect(stepOf(R(20, 25), "2026-10-12")).toBe(1); // 더 만들어 다 팔림
+    expect(stepOf(R(20, 20, 3), "2026-10-12")).toBe(0);
+    expect(stepOf(R(60, 50, 8), "2026-10-12")).toBe(-1);
+    expect(stepOf(R(60, 59), "2026-10-12")).toBe(-1);
+    expect(stepOf(R(null, 5), "2026-10-12")).toBeNull(); // 작업지시에 없던 상품
+    expect(stepOf(R(0, 0), "2026-10-12")).toBeNull();
   });
   const RT = (made: number, sold: number, half: number, last: string | null): BreadResult => ({ ...R(made, sold, half), last });
-  it("매진 목표 20:40 (2026-10-16 사장님, 20:30 → 20:40) — 20:40 전에 다 팔림 +1 · 20:40 뒤 다 팔림 그대로 · 폐기 −1", () => {
+  it("매진 목표 20:40 (2026-10-16 사장님, 20:30 → 20:40) — 10-19 결과부터(= 10-26 계획부터): 20:40 전에 다 팔림 +1 · 20:40 뒤 다 팔림 그대로 · 폐기 −1", () => {
     expect(SELL_OUT_TARGET).toBe("20:40");
-    expect(stepOf(RT(20, 20, 0, "19:50:12"))).toBe(1); // 할인 전에 다 팔림
-    expect(stepOf(RT(20, 20, 3, "20:33:00"))).toBe(1); // 할인으로 다 팔렸지만 20:40 전 (예전 규칙은 그대로)
-    expect(stepOf(RT(20, 20, 3, "20:39:59"))).toBe(1);
-    expect(stepOf(RT(20, 20, 3, "20:40:00"))).toBe(0); // 목표 시각에 다 팔림
-    expect(stepOf(RT(20, 20, 5, "20:52"))).toBe(0);
-    expect(stepOf(RT(20, 22, 0, "20:45:00"))).toBe(0); // 할인 없이 20:40 뒤 다 팔림
-    expect(stepOf(RT(60, 59, 0, "20:59:00"))).toBe(-1); // 남음
-    // 마지막 판매 시각을 모르는 예전 날은 예전 규칙 (할인 없이 매진 +1 · 할인 있으며 매진 그대로)
-    expect(stepOf(RT(20, 20, 3, null))).toBe(0);
-    expect(stepOf(RT(20, 20, 0, null))).toBe(1);
+    expect(SELL_OUT_RULE_FROM).toBe("2026-10-19");
+    const D = "2026-10-19";
+    expect(stepOf(RT(20, 20, 0, "19:50:12"), D)).toBe(1); // 할인 전에 다 팔림
+    expect(stepOf(RT(20, 20, 3, "20:33:00"), D)).toBe(1); // 할인으로 다 팔렸지만 20:40 전 (예전 규칙은 그대로)
+    expect(stepOf(RT(20, 20, 3, "20:39:59"), D)).toBe(1);
+    expect(stepOf(RT(20, 20, 3, "20:40:00"), D)).toBe(0); // 목표 시각에 다 팔림
+    expect(stepOf(RT(20, 20, 5, "20:52"), D)).toBe(0);
+    expect(stepOf(RT(20, 22, 0, "20:45:00"), "2026-11-02")).toBe(0); // 할인 없이 20:40 뒤 다 팔림
+    expect(stepOf(RT(60, 59, 0, "20:59:00"), D)).toBe(-1); // 남음
+    // 마지막 판매 시각을 모르면 예전 규칙 (할인 없이 매진 +1 · 할인 있으며 매진 그대로)
+    expect(stepOf(RT(20, 20, 3, null), D)).toBe(0);
+    expect(stepOf(RT(20, 20, 0, null), D)).toBe(1);
+  });
+  it("10-18 결과까지(= 10-19 ~ 10-25 계획)는 매진 시각을 알아도 예전 규칙 (2026-10-17 사장님 — 준비 시작한 주는 바꾸지 않음)", () => {
+    expect(stepOf(RT(20, 20, 3, "20:33:00"), "2026-10-18")).toBe(0); // 할인 있으며 매진 → 그대로
+    expect(stepOf(RT(20, 20, 0, "20:45:00"), "2026-10-13")).toBe(1); // 할인 없이 매진 → +1
+    expect(stepOf(RT(20, 18, 2, "20:50:00"), "2026-10-14")).toBe(-1);
   });
   it("그날 결과에 빵별 마지막 판매 시각 (분까지, 모르면 null)", () => {
     const d = day("2026-10-13", 100, [["소금빵", 20], ["크루아상", 5]]);
@@ -439,7 +447,8 @@ describe("같은 요일 결과로 ±1 (2026-10-12 사장님 규칙)", () => {
     const st0 = { madeOn: "2026-10-10", asOf: "2026-10-09", kind: "평일" as const, visitors: 100, weather: "모름", total: 25 };
     const rows = dayResult(new Board([d]), "2026-10-13", { v: 2, date: "2026-10-13", final: { ...st0, items: [{ name: "소금빵", qty: 20 }, { name: "크루아상", qty: 5 }] } }, null);
     expect(rows.map((x) => [x.name, x.last])).toEqual([["소금빵", "20:36"], ["크루아상", null]]);
-    expect(stepOf(rows[0])).toBe(1);
+    expect(stepOf(rows[0], "2026-10-19")).toBe(1);
+    expect(stepOf(rows[0], "2026-10-13")).toBe(1); // 할인 없음 → 예전 규칙도 +1
   });
   it("이미 센 계획에 칸만 다시 (규칙이 바뀐 주간안 고치기) — 예측(base)은 그대로, 칸 × 단위 · ±30% · 합계 다시", () => {
     const st1 = {
@@ -471,6 +480,20 @@ describe("같은 요일 결과로 ±1 (2026-10-12 사장님 규칙)", () => {
   it("매니저가 확정한 수량이 생산 기준", () => {
     const order: OrderDoc = { v: 2, date: "2026-10-12", provisional: {}, final: { 소금빵: L(50) } };
     expect(nextSteps(b, "2026-10-13", { date: "2026-10-12", plan, order }).소금빵).toBe(2); // 50 만들어 50 다 팔림(할인 8개 있음 → 그대로)
+  });
+  it("다음 같은 요일 칸 — 10-19 결과부터 20:40 규칙, 10-12 결과는 예전 규칙 (같은 매진 시각이라도)", () => {
+    const mk = (date: string) => {
+      const d = day(date, 100, [["소금빵", 20]]);
+      d.cafe!.bakeryHalfBy = { 소금빵: 3 };
+      d.cafe!.bakeryLastBy = { 소금빵: "20:33:00" };
+      const st0 = { madeOn: "2026-10-01", asOf: "2026-10-01", kind: "평일" as const, visitors: 100, weather: "모름", total: 20 };
+      const pl: PlanDoc = { v: 2, date, final: { ...st0, items: [{ name: "소금빵", qty: 20, base: 20 }] } };
+      return { b: new Board([d]), pl };
+    };
+    const a = mk("2026-10-12");
+    expect(nextSteps(a.b, "2026-10-30", { date: "2026-10-12", plan: a.pl, order: null })).toEqual({}); // 할인 있으며 매진 → 그대로
+    const c = mk("2026-10-19");
+    expect(nextSteps(c.b, "2026-10-30", { date: "2026-10-19", plan: c.pl, order: null })).toEqual({ 소금빵: 1 }); // 20:40 전에 다 팔림 → +1
   });
   it("실적이 아직 없거나(쓸 수 있는 날 뒤) 문 닫은 날은 칸만 이어 감", () => {
     expect(nextSteps(b, "2026-10-11", { date: "2026-10-12", plan, order: null })).toEqual({ 소금빵: 2, 시나몬롤: -1 });
