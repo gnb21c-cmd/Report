@@ -195,13 +195,15 @@ export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, th
 /* ---------- 비 예보 주말 (2026-10-18 사장님) ----------
    3일 전 15시 최종안 때 기상청 단기예보로 그날이 비(영업 시간 06 ~ 21시 중 비 · 강우)면 손님이 늘므로
    예정 수량(매니저 잠정 확정, 없으면 주간 수량)을 토요일 125% · 일요일 120% 로 올림 — ±10% 범위 없이, 몽블랑은 5개 단위
-   평일 · 맑음 · 구름 · 눈 · 관측(지난 날)은 그대로 보통 최종안 */
+   평일 · 맑음 · 구름 · 눈 · 관측(지난 날)은 그대로 보통 최종안 · 10-26 계획부터 (RAIN_WEEKEND_FROM) */
 export const RAIN_WEEKEND_UP: Readonly<Record<number, number>> = { 6: 1.25, 0: 1.2 };
+/** 비 예보 주말을 쓰는 첫 계획 날 (2026-10-18 사장님 — 10-24 · 10-25 는 예전 그대로) */
+export const RAIN_WEEKEND_FROM = "2026-10-26";
 
 /** 그날 비 예보 주말 배수 (아니면 null) */
 export function rainUpOf(date: string, w: DayWeather | undefined): number | null {
   const up = RAIN_WEEKEND_UP[weekday(date)];
-  if (!up || !w || w.source !== "forecast") return null;
+  if (!up || date < RAIN_WEEKEND_FROM || !w || w.source !== "forecast") return null;
   return w.key === "rain" || w.key === "heavyrain" ? up : null;
 }
 
