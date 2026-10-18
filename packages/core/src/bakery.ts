@@ -4,6 +4,7 @@
           (새벽 00:47 ~ 05:17 에 미리 계산해 두고 매니저 앱에는 6시부터 보임 — 수요일 확정 실적은 아직 없어
            수요일 밤 마지막 마감 전 카페 숫자로 셈(live.ts withLiveCafe), 없으면 화요일까지)
    [최종] 매일 15시: 3일 뒤 수량을 다시 셈(아침 09:10 수집한 어제까지 실적의 오차 보정 · 잠정 확정 수량 ±10% 안) → 매니저가 그날 18시 전에 최종 확정
+          그날 기상청 예보가 비인 주말은 예정 수량 × 토 125% · 일 120% (2026-10-18 사장님 — 아래 '비 예보 주말')
           금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
    마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
    [현장] 아침 6시부터 그날 — 오늘 생산(최종) + 내일 준비(최종, 하루 전에 미리 준비) 두 날을 함께 보여 줌
@@ -14,7 +15,7 @@ import { addDays, weekday, WEEKDAY_KO } from "./dates";
 import { bandRange, breadPlan, dayKind, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
 import { NOT_BREAD } from "./rules";
-import type { WeatherMap } from "./weather";
+import type { DayWeather, WeatherMap } from "./weather";
 
 /** 최종안을 세는 시각 (한국 시간, 매일) — 예약 작업은 조금 일찍 걸어 둠 */
 export const PLAN_TIME = "15:00";
@@ -76,6 +77,8 @@ export interface PlanStep {
   weather: string;
   items: PlanItem[];
   total: number;
+  /** 최종안: 비 예보 주말이라 예정 수량에 곱한 배수 (토 1.25 · 일 1.2, rainUpOf) — 없으면 보통 최종안 */
+  rainUp?: number;
 }
 
 export interface Outlook {
@@ -189,6 +192,21 @@ export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, th
   }));
 }
 
+/* ---------- 비 예보 주말 (2026-10-18 사장님) ----------
+   3일 전 15시 최종안 때 기상청 단기예보로 그날이 비(영업 시간 06 ~ 21시 중 비 · 강우)면 손님이 늘므로
+   예정 수량(매니저 잠정 확정, 없으면 주간 수량)을 토요일 125% · 일요일 120% 로 올림 — ±10% 범위 없이, 몽블랑은 5개 단위
+   평일 · 맑음 · 구름 · 눈 · 관측(지난 날)은 그대로 보통 최종안 · 10-26 계획부터 (RAIN_WEEKEND_FROM) */
+export const RAIN_WEEKEND_UP: Readonly<Record<number, number>> = { 6: 1.25, 0: 1.2 };
+/** 비 예보 주말을 쓰는 첫 계획 날 (2026-10-18 사장님 — 10-24 · 10-25 는 예전 그대로) */
+export const RAIN_WEEKEND_FROM = "2026-10-26";
+
+/** 그날 비 예보 주말 배수 (아니면 null) */
+export function rainUpOf(date: string, w: DayWeather | undefined): number | null {
+  const up = RAIN_WEEKEND_UP[weekday(date)];
+  if (!up || date < RAIN_WEEKEND_FROM || !w || w.source !== "forecast") return null;
+  return w.key === "rain" || w.key === "heavyrain" ? up : null;
+}
+
 /**
  * 매일 15시 — 3일 뒤 최종안. 주간 잠정안이 없으면 null (작업지시를 쓰기 전 날)
  * 빵마다 기준 = 매니저 잠정 확정 수량(없으면 주간 수량) → 새로 센 수량을 그 ±10% 안으로 묶음
@@ -198,6 +216,7 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
   const date = addDays(today, FINAL_LEAD);
   if (!plan?.week || plan.date !== date) return null;
   const now = step(board, weather, learned, today, asOf, date, steps);
+  const up = rainUpOf(date, weather[date]);
   const fresh = new Map(now.items.map((i) => [i.name, i]));
   const anchor = new Map<string, number>();
   for (const it of plan.week.items) anchor.set(it.name, it.qty);
@@ -207,6 +226,11 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
     .map((name) => {
       const f = fresh.get(name);
       const a = anchor.get(name);
+      // 비 예보 주말 — 예정 수량 × 배수 (잠정에 없던 빵은 새로 센 수량 × 배수), 같은 요일 칸은 이어 감
+      if (up) {
+        const b = a ?? f!.qty;
+        return { name, qty: snapUnit(name, Math.round(b * up)), base: f?.base ?? b, ...(f?.step ? { step: f.step } : {}) };
+      }
       if (a == null) return f!;
       const [lo, hi] = bandRange(a, FINAL_BAND);
       const qty = snapUnit(name, withinBand(a, f?.qty ?? 0, FINAL_BAND), lo, hi);
@@ -214,7 +238,7 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
     })
     .filter((i) => i.qty > 0)
     .sort((x, y) => y.qty - x.qty || x.name.localeCompare(y.name, "ko"));
-  return { ...now, items, total: items.reduce((a, b) => a + b.qty, 0) };
+  return { ...now, items, total: items.reduce((a, b) => a + b.qty, 0), ...(up ? { rainUp: up } : {}) };
 }
 
 /* ---------- 현장 태블릿 복사본 ---------- */

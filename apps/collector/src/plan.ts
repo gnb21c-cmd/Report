@@ -4,6 +4,7 @@
      매니저 앱에는 아침 6시부터 보임(weekPlanOpen) · 목요일 18시 전에 잠정 확정
      수요일 확정 실적은 아직 없어(09:12 수집) 수요일 밤 마지막 마감 전 카페 숫자(live/{수요일}, withLiveCafe)로 셈 — 없으면 화요일까지
    - 매일 15시: 3일 뒤 최종안 → plans/{날짜}.final (주간 잠정안이 있는 날만, 잠정 확정 수량 ±10% 안 · 매니저가 그날 18시 전에 최종 확정)
+     그날 기상청 예보가 비(비 · 강우)인 주말은 예정 수량 × 토 125% · 일 120% (2026-10-18 사장님, 10-26 계획부터, core bakery.ts rainUpOf)
      목요일 15시에는 주간 잠정안을 다시 세지 않음(매니저가 확정하는 중에 숫자가 바뀌지 않게) — 새벽 계산이 빠졌을 때만 그때 만듦
    - 같은 요일 결과로 ±1 (2026-10-12 사장님 규칙, core bakery.ts nextSteps): 날짜마다 앞선 같은 요일(평일에 낀 공휴일은 공휴일끼리) 계획의 칸 +
      그날 결과(매진 목표 20:40 — 그 전에 다 팔림 +1 · 그 뒤 다 팔림 그대로 · 폐기 −1, 2026-10-16 · 10-26 계획부터, 그 전은 할인 없이 매진 +1 · 할인 있으며 매진 그대로)를 손님 예측 위에 더함. 최종안(3일 전)에는 7일 전 결과가 늘 들어옴
@@ -117,7 +118,7 @@ async function main() {
   const fin = doc.week ? makeFinal(board, weather, learned, today, asOf, doc, asOrder(parse(await readOrder(fb, target))), await stepsFor(target, board, asOf)) : null;
   if (fin) {
     out.set(target, { ...doc, final: fin });
-    console.log(`최종안: ${target} · 빵 ${fin.items.length}종`);
+    console.log(`최종안: ${target} · 빵 ${fin.items.length}종${fin.rainUp ? ` · 비 예보 주말 — 예정 수량 × ${Math.round(fin.rainUp * 100)}%` : ""}`);
   } else console.log(`최종안: ${target} 은 주간 잠정안이 없어 건너뜀 (작업지시 시작 전)`);
 
   await save(out);
