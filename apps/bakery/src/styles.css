@@ -681,3 +681,8 @@ tr.sum td {
     color: #a8a8a8 !important;
   }
 }
+
+/* 비 예보 주말 — 최종안 × 125% · 120% (2026-10-18) */
+.rain-up {
+  color: #2f6fb3;
+}

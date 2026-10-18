@@ -4,7 +4,7 @@
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, type DayReport, type OrderDoc, type OrderLine, type PlanDoc } from "@report/core";
+import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap } from "@report/core";
 
 export type Kind = "provisional" | "final";
 
@@ -291,11 +291,14 @@ export function demoApi(): Api {
     /* 처음 */
   }
   // 지난 3주 동안 이 방식으로 돌았다고 치고 계획을 미리 세움 (목요일 주간 · 매일 최종, 확정은 안 한 채로 → 자동)
+  // 체험판 날씨: 최종안이 나온 가장 늦은 날이 주말이면 비 예보 (비 예보 주말 × 125% · 120% 화면용)
+  const rainDay = [...Array(4).keys()].map((k) => addDays(today, k)).reverse().find((d) => [0, 6].includes(weekday(d)));
+  const weather: WeatherMap = rainDay ? { [rainDay]: { date: rainDay, key: "rain", label: "비", icon: "🌧️", tempMax: 17, tempMin: 11, rainMm: 8, source: "forecast" } } : {};
   for (const d of [...Array(21).keys()].reverse().map((k) => addDays(today, -k))) {
     const asOf = addDays(d, -1);
     if (weekday(d) === WEEK_PLAN_WEEKDAY) for (const w of makeWeek(board, {}, DEFAULT_LEARNED, d, asOf)) plans.set(w.date, { ...(plans.get(w.date) || { v: 2, date: w.date }), week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
     const t = addDays(d, FINAL_LEAD);
-    const f = makeFinal(board, {}, DEFAULT_LEARNED, d, asOf, plans.get(t) || null, orders.get(t) || null);
+    const f = makeFinal(board, weather, DEFAULT_LEARNED, d, asOf, plans.get(t) || null, orders.get(t) || null);
     if (f) plans.set(t, { ...plans.get(t)!, final: f });
   }
   const save = () => {
