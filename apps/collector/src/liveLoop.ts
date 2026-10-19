@@ -1,0 +1,202 @@
+/* ============================================================
+   하루 실시간 수집 (2026-10-19 사장님) — POS 메인 PC(바리스타 POS, 실행기 nice-pos)가 아침에 한 번 시작해 22:50 까지 켜져 있으면서
+   자기 시계로 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45)에 바로 마감 전 영업정보를 받음 (그때마다 live.ts · survey.ts 를 새로 실행)
+   - GitHub 예약 실행은 20분 남짓 늦거나 자주 건너뛰어(2026-10-19 — 15분마다로 바꾼 뒤 3시간에 3번) 예약은 '시작'만 맡김
+     (live-collect.yml — 09:30 · 09:45 · 10:00 부터 30분마다, 이미 돌고 있으면 건너뜀)
+   - 시작했을 때 지난 칸(15분 안)을 아직 못 받았으면 바로 받음 (PC 를 다시 켰거나 비켜 줬다 돌아왔을 때 · 칸 시각 규칙 packages/core/src/live.ts liveLoopStep)
+   - 칸 사이 1분마다 A [신규 다시 확인] 요청(config/naverAsk)을 보고 새 요청이면 여기서 바로 네이버 수집(naver.ts) — 실행기가 하나라 따로 시작시키면 밤까지 기다림
+   - 칸 사이 1분마다 이 PC 실행기를 기다리는 다른 일(아침 네이버 다시 하기 · 손으로 시작한 수집 등)이 있는지 보고, 있으면 자기를 다시 시작시켜 두고 비켜 줌
+   환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작) · LOOP_END(끝 시각 HH:MM, 시험용)
+         LOOP_ONCE=1(한 번만 받고 끝 — 날짜를 정한 시험) · COLLECT_DRY=1(올리지 않음, 신규 다시 확인 요청은 맡지 않음)
+   공개 저장소라 기록에는 시각 · 성공/실패 · 개수만
+   ============================================================ */
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { kstMinutes, LIVE_FROM, LIVE_LOOP_END, liveLoopStep, liveSlotBy, naverAskTodo, type NaverAsk, type NaverAskResult } from "@report/core";
+import { fbLogin, readConfigJson, readLive, writeConfigJson, type Fb } from "./firebase";
+import { mask, say } from "./okpos";
+
+const env = (k: string) => process.env[k] || "";
+const here = dirname(fileURLToPath(import.meta.url));
+const tsx = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
+const dry = env("COLLECT_DRY") === "1";
+const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const now = () => kstMinutes();
+const hm = (t: number) => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+const minutesOf = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
+const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, Math.max(0, ms)));
+const fails: string[] = [];
+
+/** 같은 문제는 한 번만 적음 (1분마다 보니까) */
+const told = new Set<string>();
+const once = (m: string) => {
+  if (told.has(m)) return;
+  told.add(m);
+  say(m);
+};
+
+/** 수집 프로그램 하나를 새로 실행 — 끝나면 브라우저까지 다 닫힘. 끝 번호 0 = 성공 */
+function run(script: string, extra: Record<string, string>, limitMin: number): Promise<number> {
+  return new Promise((done) => {
+    const p = spawn(process.execPath, ["--import", tsx, join(here, script)], { cwd: join(here, ".."), env: { ...process.env, ...extra }, stdio: "inherit" });
+    const t = setTimeout(() => {
+      say(`  ${limitMin}분 안에 안 끝나 멈춤`);
+      // 브라우저까지 같이 닫히게 (Windows 는 프로그램 묶음째)
+      if (process.platform === "win32" && p.pid) spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" });
+      else p.kill();
+    }, limitMin * 60e3);
+    p.on("exit", (code) => {
+      clearTimeout(t);
+      done(code ?? 1);
+    });
+    p.on("error", () => {
+      clearTimeout(t);
+      done(1);
+    });
+  });
+}
+
+/* ---------- 클라우드 — 로그인은 1시간이면 풀려 50분마다 새로 ---------- */
+let fb: Fb | null = null;
+let fbAt = 0;
+async function cloud(): Promise<Fb> {
+  if (!fb || Date.now() - fbAt > 50 * 60e3) {
+    fb = await fbLogin({ apiKey: env("FIREBASE_API_KEY"), projectId: env("FIREBASE_PROJECT_ID"), board: env("REPORT_BOARD_KEY"), email: env("WEATHER_EMAIL"), password: env("WEATHER_PASSWORD") });
+    fbAt = Date.now();
+  }
+  return fb;
+}
+
+/* ---------- GitHub — 이 작업 열쇠(GH_TOKEN)로 ---------- */
+async function gh(path: string, init: RequestInit = {}): Promise<any> {
+  const r = await fetch(`${env("GITHUB_API_URL") || "https://api.github.com"}/repos/${env("GITHUB_REPOSITORY")}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${env("GH_TOKEN")}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+  });
+  if (!r.ok) throw new Error(`GitHub 오류 ${r.status}`);
+  return r.status === 204 ? null : r.json();
+}
+
+const onPos = (job: any) => (job.labels || []).some((l: string) => String(l).toLowerCase() === "nice-pos");
+
+/** 이 PC 실행기(nice-pos)를 기다리는 다른 일 수 — 실시간 수집 자신은 빼고.
+ *  같은 실행의 앞 단계(클라우드에서 도는 '할지 보기')가 아직 안 끝났으면 건너뛸 수도 있어 아직 셈하지 않음 */
+async function othersWaiting(): Promise<number> {
+  let n = 0;
+  const seen = new Set<number>();
+  for (const status of ["queued", "in_progress"]) {
+    const r = await gh(`/actions/runs?status=${status}&per_page=50`);
+    for (const w of r?.workflow_runs || []) {
+      if (seen.has(w.id) || String(w.id) === env("GITHUB_RUN_ID") || String(w.path || "").includes("live-collect.yml")) continue;
+      seen.add(w.id);
+      const jobs: any[] = (await gh(`/actions/runs/${w.id}/jobs?filter=latest&per_page=50`))?.jobs || [];
+      if (jobs.some((j) => !onPos(j) && j.status !== "completed")) continue;
+      n += jobs.filter((j) => j.status === "queued" && onPos(j)).length;
+    }
+  }
+  return n;
+}
+
+/** 비켜 주기 전에 자기를 다시 시작시켜 둠 — 기다리던 일이 끝나면 이어서 돎 (같은 확인만 · 끝 시각 그대로) */
+async function startAgain(): Promise<void> {
+  const inputs: Record<string, string> = {};
+  if (dry) inputs.dry = "true";
+  if (env("LOOP_END")) inputs.end = env("LOOP_END");
+  await gh(`/actions/workflows/live-collect.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: env("GITHUB_REF_NAME") || "main", inputs }) });
+}
+
+/** A [신규 다시 확인] — 새 요청이면 네이버 수집(naver.ts)을 바로. 했으면 true */
+async function askCheck(): Promise<boolean> {
+  if (dry) return false; // 확인만일 때는 맡지 않음 (naver-ask.yml 이 맡음)
+  const f = await cloud();
+  const ask = await readConfigJson<NaverAsk>(f, "naverAsk");
+  const res = await readConfigJson<NaverAskResult>(f, "naverResult");
+  if (!ask || !naverAskTodo(ask, res)) return false;
+  say(`${hm(now())} A [신규 다시 확인] 요청 — 네이버 수집`);
+  // 먼저 '하는 중'을 써 두어 naver-ask.yml 이 또 시작시키지 않게
+  await writeConfigJson(f, "naverResult", { ask: ask.at, state: "run", at: new Date().toISOString() });
+  const code = await run("naver.ts", { NAVER_ASK: ask.at, COLLECT_FROM: "", COLLECT_TO: "", NAVER_PROBE: "" }, 20);
+  say(`  신규 다시 확인 ${code === 0 ? "끝" : "실패"}`);
+  if (code !== 0) {
+    fails.push(`${hm(now())} 신규 다시 확인`);
+    // 시간이 넘어 멈췄으면 결과를 못 썼음 → A 가 '하는 중'에 머물지 않게
+    const r = await readConfigJson<NaverAskResult>(await cloud(), "naverResult").catch(() => null);
+    if (r?.ask === ask.at && r.state === "run") await writeConfigJson(await cloud(), "naverResult", { ask: ask.at, state: "fail", at: new Date().toISOString(), stopped: true }).catch(() => {});
+  }
+  return true;
+}
+
+/** 한 칸 받기 — 마감 전 영업정보(OKPOS 카페 · 키즈 + 네이버) → 통합데스크 설문 파일 */
+async function collect(slot: number): Promise<void> {
+  say(`── ${hm(slot)} 칸 (${hm(now())} 시작)`);
+  if ((await run("live.ts", { LIVE_DATE: "" }, 10)) !== 0) fails.push(`${hm(slot)} 칸`);
+  if ((await run("survey.ts", {}, 3)) !== 0) fails.push(`${hm(slot)} 설문`);
+}
+
+async function main() {
+  // 시험 — 한 번만 (날짜를 정했을 때 · 작업 브랜치에 올렸을 때)
+  if (env("LOOP_ONCE") === "1") {
+    const a = await run("live.ts", {}, 10);
+    const b = await run("survey.ts", {}, 3);
+    process.exit(a || b ? 1 : 0);
+  }
+  const end = minutesOf(env("LOOP_END") || LIVE_LOOP_END);
+  if (!Number.isFinite(end)) throw new Error("끝 시각 모양이 이상함 (HH:MM)");
+  const date = today();
+  say(`${date} 하루 실시간 수집 시작 ${hm(now())} — ${LIVE_FROM} 부터 15분마다(매시 0 · 15 · 30 · 45분), ${hm(end)} 에 끝${dry ? " · 확인만 (올리지 않음)" : ""}`);
+
+  // 이미 받은 칸 — 다시 켜졌을 때 그 칸은 건너뜀
+  let last: number | null = null;
+  try {
+    last = liveSlotBy((await readLive(await cloud(), date))?.at, date);
+  } catch (e) {
+    say(`클라우드 읽기: ${mask((e as Error).message)}`);
+  }
+  if (last !== null) say(`이미 받은 칸: ${hm(last)}`);
+
+  let runs = 0;
+  let yielded = false;
+  for (;;) {
+    if (today() !== date) break;
+    const step = liveLoopStep(now(), last, end);
+    if (step.act === "end") break;
+    if (step.act === "run") {
+      await collect(step.slot);
+      last = step.slot;
+      runs++;
+      continue;
+    }
+    const left = () => (step.slot - now()) * 60e3;
+    // 칸까지 1분 30초 안이면 칸 시각에 맞춰 기다리기만
+    if (left() <= 90e3) {
+      await sleep(left());
+      continue;
+    }
+    try {
+      if (await askCheck()) continue;
+    } catch (e) {
+      once(`신규 다시 확인 요청 보기: ${mask((e as Error).message)}`);
+    }
+    try {
+      const n = await othersWaiting();
+      if (n) {
+        await startAgain();
+        say(`${hm(now())} 이 PC 실행기를 기다리는 다른 일 ${n}개 — 비켜 줌 (다시 시작시켜 둠, 그 일이 끝나면 이어서)`);
+        yielded = true;
+        break;
+      }
+    } catch (e) {
+      once(`기다리는 다른 일 보기: ${mask((e as Error).message)}`);
+    }
+    await sleep(Math.min(60e3, left() - 60e3));
+  }
+  say(`${yielded ? "비켜 줌" : "끝"} ${hm(now())} — 받은 칸 ${runs}개${fails.length ? ` · 실패 ${fails.length}번 (${fails.join(", ")})` : " · 실패 없음"}`);
+  if (fails.length) process.exit(1);
+}
+
+main().catch((e) => {
+  say(`멈춤: ${mask((e as Error).message)}`);
+  process.exit(1);
+});

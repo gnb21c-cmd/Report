@@ -249,6 +249,22 @@ export async function writeConfigJson(fb: Fb, doc: string, value: unknown): Prom
   });
 }
 
+/** 설정 문서 하나(config/{문서})의 JSON 읽기 — 없거나 깨졌으면 null (네이버 다시 확인 요청 · 결과 등) */
+export async function readConfigJson<T>(fb: Fb, doc: string): Promise<T | null> {
+  let d: any;
+  try {
+    d = await http(`${base(fb)}/boards/${fb.board}/config/${doc}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+  try {
+    return JSON.parse(d.fields?.json?.stringValue || "null") as T | null;
+  } catch {
+    return null;
+  }
+}
+
 /** 보고 설정 칸(settings/{doc}) 의 json 읽기 — 없으면 null (보고 앱이 열쇠만으로 읽는 곳) */
 export async function readSettingsJson(fb: Fb, doc: string): Promise<string | null> {
   try {

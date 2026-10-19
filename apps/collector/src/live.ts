@@ -1,5 +1,5 @@
 /* ============================================================
-   오늘 마감 전 영업정보 — POS 메인 PC(GitHub 실행기 nice-pos)에서 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45, live-collect.yml)
+   오늘 마감 전 영업정보 — POS 메인 PC(GitHub 실행기 nice-pos)에서 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45) 하루 수집(liveLoop.ts)이 그때마다 새로 실행
    OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아 아침 확정 수집(collect.ts)과 **같은 계산**(buildStorePart)으로 만든
    조각을 live/{오늘} 의 cafe · kids 칸에 올림 → B 가 '마감 전 영업정보 · HH:MM 기준'으로 보여 줌
    - 올리기 전 검사: 엑셀 합계 = 계산(partCheck) · checkLivePiece (packages/core/src/live.ts). 틀리면 올리지 않음 (B 에 틀린 숫자가 안 가게)

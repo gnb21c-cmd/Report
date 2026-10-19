@@ -191,3 +191,14 @@ export interface NaverAskResult {
   problems?: number;
   stopped?: boolean;
 }
+
+/** 이만큼(시간) 넘은 요청은 건너뜀 */
+export const NAVER_ASK_MAX_H = 6;
+
+/** 아직 맡지 않은 요청인지 — 요청이 있고 · 결과가 그 요청 것이 아니며 · 6시간 안 (POS 메인 PC 하루 실시간 수집 apps/collector/src/liveLoop.ts · .github/workflows/naver-ask.yml) */
+export function naverAskTodo(ask: NaverAsk | null | undefined, res: NaverAskResult | null | undefined, now = Date.now()): boolean {
+  if (!ask?.at) return false;
+  if (res?.ask === ask.at) return false;
+  const t = Date.parse(ask.at);
+  return Number.isFinite(t) && now - t <= NAVER_ASK_MAX_H * 3600e3;
+}

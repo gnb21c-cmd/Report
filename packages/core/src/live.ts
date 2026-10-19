@@ -1,6 +1,6 @@
 /* ============================================================
    오늘 마감 전 영업정보 — live/{날짜} 문서 검사 · 확정 보고와 합치기
-   - POS 메인 PC(GitHub 실행기 nice-pos)가 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45, 2026-10-19 — 예전 15 · 45분)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
+   - POS 메인 PC(GitHub 실행기 nice-pos)의 하루 수집이 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45, 2026-10-19 — 예전 15 · 45분, 아래 liveLoopStep)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
      확정 보고와 같은 계산(buildStorePart)으로 만든 StorePart 를 live/{오늘} 의 cafe · kids 칸에 올림 (apps/collector/src/live.ts)
      → B 의 숫자 · 통계 계산이 확정 날과 같은 길
    - 같은 때 네이버 예약현황(오늘)에서 30분 칸별 이용완료 + 확정(입장예정) 장수 → naver 칸 (liveNaverPart, 입장권 상품만 · 신규는 모름)
@@ -13,10 +13,10 @@ import { NAVER_SLOTS, sum, type DayReport, type NaverPart, type StorePart } from
 import type { StoreId } from "./types";
 
 export const LIVE_LABEL = "마감 전 영업정보";
-/** 받는 시간 (한국 시간) — 15분마다 매시 0 · 15 · 30 · 45분 (.github/workflows/live-collect.yml) */
+/** 받는 시간 (한국 시간) — 15분마다 매시 0 · 15 · 30 · 45분 (apps/collector/src/liveLoop.ts · .github/workflows/live-collect.yml) */
 export const LIVE_FROM = "10:00";
 export const LIVE_TO = "22:45";
-/** 이만큼(분) 넘게 새 숫자가 없으면 B 에 '늦음' — 15분마다 받지만 GitHub 예약이 20분 남짓 늦거나 가끔 건너뛰어 넉넉히 */
+/** 이만큼(분) 넘게 새 숫자가 없으면 B 에 '늦음' — 15분마다 받지만 PC 를 다시 켰거나 다른 일에 비켜 주는 동안을 넉넉히 */
 export const LIVE_STALE_MIN = 60;
 
 /** 그 날짜가 확정(어제까지) · 마감 전(오늘) · 앞날 중 어디인지 */
@@ -156,4 +156,49 @@ export function liveStale(at: string | null | undefined, now: Date = new Date(),
   if (t < minutes(LIVE_FROM) + limit || t > minutes(LIVE_TO) + limit) return false;
   const a = at ? Date.parse(at) : NaN;
   return !Number.isFinite(a) || now.getTime() - a > limit * 60_000;
+}
+
+/* ---------- 하루 실시간 수집 시간표 (2026-10-19 사장님) ----------
+   POS 메인 PC 실행기가 아침에 한 번 시작해 LIVE_LOOP_END 까지 켜져 있으면서 자기 시계로 받을 칸(매시 0 · 15 · 30 · 45분)마다 바로 받음
+   (apps/collector/src/liveLoop.ts · .github/workflows/live-collect.yml — GitHub 예약은 '시작'만 맡김. 예약 실행이 20분 남짓 늦거나 자주 건너뛰어서) */
+/** 받는 간격(분) */
+export const LIVE_EVERY_MIN = 15;
+/** 하루 수집을 끝내는 시각 (마지막 칸 22:45 를 받고) */
+export const LIVE_LOOP_END = "22:50";
+
+/** 하루 받을 칸 — 0시부터 분 (10:00 ~ 22:45, 15분마다) */
+export function liveSlots(): number[] {
+  const out: number[] = [];
+  for (let t = minutes(LIVE_FROM); t <= minutes(LIVE_TO); t += LIVE_EVERY_MIN) out.push(t);
+  return out;
+}
+
+/** 한국 시간 0시부터 분 (초까지 소수) */
+export function kstMinutes(now: Date = new Date()): number {
+  const k = new Date(now.getTime() + 9 * 3600e3);
+  return k.getUTCHours() * 60 + k.getUTCMinutes() + k.getUTCSeconds() / 60 + k.getUTCMilliseconds() / 60000;
+}
+
+/** 클라우드 live 문서의 받은 시각(at)이 들어 있는 칸 — 그 칸은 이미 받음 (다른 날 · 10:00 전 · 없음 → null) */
+export function liveSlotBy(at: string | null | undefined, date: string): number | null {
+  const a = at ? Date.parse(at) : NaN;
+  if (!Number.isFinite(a)) return null;
+  if (new Date(a + 9 * 3600e3).toISOString().slice(0, 10) !== date) return null;
+  const t = kstMinutes(new Date(a));
+  const done = liveSlots().filter((s) => s <= t);
+  return done.length ? done[done.length - 1] : null;
+}
+
+export type LiveLoopStep = { act: "run"; slot: number } | { act: "wait"; slot: number } | { act: "end" };
+
+/** 다음에 할 일 — now = 지금(분), last = 마지막으로 받은 칸(없으면 null), end = 끝낼 시각(분)
+ *  지난 칸을 아직 못 받았으면(15분 안 — 가장 최근 칸 하나만) 바로 받기 · 아니면 다음 칸까지 기다림 · 다음 칸이 끝 시각을 넘으면 끝 */
+export function liveLoopStep(now: number, last: number | null, end: number): LiveLoopStep {
+  if (now >= end) return { act: "end" };
+  const slots = liveSlots().filter((s) => last === null || s > last);
+  const due = slots.filter((s) => s <= now);
+  const cur = due[due.length - 1];
+  if (cur !== undefined && now - cur < LIVE_EVERY_MIN) return { act: "run", slot: cur };
+  const next = slots.find((s) => s > now);
+  return next === undefined || next >= end ? { act: "end" } : { act: "wait", slot: next };
 }
