@@ -18,7 +18,7 @@
 import { dayRange, daysInMonth, lyCalendar, lyDay, monthOf, monthStart, weekdayLabel } from "./dates";
 import { EXTRA_KINDS, type ExtraItem, type ExtraKind } from "./extra";
 import { rentalIn } from "./cash";
-import { etcMove, holidayName, isShortTime, kidsPrice, kidsSales, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
+import { etcMove, holidayName, isShortTime, kidsPrice, kidsSales, NOT_BREAD, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
 import type { KidsKind, Sector } from "./classify";
@@ -235,7 +235,13 @@ export class Board {
       m.cups += cafe.cups;
       m.teams += cafe.teams;
       // 예전에 기타로 저장된 상품도 볼 때 옮김 (새로 올린 날은 이미 옮겨져 저장됨 → 여기선 기타 줄만 봄)
+      // 빵이 아닌 상품(NOT_BREAD — 잼 · 포션크림치즈 · 발사믹소스 · 소스 따로)이 예전에 베이커리로 저장된 날도 볼 때 기타로
       for (const p of cafe.products || []) {
+        if (p[1] === "베이커리" && NOT_BREAD.has(p[0])) {
+          m.box.베이커리 -= p[3];
+          m.box.기타 += p[3];
+          continue;
+        }
         if (p[1] !== "기타") continue;
         const to = etcMove("cafe", p[0]);
         if (to !== "바리스타" && to !== "베이커리" && to !== "키친") continue;
@@ -390,6 +396,8 @@ export class Board {
 /** 상품이 그 상자(섹터) 것인지 */
 export function productInBox(part: StorePart, p: ProductTuple, box: BoxKey): boolean {
   const to = p[1] === "기타" || p[1] === "추가인원" ? etcMove(part.store, p[0]) : null;
+  // 빵이 아닌 상품(NOT_BREAD)은 예전에 베이커리로 저장됐어도 기타
+  if (part.store === "cafe" && p[1] === "베이커리" && NOT_BREAD.has(p[0])) return box === "기타";
   if (part.store === "cafe") return (to === "바리스타" || to === "베이커리" || to === "키친" ? to : p[1]) === box;
   if (box === "키즈입장료") return p[1] === "현장결제" || p[1] === "입장발행" || to === "키즈입장료";
   if (box === "기타") return (p[1] === "추가인원" || p[1] === "기타") && to !== "키즈입장료";
