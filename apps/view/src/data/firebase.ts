@@ -7,8 +7,9 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, cleanSurveys, DESK_LIVE, mergeSurveyDocs, parseDeskLive, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { asOrder, asPlan, cleanSettings, cleanSurveys, DESK_LIVE, DESK_REVISIT, DESK_STATS, mergeSurveyDocs, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import demoDeskLive from "./demoDeskLive.json";
+import demoRevisit from "./demoRevisit.json";
 import type { Source } from "./source";
 
 export interface FirebaseConfig {
@@ -239,4 +240,25 @@ export async function deskLiveNow(): Promise<{ live: DeskLive | null; bad?: bool
   const f = fieldsOf(await res.json());
   const live = parseDeskLive(f.json);
   return live ? { live } : { live: null, bad: true };
+}
+
+/** 재방문 간격 — 키즈 POS 통합데스크가 매일 20:00 덮어쓰는 deskStats/revisit (astanakiz docs/REVISIT.md · 손님 정보 없음)
+    없으면 revisit: null · 모양이 틀리면 bad · 인터넷 · 권한 오류는 throw */
+export async function deskRevisitNow(): Promise<{ revisit: DeskRevisit | null; bad?: boolean }> {
+  if (__DEMO__) return { revisit: parseDeskRevisit(demoRevisit) };
+  const cfg = firebaseConfig();
+  const board = boardKey();
+  if (!cfg || !board) return { revisit: null };
+  let res: Response;
+  try {
+    res = await fetch(`${base(cfg, board)}/${DESK_STATS}/${DESK_REVISIT}?key=${cfg.apiKey}`, { cache: "no-store" });
+  } catch {
+    throw new Error("인터넷에 연결하지 못해 재방문 간격을 받지 못했습니다.");
+  }
+  if (res.status === 404) return { revisit: null };
+  if (res.status === 403) throw new Error("재방문 간격을 읽을 수 없습니다 — 클라우드 보안 규칙에 deskStats 가 들어갔는지 확인해 주세요 (docs/KIDS_REVISIT.md).");
+  if (!res.ok) throw new Error(`재방문 간격 받기 오류 (${res.status})`);
+  const f = fieldsOf(await res.json());
+  const revisit = parseDeskRevisit(f.json);
+  return revisit ? { revisit } : { revisit: null, bad: true };
 }
