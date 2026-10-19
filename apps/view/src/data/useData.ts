@@ -169,7 +169,7 @@ export function useData() {
     // 앱을 다시 열 때(폰 화면 켬)마다 새 자료 확인
     const onVis = () => document.visibilityState === "visible" && void sync();
     document.addEventListener("visibilitychange", onVis);
-    // 열려 있는 동안 5분마다 마감 전 영업정보만 (문서 두 개 — 매시 15분 · 45분에 새로 옴)
+    // 열려 있는 동안 5분마다 마감 전 영업정보만 (문서 두 개 — 15분마다 매시 0 · 15 · 30 · 45분에 새로 옴)
     const t = setInterval(() => document.visibilityState === "visible" && void syncLive(), 5 * 60_000);
     return () => {
       document.removeEventListener("visibilitychange", onVis);

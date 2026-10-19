@@ -1,5 +1,5 @@
 /* ============================================================
-   오늘 마감 전 영업정보 — POS 메인 PC(GitHub 실행기 nice-pos)에서 매시 15분 · 45분(10:15 ~ 22:45, live-collect.yml)
+   오늘 마감 전 영업정보 — POS 메인 PC(GitHub 실행기 nice-pos)에서 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45, live-collect.yml)
    OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아 아침 확정 수집(collect.ts)과 **같은 계산**(buildStorePart)으로 만든
    조각을 live/{오늘} 의 cafe · kids 칸에 올림 → B 가 '마감 전 영업정보 · HH:MM 기준'으로 보여 줌
    - 올리기 전 검사: 엑셀 합계 = 계산(partCheck) · checkLivePiece (packages/core/src/live.ts). 틀리면 올리지 않음 (B 에 틀린 숫자가 안 가게)
@@ -107,21 +107,38 @@ async function main() {
   const statePath = env("NAVER_STATE_DIR") ? join(env("NAVER_STATE_DIR"), "state.json") : "";
   if (!statePath || !existsSync(statePath)) say("네이버: 로그인 상태가 없어 건너뜀 (POS 메인 PC 의 naver-login.cmd)");
   else {
-    const nb = await NaverBook.open(statePath);
+    // 한 번 읽기 (브라우저를 새로 열어서) — 화면이 늦게 떠 표를 못 찾는 등 실패하면 바로 한 번 더 (2026-10-19, 로그인이 풀린 것은 다시 해도 같아 그대로)
+    const readNaver = async () => {
+      const nb = await NaverBook.open(statePath);
+      try {
+        await nb.enter(env("NAVER_BIZ_ID"));
+        await nb.gotoDate(date);
+        const done = await nb.readCells("완료");
+        if (!done.rows) throw new Error("회차 표를 못 찾음");
+        await nb.showStatus("확정");
+        const booked = await nb.readCells("확정");
+        await nb.showStatus("전체").catch(() => {});
+        await nb.saveState(statePath);
+        const part = liveNaverPart(date, done.cells, booked.cells);
+        const bad = checkLiveNaver(part, date);
+        const used = (cs: { product: string }[]) => cs.filter((c) => isNaverTicketProduct(c.product)).length;
+        say(`네이버: 이용완료 칸 ${used(done.cells)}개 · 입장예정 칸 ${used(booked.cells)}개 (입장권 상품) · 검사 ${bad.length ? `걸림 ${bad.length}` : "통과"}`);
+        if (bad.length) throw new Error("검사에 걸려 올리지 않음");
+        return part;
+      } finally {
+        await nb.close().catch(() => {});
+      }
+    };
     try {
-      await nb.enter(env("NAVER_BIZ_ID"));
-      await nb.gotoDate(date);
-      const done = await nb.readCells("완료");
-      if (!done.rows) throw new Error("회차 표를 못 찾음");
-      await nb.showStatus("확정");
-      const booked = await nb.readCells("확정");
-      await nb.showStatus("전체").catch(() => {});
-      await nb.saveState(statePath);
-      const part = liveNaverPart(date, done.cells, booked.cells);
-      const bad = checkLiveNaver(part, date);
-      const used = (cs: { product: string }[]) => cs.filter((c) => isNaverTicketProduct(c.product)).length;
-      say(`네이버: 이용완료 칸 ${used(done.cells)}개 · 입장예정 칸 ${used(booked.cells)}개 (입장권 상품) · 검사 ${bad.length ? `걸림 ${bad.length}` : "통과"}`);
-      if (bad.length) throw new Error("검사에 걸려 올리지 않음");
+      let part: Awaited<ReturnType<typeof readNaver>>;
+      try {
+        part = await readNaver();
+      } catch (e) {
+        const m = mask((e as Error).message);
+        if (/로그인이 풀렸|검사에 걸려/.test(m)) throw e;
+        say(`네이버: ${m} → 바로 한 번 더`);
+        part = await readNaver();
+      }
       if (!dry) {
         try {
           await writeLive(fb, date, LIVE_BY_NAVER, [{ kind: "naver", part }]);
@@ -133,8 +150,6 @@ async function main() {
       }
     } catch (e) {
       problems.push(`네이버: ${mask((e as Error).message)}`);
-    } finally {
-      await nb.close().catch(() => {});
     }
   }
   if (problems.length) {
