@@ -108,7 +108,7 @@ function RevisitCard() {
       </h2>
       {state === "loading" && <p className="sub">통합데스크 자료를 받는 중입니다…</p>}
       {state === "error" && <p className="sub">{err}</p>}
-      {state === "none" && <p className="sub">재방문 간격이 아직 없어요 — 키즈 POS 통합데스크 운영 설정 → 설문조사 '재방문 간격'에서 보고 열쇠 · [지난 방문 기록 읽기]를 확인해 주세요 (매일 20:00 보냄).</p>}
+      {state === "none" && <p className="sub">재방문 간격이 아직 없어요 — 키즈 POS 통합데스크가 매일 20:00 에 보내요. 오지 않으면 통합데스크 운영 설정 → 설문조사의 보고 열쇠 · '재방문 간격' 줄을 확인해 주세요.</p>}
       {state === "bad" && <p className="sub">모양이 맞지 않아 숨겼어요 — 키즈 POS 통합데스크를 새 판으로 바꿔 주세요.</p>}
       {r && (
         <>
@@ -135,7 +135,7 @@ function RevisitCard() {
           </div>
           <p className="note">
             통합데스크 {md(r.day)} {r.sentAt.slice(11, 16)} 기준 · 방문 기록 {r.history.days ? `${md(r.history.from)} ~ ${md(r.history.to)} (${count(r.history.days)}일)` : "없음"}
-            {r.past && r.history.from > r.past.from ? " — 지난 방문 기록을 아직 다 안 읽었어요" : ""}
+            {r.past && r.history.from > r.past.from ? " — 지난 방문 기록을 아직 다 안 읽었어요 (통합데스크가 20:00 마다 이어서 읽어요)" : ""}
           </p>
         </>
       )}
