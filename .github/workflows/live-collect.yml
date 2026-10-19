@@ -2,6 +2,7 @@
 # 자기 시계로 매시 0 · 15 · 30 · 45분(한국 10:00 ~ 22:45)에 바로 받음 (2026-10-19 사장님 — apps/collector/src/liveLoop.ts)
 # OKPOS 점주 웹의 오늘 카페 · 키즈 영수증별 엑셀 → 확정 보고와 같은 계산 → 클라우드 live/{오늘} → 보고 앱 B '마감 전 영업정보'
 # + 네이버 예약현황(오늘)의 30분 칸별 이용완료 + 확정(입장예정) 장수 → live/{오늘}.naver (키즈 입장료 계산)
+#   네이버를 직접 못 읽거나 1분 넘게 걸리면 통합데스크 키즈 실시간 현황(deskLive/now)의 네이버 시간 칸으로 대신 (2026-10-19 사장님)
 # apps/collector/src/live.ts · 규칙은 packages/core/src/live.ts. 확정 칸(reports)은 그대로 — 다음 날 아침 09:12 확정 수집
 # GitHub 예약 실행은 20분 남짓 늦거나 자주 건너뛰어(15분마다로 바꾼 날 3시간에 3번) 예약은 '시작'만 맡김
 #   09:30 · 09:45 · 10:00 부터 30분마다 시작을 시도하고, 이미 돌고 있으면 바로 건너뜀
@@ -38,6 +39,10 @@ on:
       end:
         description: "끝 시각 HH:MM (비우면 22:50 — 시험용)"
         required: false
+      desk:
+        description: "시험: 네이버를 직접 읽지 않고 통합데스크 키즈 실시간 현황으로"
+        type: boolean
+        default: false
 jobs:
   # 예약으로 시작했을 때: 하루 수집이 이미 돌고 있거나(시작을 기다리는 것 포함) · 하루 수집 시간이 아니면 건너뜀
   # 손으로 시작 · 비켜 준 뒤 다시 시작은 그대로 (겹치면 아래 concurrency 로 앞의 것이 끝난 뒤에)
@@ -117,6 +122,7 @@ jobs:
           LOOP_ONCE: ${{ (github.event_name == 'push' || inputs.once || inputs.date != '') && '1' || '' }}
           LOOP_END: ${{ inputs.end }}
           COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
+          LIVE_FORCE_DESK: ${{ inputs.desk && '1' || '' }}
           GH_TOKEN: ${{ github.token }}
           # 네이버 예약현황 (오늘) · A [신규 다시 확인] — 로그인 상태는 아침 네이버 수집과 같은 곳 (POS 메인 PC 도구 폴더)
           NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login

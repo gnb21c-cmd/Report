@@ -17,6 +17,12 @@
    클라우드 `boards/{열쇠}/deskLive/now` 에 **덮어씀** (설문 보고함과 같은 보고 열쇠 · 로그인 없이). 통합데스크 쪽 설명 · 글 모양은 astanakiz `docs/LIVE.md`
 2. B 가 그 한 문서를 읽어(`apps/view/src/data/firebase.ts deskLiveNow`) 검사(`packages/core/src/deskLive.ts parseDeskLive` — 모양이 틀리면 안 보임)한 뒤 그림
 
+## 마감 전 영업정보의 네이버를 대신 받기 (2026-10-19 사장님)
+- 바리스타 POS 하루 수집(`apps/collector/src/live.ts`)이 네이버를 직접 못 읽거나(로그인 풀림 · 표를 못 찾음) 1분 넘게 걸리면 이 현황의 네이버 시간 칸(완료 + 확정)을 `live/{오늘}.naver` 에 대신 씀 (`packages/core/src/live.ts deskNaverPart`)
+- 통합데스크도 같은 네이버 예약현황(입장권 칸)을 읽음 → 2026-10-19 19:18 견줌: 20칸 모두 같음
+- 오늘 현황 · 10분 안에 온 소식 · 상품이 보고 기준(평일무제한 · 야간자유 입장권)과 같을 때만 · 먼저 받은 네이버보다 합이 작으면 덮지 않음 (통합데스크는 네이버를 :20 · :50 · 입장 처리 때 다시 읽어 조금 늦을 수 있음)
+- 손님 이름 · 전화는 읽기만 하고 쓰지 않음 (시간 칸 장수만)
+
 ## 처음 한 번 (사장님)
 1. **Firebase 콘솔 → Firestore Database → 규칙** 에 이 저장소 `firebase/firestore.rules` 전체를 붙여 넣고 [게시] (`deskLive` 규칙이 새로 들어감 — Deploy 는 화면만 올림)
 2. 키즈 POS 통합데스크를 '폰 실시간 현황'이 들어간 판으로 → 운영 설정 → 설문조사: 보고 열쇠(설문 보고함과 같은 것) · **폰 실시간 현황 켜짐**

@@ -109,6 +109,17 @@ export async function readLive(fb: Fb, date: string): Promise<LiveDoc | null> {
   return out;
 }
 
+/** 통합데스크 키즈 실시간 현황(deskLive/now)의 글 — 없으면 null (네이버를 직접 못 읽었을 때 대신 씀, docs/KIDS_LIVE.md) */
+export async function readDeskLive(fb: Fb): Promise<string | null> {
+  try {
+    const d = await http(`${base(fb)}/boards/${fb.board}/deskLive/now`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return d.fields?.json?.stringValue ?? null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
 /** 작업지시 계획 읽기 (없으면 undefined) */
 export async function readPlan(fb: Fb, date: string): Promise<string | undefined> {
   try {

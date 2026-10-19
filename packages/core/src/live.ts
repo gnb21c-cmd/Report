@@ -8,6 +8,7 @@
    - B 는 받은 조각을 검사해 틀리면 보이지 않고 '확인 필요'로 (틀린 숫자를 보여 주지 않음)
    - 다음 날 아침 09:12 확정 수집(reports)이 들어오면 칸마다 확정이 이김
    ============================================================ */
+import { deskLiveAgeMin, type DeskLive } from "./deskLive";
 import { isNaverTicketProduct, naverTime } from "./naverAuto";
 import { NAVER_SLOTS, sum, type DayReport, type NaverPart, type StorePart } from "./part";
 import type { StoreId } from "./types";
@@ -80,6 +81,34 @@ export function checkLiveNaver(p: NaverPart, date: string): string[] {
   for (const k of ["tickets", "newVisitors"] as const) if (!Array.isArray(p[k]) || p[k].length !== NAVER_SLOTS.length || !p[k].every(isCount)) e.push(`${k} 30분 칸 모양이 다름`);
   if (hasPhone(p)) e.push("개인정보(전화번호)로 보이는 글이 있음");
   return e;
+}
+
+/* ---------- 통합데스크로 대신 받기 (2026-10-19 사장님 — 네이버를 직접 못 읽거나 오래 걸리면) ----------
+   키즈 POS 통합데스크도 같은 네이버 예약현황(입장권 칸 이용완료 · 확정)을 읽어 1분마다 deskLive/now 로 보냄 (docs/KIDS_LIVE.md)
+   → 시간 칸마다 이용완료 + 확정 = 보고 앱이 직접 읽는 것과 같은 값 (2026-10-19 19:18 견줌 — 20칸 모두 같음)
+   통합데스크는 네이버를 30분마다(:20 · :50, 19:20 까지) · 입장 처리 때 다시 읽어 조금 늦을 수 있음 → 먼저 받은 것보다 합이 작으면 덮지 않음 */
+/** 통합데스크 소식이 이만큼(분) 넘게 없으면 쓰지 않음 (키즈 POS 꺼짐 등) */
+export const DESK_NAVER_MAX_MIN = 10;
+
+/** 통합데스크 현황 → 마감 전 네이버 칸 (못 쓰면 part = null · why = 까닭). prev = 지금 live 에 있는 네이버 칸 */
+export function deskNaverPart(desk: DeskLive | null, date: string, now: Date = new Date(), prev?: NaverPart | null): { part: NaverPart | null; why: string } {
+  const no = (why: string) => ({ part: null, why });
+  if (!desk) return no("통합데스크 현황이 없거나 모양이 틀림");
+  if (desk.day !== date) return no(`통합데스크 현황이 오늘 것이 아님 (${desk.day})`);
+  const age = deskLiveAgeMin(desk, now);
+  if (age > DESK_NAVER_MAX_MIN) return no(`통합데스크 소식이 ${Number.isFinite(age) ? `${age}분째` : "오래"} 없음`);
+  if (desk.naver.products.some((x) => !isNaverTicketProduct(x.name))) return no("통합데스크 네이버 상품이 보고 기준(입장권 상품)과 다름");
+  const tickets = NAVER_SLOTS.map(() => 0);
+  for (const s of desk.naver.slots) {
+    const i = NAVER_SLOTS.indexOf(s.t.padStart(5, "0"));
+    if (i < 0) {
+      if (s.done + s.conf > 0) return no(`보고 칸에 없는 시각 ${s.t}`);
+      continue;
+    }
+    tickets[i] += s.done + s.conf;
+  }
+  if (prev && Array.isArray(prev.tickets) && sum(prev.tickets) > sum(tickets)) return no("통합데스크 숫자가 먼저 받은 것보다 작음 (아직 다시 안 읽었을 수 있음)");
+  return { part: { v: 1, date, tickets, newVisitors: NAVER_SLOTS.map(() => 0), noNew: true }, why: "" };
 }
 
 type Piece<T> = { p: T; at?: string; by?: string } | undefined;
