@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Board, buildStorePart, etcDetail, etcMove, extraTotal, productInBox, type ExtraPart, type ReceiptLine, type StorePart } from "../src";
+import { Board, buildStorePart, etcDetail, etcMove, extraTotal, NOT_BREAD, productInBox, type ExtraPart, type ReceiptLine, type StorePart } from "../src";
 
 const line = (o: Partial<ReceiptLine>): ReceiptLine => ({ pos: "01", receipt: "0001", refund: false, time: "12:00:00", name: "", qty: 1, gross: 0, discount: 0, net: 0, ...o });
 const sold = (name: string, qty: number, price: number) => line({ name, qty, gross: qty * price, net: qty * price });
@@ -93,6 +93,32 @@ describe("기타로 잡히던 상품 옮기기 (2026-10-06 사장님 기준)", (
     expect([productInBox(old, bun, "베이커리"), productInBox(old, bun, "기타")]).toEqual([true, false]);
     expect(b.products("2026-09-01", "2026-09-01", "기타").map((x) => x.name)).toEqual(["이벤트 초"]);
     expect(b.products("2026-09-01", "2026-09-01", "바리스타").map((x) => x.name).sort()).toEqual(["[드립백]디카프", "[원액500ml]콜드브루"]);
+  });
+
+  it("빵이 아닌 상품 — 포션크림치즈 · 발사믹소스 · 소스 따로는 기타 (2026-10-19 사장님, 잼과 같이)", () => {
+    for (const n of ["딸기잼", "블루베리잼", "포션크림치즈", "발사믹소스", "소스 따로"]) expect(NOT_BREAD.has(n)).toBe(true);
+    const p = day("cafe", "2026-10-19", [sold("소금빵", 3, 3500), sold("포션크림치즈", 1, 1500), sold("발사믹소스", 2, 1200), sold("소스 따로", 1, 0)], () => "베이커리");
+    expect(p.sectors.베이커리).toBe(10500);
+    expect(p.sectors.기타).toBe(1500 + 2400);
+    const b = new Board([{ date: "2026-10-19", cafe: p }]);
+    expect(b.products("2026-10-19", "2026-10-19", "베이커리").map((x) => x.name)).toEqual(["소금빵"]);
+  });
+
+  it("예전에 올린 날(포션크림치즈 · 발사믹소스 · 소스 따로 · 잼이 베이커리로 저장됨)도 볼 때 기타로 — 합계는 그대로", () => {
+    const now = day("cafe", "2026-10-18", [sold("소금빵", 3, 3500), sold("포션크림치즈", 1, 1500), sold("발사믹소스", 2, 1200), sold("소스 따로", 2, 0), sold("딸기잼", 1, 1500)], () => "베이커리");
+    const old: StorePart = {
+      ...now,
+      sectors: { 바리스타: 0, 베이커리: 10500 + 1500 + 2400 + 1500, 키친: 0, 기타: 0 },
+      products: now.products.map((p) => [p[0], "베이커리", p[2], p[3]]),
+    };
+    const b = new Board([{ date: "2026-10-18", cafe: old }]);
+    const m = b.day("2026-10-18");
+    expect([m.box.베이커리, m.box.기타]).toEqual([10500, 1500 + 2400 + 1500]);
+    expect(m.total).toBe(10500 + 1500 + 2400 + 1500);
+    expect(b.products("2026-10-18", "2026-10-18", "베이커리").map((x) => x.name)).toEqual(["소금빵"]);
+    expect(b.products("2026-10-18", "2026-10-18", "기타").map((x) => x.name).sort()).toEqual(["딸기잼", "발사믹소스", "소스 따로", "포션크림치즈"].sort());
+    const sauce = old.products.find((x) => x[0] === "발사믹소스")!;
+    expect([productInBox(old, sauce, "베이커리"), productInBox(old, sauce, "기타")]).toEqual([false, true]);
   });
 
   it("키즈: 음료 · 스티커 → 자판기, 퇴장 지연 · 열쇠 · 인원추가 → 키즈입장료 (키즈 매출을 잡는 4월부터)", () => {
