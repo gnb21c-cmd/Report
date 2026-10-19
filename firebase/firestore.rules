@@ -87,6 +87,19 @@ service cloud.firestore {
         allow delete: if isSender(board);
       }
 
+      // 재방문 간격 (2026-10-19 사장님 · 통합데스크 → B '네이버 판매 수' 세부 화면 맨 위) — astanakiz docs/REVISIT.md · docs/KIDS_REVISIT.md
+      //   문서 하나(revisit)만 매일 20:00 덮어씀 · json = 일수 모음(astanakiz-revisit) · 손님 정보 없음
+      match /deskStats/{doc} {
+        allow read: if true;
+        allow create, update: if doc == "revisit"
+          && exists(/databases/$(database)/documents/boards/$(board)/settings/main)
+          && request.resource.data.keys().hasOnly(["json", "at"])
+          && request.resource.data.json is string && request.resource.data.json.size() < 20000
+          && request.resource.data.json.matches("(?s)^[{].*astanakiz-revisit.*$")
+          && request.resource.data.at is string && request.resource.data.at.size() < 40;
+        allow delete: if isSender(board);
+      }
+
       // 베이커리 작업지시 — 계획(plans: 매일 16시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
       match /plans/{date} {
         allow read: if true;

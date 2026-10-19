@@ -1,0 +1,39 @@
+{
+  "type": "astanakiz-revisit",
+  "v": 1,
+  "day": "2026-11-20",
+  "sentAt": "2026-11-20 20:00",
+  "history": { "from": "2026-04-01", "to": "2026-11-20", "days": 220 },
+  "recent": { "from": "2026-10-22", "to": "2026-11-20", "people": 410, "revisits": 96, "mode": { "days": 7, "count": 23 }, "avg": 11.3, "median": 8 },
+  "past": {
+    "from": "2026-04-01",
+    "to": "2026-10-25",
+    "revisits": 512,
+    "people": 301,
+    "top": [
+      { "days": 7, "count": 82 },
+      { "days": 14, "count": 61 },
+      { "days": 6, "count": 44 },
+      { "days": 1, "count": 38 },
+      { "days": 21, "count": 30 },
+      { "days": 13, "count": 24 },
+      { "days": 8, "count": 19 }
+    ]
+  },
+  "event": {
+    "from": "2026-10-26",
+    "to": "2026-11-20",
+    "end": "2027-02-28",
+    "revisits": 74,
+    "people": 58,
+    "top": [
+      { "days": 6, "count": 21 },
+      { "days": 7, "count": 15 },
+      { "days": 14, "count": 12 },
+      { "days": 13, "count": 9 },
+      { "days": 1, "count": 6 },
+      { "days": 10, "count": 4 },
+      { "days": 19, "count": 3 }
+    ]
+  }
+}
