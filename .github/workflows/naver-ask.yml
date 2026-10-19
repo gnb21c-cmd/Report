@@ -1,4 +1,5 @@
 # A [신규 다시 확인] 요청 보기 — 5분마다(한국 09시 ~ 24시) 클라우드의 요청(config/naverAsk)을 보고, 아직 안 한 요청이면 네이버 수집(naver-collect.yml)을 시작시킴
+# POS 메인 PC 의 하루 수집(live-collect.yml, 09:30 ~ 22:50)이 돌고 있으면 그쪽이 1분마다 보고 먼저 맡음 → 여기서는 '이미 맡긴 요청'으로 끝남 (실행기가 하나라)
 # 요청은 정해진 계정만 남길 수 있음 (packages/core/src/naverAuto.ts NAVER_ASK_EMAIL · firebase/firestore.rules)
 # 결과는 수집이 config/naverResult 에 씀 → A 가 읽어 보여 줌. 공개 저장소라 기록에는 '요청 있음/없음'만
 name: 네이버 신규 다시 확인 요청 보기

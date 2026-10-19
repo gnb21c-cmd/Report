@@ -109,6 +109,17 @@ export async function readLive(fb: Fb, date: string): Promise<LiveDoc | null> {
   return out;
 }
 
+/** 통합데스크 키즈 실시간 현황(deskLive/now)의 글 — 없으면 null (네이버를 직접 못 읽었을 때 대신 씀, docs/KIDS_LIVE.md) */
+export async function readDeskLive(fb: Fb): Promise<string | null> {
+  try {
+    const d = await http(`${base(fb)}/boards/${fb.board}/deskLive/now`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return d.fields?.json?.stringValue ?? null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
 /** 작업지시 계획 읽기 (없으면 undefined) */
 export async function readPlan(fb: Fb, date: string): Promise<string | undefined> {
   try {
@@ -247,6 +258,22 @@ export async function writeConfigJson(fb: Fb, doc: string, value: unknown): Prom
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
     body: JSON.stringify({ fields: { json: str(JSON.stringify(value)), at: { timestampValue: new Date().toISOString() } } }),
   });
+}
+
+/** 설정 문서 하나(config/{문서})의 JSON 읽기 — 없거나 깨졌으면 null (네이버 다시 확인 요청 · 결과 등) */
+export async function readConfigJson<T>(fb: Fb, doc: string): Promise<T | null> {
+  let d: any;
+  try {
+    d = await http(`${base(fb)}/boards/${fb.board}/config/${doc}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+  try {
+    return JSON.parse(d.fields?.json?.stringValue || "null") as T | null;
+  } catch {
+    return null;
+  }
 }
 
 /** 보고 설정 칸(settings/{doc}) 의 json 읽기 — 없으면 null (보고 앱이 열쇠만으로 읽는 곳) */
