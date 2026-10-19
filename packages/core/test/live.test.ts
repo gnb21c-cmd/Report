@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Board, buildStorePart, checkLiveNaver, checkLivePiece, dashboard, dayStage, liveNaverPart, liveReport, liveStale, mergeLive, NAVER_SLOTS, sampleReports, withLiveCafe, type NaverPart, type ReceiptSheet } from "../src";
+import { Board, buildStorePart, checkLiveNaver, checkLivePiece, dashboard, dayStage, liveNaverPart, liveReport, liveStale, mergeLive, NAVER_SLOTS, sampleReports, withLiveCafe, type NaverPart, type ReceiptSheet, LIVE_STALE_MIN, LIVE_FROM } from "../src";
 
 const sheet: ReceiptSheet = {
   from: "2026-10-08",
@@ -61,17 +61,19 @@ describe("오늘 마감 전 영업정보 — 받은 숫자 검사 (틀린 숫자
   });
 });
 
-describe("늦음 표시 — 매시 15분 · 45분에 받으니 70분 넘게 새 숫자가 없으면 (받는 시간 안에서만)", () => {
+describe("늦음 표시 — 15분마다(0 · 15 · 30 · 45분) 받으니 60분 넘게 새 숫자가 없으면 (받는 시간 안에서만)", () => {
   const kst = (hm: string) => new Date(`2026-10-08T${hm}:00+09:00`);
   const at = (hm: string) => kst(hm).toISOString();
-  it("70분 안이면 늦지 않음 · 넘으면 늦음", () => {
-    expect(liveStale(at("13:15"), kst("14:20"))).toBe(false);
-    expect(liveStale(at("13:15"), kst("14:30"))).toBe(true);
+  it("60분 안이면 늦지 않음 · 넘으면 늦음", () => {
+    expect(LIVE_STALE_MIN).toBe(60);
+    expect(liveStale(at("13:15"), kst("14:10"))).toBe(false);
+    expect(liveStale(at("13:15"), kst("14:20"))).toBe(true);
   });
-  it("아침 첫 수집(10:15) 전후 · 마지막(22:45) 뒤 밤에는 늦음 표시 없음", () => {
+  it("아침 첫 수집(10:00) 전후 · 마지막(22:45) 뒤 밤에는 늦음 표시 없음", () => {
+    expect(LIVE_FROM).toBe("10:00");
     expect(liveStale(null, kst("09:50"))).toBe(false);
-    expect(liveStale(null, kst("10:40"))).toBe(false);
-    expect(liveStale(null, kst("11:30"))).toBe(true);
+    expect(liveStale(null, kst("10:50"))).toBe(false);
+    expect(liveStale(null, kst("11:05"))).toBe(true);
     expect(liveStale(at("22:45"), kst("23:59"))).toBe(false);
   });
 });

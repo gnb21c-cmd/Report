@@ -3,7 +3,7 @@
    - 아스타나키즈 통합데스크(1.38~)가 매일 20:00 POS PC 데스크 폴더(%APPDATA%\아스타나키즈 입장 데스크\report-outbox\)에
      survey-날짜.json (질문 · 기간 · 대상 · 번호별 오늘 · 누적 · 제외 · 응답 수 — 손님 이름 · 전화 없음) 을 남김
    - 그 파일들을 읽어 설문마다 가장 최근 날의 누적을 settings/surveys 에 올림 (packages/core/src/survey.ts surveysFromDesk)
-   - POS 메인 PC 의 마감 전 수집(live-collect.yml) 마지막 단계로 30분마다 — 바뀌었을 때만 올림, 폴더가 없으면 건너뜀
+   - POS 메인 PC 의 마감 전 수집(live-collect.yml) 마지막 단계로 15분마다 — 바뀌었을 때만 올림, 폴더가 없으면 건너뜀
    - 실행기가 데스크와 다른 Windows 사용자로 돌 수 있어 사용자 폴더들을 다 찾아봄
    - 통합데스크가 다른 PC(키즈 POS)면 이 길로는 못 받음 → 통합데스크가 클라우드 설문 보고함(surveyInbox)에 바로 씀 (2026-10-15, docs/SURVEY.md)
    - COLLECT_DRY=1 이면 확인만

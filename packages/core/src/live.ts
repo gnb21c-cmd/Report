@@ -1,6 +1,6 @@
 /* ============================================================
    오늘 마감 전 영업정보 — live/{날짜} 문서 검사 · 확정 보고와 합치기
-   - POS 메인 PC(GitHub 실행기 nice-pos)가 매시 15분 · 45분(10:15 ~ 22:45)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
+   - POS 메인 PC(GitHub 실행기 nice-pos)가 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45, 2026-10-19 — 예전 15 · 45분)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
      확정 보고와 같은 계산(buildStorePart)으로 만든 StorePart 를 live/{오늘} 의 cafe · kids 칸에 올림 (apps/collector/src/live.ts)
      → B 의 숫자 · 통계 계산이 확정 날과 같은 길
    - 같은 때 네이버 예약현황(오늘)에서 30분 칸별 이용완료 + 확정(입장예정) 장수 → naver 칸 (liveNaverPart, 입장권 상품만 · 신규는 모름)
@@ -13,11 +13,11 @@ import { NAVER_SLOTS, sum, type DayReport, type NaverPart, type StorePart } from
 import type { StoreId } from "./types";
 
 export const LIVE_LABEL = "마감 전 영업정보";
-/** 받는 시간 (한국 시간) — 매시 15분 · 45분 (.github/workflows/live-collect.yml) */
-export const LIVE_FROM = "10:15";
+/** 받는 시간 (한국 시간) — 15분마다 매시 0 · 15 · 30 · 45분 (.github/workflows/live-collect.yml) */
+export const LIVE_FROM = "10:00";
 export const LIVE_TO = "22:45";
-/** 이만큼(분) 넘게 새 숫자가 없으면 B 에 '늦음' — 30분마다 받지만 GitHub 예약이 늦게 시작할 때가 있어 넉넉히 */
-export const LIVE_STALE_MIN = 70;
+/** 이만큼(분) 넘게 새 숫자가 없으면 B 에 '늦음' — 15분마다 받지만 GitHub 예약이 20분 남짓 늦거나 가끔 건너뛰어 넉넉히 */
+export const LIVE_STALE_MIN = 60;
 
 /** 그 날짜가 확정(어제까지) · 마감 전(오늘) · 앞날 중 어디인지 */
 export function dayStage(date: string, today: string): "closed" | "live" | "future" {
@@ -150,7 +150,7 @@ export function withLiveCafe(reports: DayReport[], doc: LiveDoc | null | undefin
 
 const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 
-/** 새 숫자가 늦는지 — 받는 시간(10:15 ~ 22:45) 안에서 LIVE_STALE_MIN 분 넘게 새 숫자가 없으면 (첫 수집 직후 · 마지막 뒤 밤에는 아님) */
+/** 새 숫자가 늦는지 — 받는 시간(10:00 ~ 22:45) 안에서 LIVE_STALE_MIN 분 넘게 새 숫자가 없으면 (첫 수집 직후 · 마지막 뒤 밤에는 아님) */
 export function liveStale(at: string | null | undefined, now: Date = new Date(), limit = LIVE_STALE_MIN): boolean {
   const t = minutes(new Date(now.getTime() + 9 * 3600e3).toISOString().slice(11, 16));
   if (t < minutes(LIVE_FROM) + limit || t > minutes(LIVE_TO) + limit) return false;

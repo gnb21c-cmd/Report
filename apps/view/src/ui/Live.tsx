@@ -48,7 +48,7 @@ export function LiveNote() {
         {first}
       </div>
       <div data-fit>카페,키즈 영수 정보는</div>
-      <div data-fit>매시 15분, 45분에 받습니다.</div>
+      <div data-fit>15분마다(매시 0·15·30·45분) 받습니다.</div>
       <div data-fit>자판기, 주차, 네컷, 현금은</div>
       <div data-fit>다음(근무일)날 포함 됩니다.</div>
     </div>
