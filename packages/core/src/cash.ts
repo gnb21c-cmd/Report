@@ -110,10 +110,10 @@ export interface CashSummary {
   jpyKrw: number;
   /** 법인 증권계좌 금일 잔고 (잔액 합계와 따로) */
   securities: number;
-  /** 잔액 합계 (원화 + 외화 환산, 증권계좌 뺌) */
+  /** 잔액 합계 (원화만, 증권계좌 뺌) — 달러 · 엔화 환산(usdKrw · jpyKrw)은 더하지 않고 외화 칸에 따로 (2026-10-20 사장님) */
   total: number;
   loans: number;
-  /** 대출 제외 자금 */
+  /** 대출 제외 자금 = 잔액 합계 + 증권계좌 − 대출 (원화만) */
   net: number;
   rates: { usd: number; jpy: number };
   /** 직전 자금 보고 대비 환율 변동 (없으면 null) */
@@ -205,7 +205,7 @@ export function cashSummary(p: CashPart, opts: { open?: Record<string, number>; 
   const usdKrw = Math.round(group.usd.close * rates.usd);
   const jpyKrw = Math.round((group.jpy.close * rates.jpy) / 100);
   const securities = group.securities.close;
-  const total = krw.close - securities + usdKrw + jpyKrw;
+  const total = krw.close - securities;
   const loans = (p.loans || []).reduce((s, l) => s + num(l.amount), 0);
   const pr = opts.prevRates;
   const diff = (now: number, before?: number) => (before && now ? Math.round((now - before) * 100) / 100 : null);

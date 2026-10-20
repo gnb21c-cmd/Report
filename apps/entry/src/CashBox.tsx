@@ -268,7 +268,7 @@ export function CashTable(props: {
           {fx("usd")}
           {fx("jpy")}
           <tr className="grand">
-            <th colSpan={6}>잔액 합계 (ⓐ+ⓑ+ⓓ + 외화 보고일 환율 환산 · 증권계좌 제외)</th>
+            <th colSpan={6}>잔액 합계 (ⓐ+ⓑ+ⓓ 원화만 · 외화 환산은 따로 · 증권계좌 제외)</th>
             <td className="num">{money(sum.total, "KRW", false)}원</td>
           </tr>
           <tr className="sec-row">
