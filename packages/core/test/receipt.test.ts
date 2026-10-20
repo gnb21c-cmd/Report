@@ -112,6 +112,17 @@ describe("상품 분류 짐작 (분류표에 없는 새 상품)", () => {
     ];
     expect(want.map(([n]) => [n, guessSector(n)])).toEqual(want);
   });
+  it("스팀밀크(2026-10-19 새 음료) · 밀크 · 우유 음료는 바리스타 — 빵 이름이 먼저(우유모닝빵은 베이커리)", () => {
+    const want: [string, string][] = [["스팀밀크", "바리스타"], ["ICE 스팀밀크", "바리스타"], ["바닐라밀크", "바리스타"], ["딸기우유", "바리스타"], ["우유모닝빵", "베이커리"], ["밀크티", "바리스타"]];
+    expect(want.map(([n]) => [n, guessSector(n)])).toEqual(want);
+  });
+  it("스팀밀크는 바리스타 매출 · 1잔으로 셈", () => {
+    const s2 = parseReceiptSheet(sheet([row("01", "0001", "매출", "10:00:00", "스팀밀크", 1, 5000), row("01", "0001", "매출", "10:00:00", "아메리카노", 1, 4500)], "2026-10-19"));
+    const r = buildStorePart({ store: "cafe", date: "2026-10-19", file: "t.xls", sheet: s2, sectorOf: sectorLookup({}) });
+    expect(r.part.sectors.바리스타).toBe(9500);
+    expect(r.part.sectors.기타).toBe(0);
+    expect(r.part.cups).toBe(2);
+  });
   it("분류표에 있으면 그것을 씀", () => {
     expect(sectorLookup({ 여름사냥: "바리스타" })("여름사냥")).toBe("바리스타");
     expect(sectorLookup({})("여름사냥")).toBe("기타");
