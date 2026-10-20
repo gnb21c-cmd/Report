@@ -22,7 +22,7 @@ function sheet(): CashPart {
 }
 
 describe("자금요약", () => {
-  it("엑셀과 같은 숫자 (계좌 · 원화 합계 · 외화 환산 · 대출 제외)", () => {
+  it("엑셀과 같은 숫자 (계좌 · 원화 합계 · 외화 환산 · 대출 제외) — 잔액 합계 · 대출 제외는 원화만 (외화 환산은 따로, 2026-10-20 사장님)", () => {
     const s = cashSummary(sheet());
     const by = Object.fromEntries(s.lines.map((l) => [l.account.id, l]));
     expect(by.nh.close).toBe(119111538);
@@ -36,9 +36,11 @@ describe("자금요약", () => {
     expect(s.usdKrw).toBe(85824);
     expect(s.jpyKrw).toBe(0);
     // 잔액 합계는 증권계좌(2억)를 빼고 따로 — 대출 제외 자금은 증권계좌 포함 (엑셀과 같음)
+    // 달러 · 엔화 환산은 잔액 합계에 더하지 않음 (2026-10-20 사장님 — 자금 현황 아래 외화 칸에 따로)
     expect(s.securities).toBe(200000000);
-    expect(s.total).toBe(146242761);
-    expect(s.net).toBe(-693757239);
+    expect(s.total).toBe(146156937);
+    expect(s.total).toBe(s.krw.close - s.securities);
+    expect(s.net).toBe(-693843063);
   });
 
   it("빈칸은 0, 빈 줄은 뺌, 모든 계좌를 채움", () => {

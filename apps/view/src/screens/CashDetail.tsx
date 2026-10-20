@@ -1,6 +1,7 @@
 /* ============================================================
    자금 현황 — 사무실 A 가 올린 '자금요약' · '자금 변동 내역'을 폰 크기로
-   - 맨 위: 잔액 합계(증권계좌 빼고) · 증권계좌 · 대출 제외 자금
+   - 맨 위: 잔액 합계(원화만 · 증권계좌 빼고) · 증권계좌 · 대출 제외 자금
+   - 달러 · 엔화 원화 환산은 잔액 합계에 더하지 않고 계좌별 잔고의 외화 칸에 따로 (2026-10-20 사장님)
    - 계좌별 금일 잔고 (움직인 계좌는 전일 · 입금 · 출금도)
    - 보고 시점 환율 (직전 보고 대비)
    - 그날 입출금 내역 (거래처 · 적요 · 금액)
@@ -55,11 +56,7 @@ function Body({ sum, part, meta }: { sum: CashSummary; part: CashPart; meta?: Pa
           <span className="ch-label">잔액 합계</span>
           <span className="ch-value">{krw(sum.total)}</span>
         </div>
-        <div className="ch-sub">
-          원화 {krw(sum.krw.close - sum.securities)}
-          {sum.usdKrw ? ` · 달러 환산 ${krw(sum.usdKrw)}` : ""}
-          {sum.jpyKrw ? ` · 엔화 환산 ${krw(sum.jpyKrw)}` : ""}
-        </div>
+        {(sum.usdKrw !== 0 || sum.jpyKrw !== 0) && <div className="ch-sub">원화만 · 외화는 아래 외화 칸에 따로</div>}
         <div className="ch-row sec">
           <span className="ch-label">법인 증권계좌 (별도)</span>
           <span className="ch-value small">{krw(sum.securities)}</span>
@@ -99,6 +96,12 @@ function Body({ sum, part, meta }: { sum: CashSummary; part: CashPart; meta?: Pa
                 </span>
                 <b>{money(tot.close, cur, false)}</b>
               </div>
+              {(g === "usd" ? sum.usdKrw : g === "jpy" ? sum.jpyKrw : 0) !== 0 && (
+                <div className="cg-krw">
+                  <span>원화 환산 <small className="muted">잔액 합계와 별도</small></span>
+                  <b>{krw(g === "usd" ? sum.usdKrw : sum.jpyKrw)}</b>
+                </div>
+              )}
               {lines.length > 1 &&
                 (shown.length ? shown : []).map((l) => (
                   <div key={l.account.id} className="cg-line">
@@ -132,7 +135,6 @@ function Body({ sum, part, meta }: { sum: CashSummary; part: CashPart; meta?: Pa
                       {sum.rateChange[g]!.toFixed(2)})
                     </span>
                   )}
-                  {" → "}원화 {krw(g === "usd" ? sum.usdKrw : sum.jpyKrw)}
                 </div>
               )}
             </div>
@@ -172,7 +174,7 @@ function Body({ sum, part, meta }: { sum: CashSummary; part: CashPart; meta?: Pa
         ))}
       </section>
       <p className="note center-note">
-        전일 잔고 = {sum.openFrom ? `${shortLabel(sum.openFrom)} 마감 잔고` : "처음 넣은 값"} · 원화 기준, 외화는 보고일 환율 환산 · 퇴직급여 예치금 제외
+        전일 잔고 = {sum.openFrom ? `${shortLabel(sum.openFrom)} 마감 잔고` : "처음 넣은 값"} · 잔액 합계 · 대출 제외 자금은 원화만 (외화는 보고일 환율 환산을 외화 칸에 따로) · 퇴직급여 예치금 제외
         {meta ? ` · 입력 ${meta.by} ${when(meta.at)}` : ""}
       </p>
     </>
