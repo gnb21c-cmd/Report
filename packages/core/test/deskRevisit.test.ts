@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDeskRevisit, revisitRows, revisitSummary } from "../src";
+import { parseDeskRevisit, revisitByDays, revisitRows, revisitSummary } from "../src";
 import sample from "../../../apps/view/src/data/demoRevisit.json";
 
 /** 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md) — 체험판 예시 */
@@ -55,5 +55,17 @@ describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장�
     expect(rows[0].left).toEqual({ rank: 1, days: 7, count: 82 });
     expect(rows[2].right).toEqual({ rank: 3, days: 14, count: 12 });
     expect(rows[3].right).toBeNull();
+  });
+
+  it("보여 줄 때는 빨리 온 순(일수 짧은 순) — 많은 7개는 그대로 고르고 순서만 (2026-10-21 사장님) · 가장 많은 것(1위) 표시는 남김", () => {
+    const top = [
+      { rank: 1, days: 7, count: 18 }, { rank: 2, days: 14, count: 14 }, { rank: 3, days: 6, count: 13 }, { rank: 4, days: 12, count: 12 },
+      { rank: 5, days: 1, count: 9 }, { rank: 6, days: 9, count: 9 }, { rank: 7, days: 2, count: 8 },
+    ];
+    const by = revisitByDays(top);
+    expect(by.map((t) => t.days)).toEqual([1, 2, 6, 7, 9, 12, 14]);
+    expect(by.find((t) => t.days === 7)!.rank).toBe(1);
+    expect(top[0].days).toBe(7); // 받은 목록은 그대로
+    expect(revisitByDays([])).toEqual([]);
   });
 });

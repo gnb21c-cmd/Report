@@ -4,7 +4,7 @@
      매일 20:00 boards/{열쇠}/deskStats/revisit 문서 하나에 일수 모음(astanakiz-revisit)을 덮어씀 — 손님 정보 없음
      글 모양 · 통합데스크 쪽 설명은 astanakiz docs/REVISIT.md
    - B '네이버 판매 수' 세부 화면 맨 위: 한 줄 요약(지난 30일 재방문) + 아래 반반(왼쪽 과거 4/1 ~ 10/25 · 오른쪽 이벤트 10/26 ~)
-     재방문까지 걸린 일수 많은 순 7개 "1위 7일 23명"
+     재방문까지 걸린 일수 많은 순 7개를 골라 빨리 온 순(일수 짧은 순)으로 보여 줌 "1일 9명 · 2일 8명 …" (2026-10-21 사장님 — 예전엔 많은 순 "1위 7일 23명")
    ============================================================ */
 
 export const DESK_STATS = "deskStats";
@@ -104,6 +104,11 @@ export function revisitSummary(r: RevisitRecent): string {
   if (r.median != null) parts.push(`가운데 ${r.median}일`);
   parts.push(`재방문 ${r.revisits}명`);
   return parts.join(" · ");
+}
+
+/** 보여 줄 순서 — 많은 순으로 고른 7개를 빨리 온 순(일수 짧은 순)으로 (2026-10-21 사장님) · rank(많은 순 순위)는 그대로 남김 */
+export function revisitByDays(top: RevisitTop[]): RevisitTop[] {
+  return [...top].sort((a, b) => a.days - b.days || b.count - a.count);
 }
 
 /** 좌우 줄 — 순위마다 왼쪽(과거) · 오른쪽(이벤트), 짧은 쪽은 null */
