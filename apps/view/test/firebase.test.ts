@@ -88,3 +88,28 @@ describe("보고 앱 — 통합데스크 설문 보고함 (키즈 POS 가 바로
     vi.unstubAllGlobals();
   });
 });
+
+describe("보고 앱 — 통합데스크 이벤트 입장 수 (deskStats/event-날짜 · 2026-10-21)", () => {
+  const ev = (day: string, count: number) => JSON.stringify({ type: "astanakiz-event", v: 1, day, sentAt: `${day} 20:00`, count, names: [{ name: "한가위", n: count }] });
+  const doc = (id: string, json: string) => ({ name: `projects/p/databases/(default)/documents/boards/board/deskStats/${id}`, fields: { json: { stringValue: json }, at: { stringValue: "x" } } });
+
+  it("deskStats 문서를 끝까지(쪽마다) 읽어 날짜 → 수 · revisit 은 빼고 · 그날 하나만 읽기 (없으면 null)", async () => {
+    const pages: Record<string, any> = {
+      "": { documents: [doc("event-2026-10-20", ev("2026-10-20", 2)), doc("revisit", JSON.stringify({ type: "astanakiz-revisit" }))], nextPageToken: "T2" },
+      T2: { documents: [doc("event-2026-10-21", ev("2026-10-21", 5)), doc("event-2026-10-19", "{깨짐")] },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (/deskStats\?/.test(url)) return { ok: true, json: async () => pages[new URL(url).searchParams.get("pageToken") || ""] } as any;
+        if (url.includes("deskStats/event-2026-10-21?")) return { ok: true, status: 200, json: async () => doc("event-2026-10-21", ev("2026-10-21", 6)) } as any;
+        return { ok: false, status: 404, json: async () => ({}) } as any;
+      }),
+    );
+    const src = firebaseSource({ apiKey: "k", projectId: "p" }, "board");
+    expect(await src.deskEvents()).toEqual({ "2026-10-20": 2, "2026-10-21": 5 });
+    expect(await src.deskEventDay("2026-10-21")).toBe(6);
+    expect(await src.deskEventDay("2026-10-22")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});

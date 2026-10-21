@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, liveReport, liveStale, mergeLive, settlements, todayKst, type CashPart, type DayReport, type LiveKind } from "@report/core";
+import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, liveReport, liveStale, mergeLive, settlements, todayKst, withDeskEvents, type CashPart, type DayReport, type LiveKind } from "@report/core";
 import { LiveCtx, LiveNote, type LiveState } from "./ui/Live";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
@@ -43,11 +43,12 @@ export function App() {
     return m;
   }, [d.live, d.reports]);
   const reports = useMemo(() => {
-    if (!lives.size) return d.reports;
+    // 키즈 이벤트 무료입장 = max(POS 0원 상품, 통합데스크 이벤트 입장 수) — 통합데스크 2.1~ 매일 20:00 (2026-10-21 사장님)
+    if (!lives.size) return withDeskEvents(d.reports, d.deskEvents);
     const m = new Map(d.reports.map((r) => [r.date, r]));
     for (const [date, l] of lives) if (l.provisional.length) m.set(date, l.merged);
-    return [...m.values()];
-  }, [d.reports, lives]);
+    return withDeskEvents([...m.values()], d.deskEvents);
+  }, [d.reports, lives, d.deskEvents]);
   // 설정(기간 스티커 · 휴일)을 넣은 뒤 계산 — 설정이 바뀌면 다시
   const board = useMemo(() => {
     applySettings(d.settings);

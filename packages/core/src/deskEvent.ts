@@ -1,0 +1,68 @@
+/* ============================================================
+   이벤트 무료입장 — 키즈 POS 통합데스크(gnb21c-cmd/astanakiz 2.1~)가 보내는 그날 현장 [이벤트 입장] 수 (2026-10-21 사장님)
+   - 예전: 키즈 POS 의 0원 이벤트 상품('[평일] 한가위 무제한 쿠폰' — classify '이벤트무료') 판매 수량 → kids.eventFree
+   - 이제: 이벤트 손님은 POS 를 거치지 않고 통합데스크 현장입장 창 [한가위 이벤트 입장]으로 바로 들어감
+     → 통합데스크가 매일 20:00 (설문 보낼 때 같이 · 설문이 없어도) boards/{열쇠}/deskStats/event-{날짜} 에 덮어씀
+       (astanakiz-event · 그날 수 · 이벤트 이름별 · 손님 정보 없음 · 20:00 뒤 숫자가 바뀌면 다시). 통합데스크 쪽은 astanakiz docs/OPERATION.md
+   - 그날 이벤트 무료입장 = max(POS 0원 상품, 통합데스크) — 옮겨 가는 동안 같은 손님을 POS 에도 찍었을 수 있어 더하지 않음
+   ============================================================ */
+import type { DayReport } from "./part";
+
+export const DESK_EVENT_PREFIX = "event-";
+
+export interface DeskEvent {
+  day: string;
+  /** 그날 이벤트 입장 수 (명) */
+  count: number;
+  /** 이벤트 이름별 (예: 한가위 12) */
+  names: { name: string; n: number }[];
+  sentAt: string;
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const nat = (x: unknown, max: number): number | null => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= max ? x : null);
+/** 이벤트 이름: 짧은 글만 (전화번호처럼 숫자가 많은 글은 버림) */
+const nameOk = (x: unknown): string | null => (typeof x === "string" && x.length <= 20 && !/\d{3,}/.test(x) ? x.trim() || "이벤트" : null);
+
+/** 통합데스크 글(astanakiz-event) → 검사한 값. 모양이 틀리면 null */
+export function parseDeskEvent(raw: unknown): DeskEvent | null {
+  let x: any = raw;
+  if (typeof raw === "string") {
+    try {
+      x = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!x || typeof x !== "object" || x.type !== "astanakiz-event" || x.v !== 1 || !DAY.test(String(x.day || ""))) return null;
+  const count = nat(x.count, 9999);
+  if (count == null) return null;
+  const names: DeskEvent["names"] = [];
+  for (const it of Array.isArray(x.names) ? x.names.slice(0, 20) : []) {
+    const name = nameOk(it && it.name), n = nat(it && it.n, 9999);
+    if (name != null && n != null && n > 0) names.push({ name, n });
+  }
+  return { day: x.day, count, names, sentAt: typeof x.sentAt === "string" ? x.sentAt.slice(0, 16) : "" };
+}
+
+/** deskStats 문서들(이름 · json) → 날짜 → 그날 이벤트 입장 수 (event-날짜 문서만 · 문서 이름과 글의 날짜가 같을 때만) */
+export function deskEventsFrom(docs: { id: string; json?: unknown }[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const d of docs) {
+    if (!d.id.startsWith(DESK_EVENT_PREFIX)) continue;
+    const e = parseDeskEvent(d.json);
+    if (e && d.id === DESK_EVENT_PREFIX + e.day) out[e.day] = e.count;
+  }
+  return out;
+}
+
+/** 그날 키즈 이벤트 무료입장 = max(POS 0원 상품, 통합데스크) — 키즈 칸이 있는 날만 (원래 자료는 그대로 · 바뀐 날만 새 것) */
+export function withDeskEvents(reports: DayReport[], ev: Record<string, number> | null | undefined): DayReport[] {
+  if (!ev || !Object.keys(ev).length) return reports;
+  return reports.map((r) => {
+    const n = ev[r.date];
+    const k = r.kids?.kids;
+    if (n == null || !k || n <= k.eventFree) return r;
+    return { ...r, kids: { ...r.kids!, kids: { ...k, eventFree: n } } };
+  });
+}

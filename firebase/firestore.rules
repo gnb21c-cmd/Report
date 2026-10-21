@@ -89,14 +89,16 @@ service cloud.firestore {
 
       // 재방문 간격 (2026-10-19 사장님 · 통합데스크 → B '네이버 판매 수' 세부 화면 맨 위) — astanakiz docs/REVISIT.md · docs/KIDS_REVISIT.md
       //   문서 하나(revisit)만 매일 20:00 덮어씀 · json = 일수 모음(astanakiz-revisit) · 손님 정보 없음
+      // 이벤트 입장 수 (2026-10-21 사장님 · 통합데스크 현장 [이벤트 입장] → B 키즈 '이벤트 무료입장') — docs/KIDS_EVENT.md
+      //   하루 한 문서(event-날짜) 매일 20:00 (뒤에 바뀌면 다시) · json = 그날 수(astanakiz-event) · 손님 정보 없음
       match /deskStats/{doc} {
         allow read: if true;
-        allow create, update: if doc == "revisit"
-          && exists(/databases/$(database)/documents/boards/$(board)/settings/main)
+        allow create, update: if exists(/databases/$(database)/documents/boards/$(board)/settings/main)
           && request.resource.data.keys().hasOnly(["json", "at"])
-          && request.resource.data.json is string && request.resource.data.json.size() < 20000
-          && request.resource.data.json.matches("(?s)^[{].*astanakiz-revisit.*$")
-          && request.resource.data.at is string && request.resource.data.at.size() < 40;
+          && request.resource.data.json is string
+          && request.resource.data.at is string && request.resource.data.at.size() < 40
+          && ((doc == "revisit" && request.resource.data.json.size() < 20000 && request.resource.data.json.matches("(?s)^[{].*astanakiz-revisit.*$"))
+            || (doc.matches("^event-[0-9]{4}-[0-9]{2}-[0-9]{2}$") && request.resource.data.json.size() < 5000 && request.resource.data.json.matches("(?s)^[{].*astanakiz-event.*$")));
         allow delete: if isSender(board);
       }
 
