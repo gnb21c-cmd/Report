@@ -26,6 +26,9 @@ import {
   BREAD_BOOST,
   BREAD_BOOST_FROM,
   breadBoostOf,
+  WEEKDAY_BREAD_BAND,
+  breadBandOf,
+  fitTotal,
   breadPlan,
   weeklyOutlook,
   displayDays,
@@ -244,7 +247,7 @@ describe("생산 수량 평일 × 1.5 · 휴일 × 1.3 — 빵별 · 요일 추�
   });
 
   it("다음 주(10-26 ~ 11-01) 주간안 = 빵별 예측 × 그날 배수 (반올림) · 같은 요일 칸은 그 위에 · 몽블랑은 5개 단위", () => {
-    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07", { "2026-10-26": { 소금빵: 2 } });
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07", { "2026-10-30": { 소금빵: 2 } });
     expect(week.map((w) => w.date)).toEqual(dayRange("2026-10-26", "2026-11-01"));
     for (const w of week) {
       expect(w.week.boost).toBe(breadBoostOf(w.date));
@@ -254,7 +257,8 @@ describe("생산 수량 평일 × 1.5 · 휴일 × 1.3 — 빵별 · 요일 추�
       }
       expect(w.week.total).toBe(w.week.items.reduce((a, b) => a + b.qty, 0));
     }
-    const s = week[0].week.items.find((i) => i.name === "소금빵")!;
+    // 금요일(하루 합계 범위 없음) — 수량 = 올린 예측 + 칸
+    const s = week.find((w) => w.date === "2026-10-30")!.week.items.find((i) => i.name === "소금빵")!;
     expect([s.qty, s.step]).toEqual([s.base! + 2, 2]);
   });
 
@@ -282,6 +286,49 @@ describe("생산 수량 평일 × 1.5 · 휴일 × 1.3 — 빵별 · 요일 추�
     }
     const sat = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07").find((w) => w.date === "2026-10-31")!;
     expect(makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-28", "2026-10-07", { v: 2, date: sat.date, week: sat.week }, null)!.boost).toBe(1.3);
+  });
+});
+
+describe("평일(월 ~ 목) 하루 합계 300 ~ 320개 안 — 같은 요일 칸 · 날씨 추세로 움직이되 그 안에서 (2026-10-21 사장님, 10-26 계획부터)", () => {
+  const sum = (xs: { qty: number }[]) => xs.reduce((a, b) => a + b.qty, 0);
+  it("범위 300 ~ 320 · 월 ~ 목 평일만 (금요일 · 휴일 · 10-26 전은 없음)", () => {
+    expect(WEEKDAY_BREAD_BAND).toEqual([300, 320]);
+    expect(breadBandOf("2026-10-26")).toEqual([300, 320]); // 월
+    expect(breadBandOf("2026-10-29")).toEqual([300, 320]); // 목
+    expect(breadBandOf("2026-10-30")).toBeNull(); // 금
+    expect(breadBandOf("2026-10-31")).toBeNull(); // 토
+    expect(breadBandOf("2026-10-22")).toBeNull(); // 10-26 전
+  });
+  it("합계 맞추기 — 넘으면 320 · 모자라면 300 · 빵 사이 비율은 그대로 · 몽블랑 5개 단위 · 안이면 그대로", () => {
+    const items = [{ name: "소금빵", qty: 120 }, { name: "크루아상", qty: 90 }, { name: "몽블랑", qty: 40 }, { name: "식빵", qty: 78 }]; // 328
+    const down = fitTotal(items, 300, 320);
+    expect(sum(down)).toBe(320);
+    expect(down.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
+    expect(down.every((i, k) => i.qty <= items[k].qty)).toBe(true);
+    const up = fitTotal(items.map((i) => ({ ...i, qty: Math.round(i.qty * 0.8) })), 300, 320); // 262
+    expect(sum(up)).toBe(300);
+    const mid = items.map((i) => ({ ...i, qty: i.name === "소금빵" ? 100 : i.qty })); // 308
+    expect(fitTotal(mid, 300, 320)).toBe(mid);
+  });
+  it("다음 주(10-26 ~ 10-29) 주간안 — 같은 요일 칸을 크게 넣어도 300 ~ 320 · 금 · 토 · 일은 맞추지 않음", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07", { "2026-10-26": { 소금빵: 100, 크루아상: 100 }, "2026-10-27": { 소금빵: -100 } });
+    for (const w of week) {
+      if (breadBandOf(w.date)) {
+        expect(w.week.total).toBeGreaterThanOrEqual(300);
+        expect(w.week.total).toBeLessThanOrEqual(320);
+        expect(w.week.band).toEqual([300, 320]);
+      } else expect(w.week.band).toBeUndefined();
+      expect(w.week.total).toBe(sum(w.week.items));
+    }
+    // 칸이 큰 월요일이 칸이 작은 화요일보다 적지 않음 (추세는 범위 안에서 남음)
+    expect(week[0].week.total).toBeGreaterThanOrEqual(week[1].week.total);
+  });
+  it("최종안(10-23 금 → 10-26 월)도 300 ~ 320", () => {
+    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07");
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-23", "2026-10-07", { v: 2, date: mon.date, week: mon.week }, null, { 소금빵: 100 })!;
+    expect(f.total).toBeGreaterThanOrEqual(300);
+    expect(f.total).toBeLessThanOrEqual(320);
+    expect(f.total).toBe(sum(f.items));
   });
 });
 

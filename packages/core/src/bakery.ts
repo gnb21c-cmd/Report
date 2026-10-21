@@ -82,6 +82,8 @@ export interface PlanStep {
   rainUp?: number;
   /** 빵별 예측에 곱한 생산 배수 (1.5, breadBoostOf) — 없으면 1 */
   boost?: number;
+  /** 하루 합계를 맞춘 범위 (평일 300 ~ 320, breadBandOf) — 없으면 맞추지 않음 */
+  band?: [number, number];
 }
 
 export interface Outlook {
@@ -184,17 +186,49 @@ export const BREAD_BOOST_FROM = "2026-10-26";
 /** 그날 계획의 생산 배수 (10-26 전은 1) */
 export const breadBoostOf = (date: string): number => (date >= BREAD_BOOST_FROM ? BREAD_BOOST[dayKind(date)] : 1);
 
+/* ---------- 평일 하루 합계 범위 (2026-10-21 사장님) ----------
+   월 ~ 목 평일은 하루 300 ~ 320개 안 — 같은 요일 칸(±1) · 날씨 · 예상 손님 추세로 날마다 달라지되 그 범위 안에서
+   넘으면 320, 모자라면 300 으로 빵마다 같은 비율로 줄이거나 늘림 (빵 사이 비율 · 몽블랑 5개 단위는 그대로). 10-26 계획부터 · 금요일 · 휴일은 없음 */
+export const WEEKDAY_BREAD_BAND: Readonly<[number, number]> = [300, 320];
+/** 그날 하루 합계 범위 (없으면 null) */
+export function breadBandOf(date: string): [number, number] | null {
+  return date >= BREAD_BOOST_FROM && dayKind(date) === "평일" ? [WEEKDAY_BREAD_BAND[0], WEEKDAY_BREAD_BAND[1]] : null;
+}
+
+/** 하루 합계를 lo ~ hi 안으로 — 넘으면 hi, 모자라면 lo 로 빵마다 같은 비율 (반올림 차이는 1개 단위 빵 중 많은 것부터 한 개씩) · 안이면 그대로 */
+export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo: number, hi: number): T[] {
+  const total = items.reduce((a, b) => a + b.qty, 0);
+  if (!items.length || total <= 0 || (total >= lo && total <= hi)) return items;
+  const target = total > hi ? hi : lo;
+  const out = items.map((it) => ({ ...it, qty: snapUnit(it.name, (it.qty * target) / total) }));
+  let diff = target - out.reduce((a, b) => a + b.qty, 0);
+  const ones = out.filter((i) => breadUnit(i.name) === 1 && i.qty > 0).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
+  for (let k = 0; diff !== 0 && ones.length && k < 100000; k++) {
+    const it = ones[k % ones.length];
+    if (diff > 0) {
+      it.qty++;
+      diff--;
+    } else if (it.qty > 1) {
+      it.qty--;
+      diff++;
+    }
+  }
+  return out;
+}
+
 /* ---------- 계획 세기 ---------- */
 
 function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>): PlanStep {
   const p = breadPlan(board, weather, asOf, date, learned);
   const boost = breadBoostOf(date);
-  const items: PlanItem[] = p.items.map((it) => {
+  const band = breadBandOf(date);
+  const raw: PlanItem[] = p.items.map((it) => {
     const base = Math.round(it.qty * boost);
     const k = clampStep(it.name, base, steps[it.name] ?? 0);
     return { name: it.name, qty: snapUnit(it.name, base + k * breadUnit(it.name)), base, ...(k ? { step: k } : {}) };
   });
-  return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(boost !== 1 ? { boost } : {}) };
+  const items = band ? fitTotal(raw, band[0], band[1]) : raw;
+  return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(boost !== 1 ? { boost } : {}), ...(band ? { band } : {}) };
 }
 
 /** 1 ~ 4주 전망 × 생산 배수 (평일 칸 × 평일 배수 · 휴일 칸 × 휴일 배수, 그 주가 10-26 부터일 때) */
@@ -263,7 +297,9 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
     })
     .filter((i) => i.qty > 0)
     .sort((x, y) => y.qty - x.qty || x.name.localeCompare(y.name, "ko"));
-  return { ...now, items, total: items.reduce((a, b) => a + b.qty, 0), ...(up ? { rainUp: up } : {}) };
+  // 평일 하루 합계 범위 — 잠정 ±10% 로 묶은 뒤에도 300 ~ 320 안으로
+  const fitted = now.band ? fitTotal(items, now.band[0], now.band[1]) : items;
+  return { ...now, items: fitted, total: fitted.reduce((a, b) => a + b.qty, 0), ...(up ? { rainUp: up } : {}) };
 }
 
 /* ---------- 현장 태블릿 복사본 ---------- */

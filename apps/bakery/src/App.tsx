@@ -392,6 +392,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
             예상 손님 {count(step.visitors, "명")} · {step.kind} · 날씨 {step.weather} · 합계 <b>{count(total, "개")}</b> · {kind === "final" ? "확정" : "잠정"} {confirmedN}/{rows.length}
             {kind === "final" && step.rainUp && <b className="rain-up"> · 비 예보 {WEEKDAY_KO[weekday(date)]}요일 — 예정 수량 × {Math.round(step.rainUp * 100)}%</b>}
             {step.boost && <b className="rain-up"> · 생산 늘림 — 작년 추세 × {Math.round(step.boost * 100)}%</b>}
+            {step.band && <b className="rain-up"> · 평일 하루 {step.band[0]} ~ {step.band[1]}개 안으로</b>}
           </div>
         )}
         <button className="primary big" disabled={!rows.length || !!busy || locked} onClick={() => save(Object.fromEntries(rows.map((r) => [r.name, valueOf(r.name, r.qty)])), "all")}>
