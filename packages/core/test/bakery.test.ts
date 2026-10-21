@@ -22,6 +22,11 @@ import {
   RAIN_WEEKEND_UP,
   RAIN_WEEKEND_FROM,
   rainUpOf,
+  BREAD_BOOST,
+  BREAD_BOOST_FROM,
+  breadBoostOf,
+  breadPlan,
+  weeklyOutlook,
   displayDays,
   finalDay,
   floorCopy,
@@ -234,6 +239,57 @@ describe("비 예보 주말 — 3일 전 최종 때 예정 수량 × 토 125% ·
     const fri = of("2026-10-30");
     const g = makeFinal(board, W(fri.date, "rain"), DEFAULT_LEARNED, "2026-10-27", "2026-10-07", { v: 2, date: fri.date, week: fri.week }, null)!;
     expect(g.rainUp).toBeUndefined();
+  });
+});
+
+describe("생산 수량 × 1.5 — 빵별 · 요일 추세는 작년 기반 계산 그대로, 10-26 계획부터 (2026-10-21 사장님)", () => {
+  const raw = (date: string, name: string) => breadPlan(board, {}, "2026-10-07", date, DEFAULT_LEARNED).items.find((x) => x.name === name)!.qty;
+
+  it("배수 1.5 · 10-26 부터 (10-22 목요일에 세는 다음 주 계획)", () => {
+    expect(BREAD_BOOST).toBe(1.5);
+    expect(BREAD_BOOST_FROM).toBe("2026-10-26");
+    expect(breadBoostOf("2026-10-25")).toBe(1);
+    expect(breadBoostOf("2026-10-26")).toBe(1.5);
+    expect(breadBoostOf("2026-11-30")).toBe(1.5);
+  });
+
+  it("다음 주(10-26 ~ 11-01) 주간안 = 빵별 예측 × 1.5 (반올림) · 같은 요일 칸은 그 위에 · 몽블랑은 5개 단위", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07", { "2026-10-26": { 소금빵: 2 } });
+    expect(week.map((w) => w.date)).toEqual(dayRange("2026-10-26", "2026-11-01"));
+    for (const w of week) {
+      expect(w.week.boost).toBe(1.5);
+      for (const it of w.week.items) {
+        expect(it.base).toBe(Math.round(raw(w.date, it.name) * 1.5));
+        expect(it.qty % (it.name === "몽블랑" ? 5 : 1)).toBe(0);
+      }
+      expect(w.week.total).toBe(w.week.items.reduce((a, b) => a + b.qty, 0));
+    }
+    const s = week[0].week.items.find((i) => i.name === "소금빵")!;
+    expect([s.qty, s.step]).toEqual([s.base! + 2, 2]);
+  });
+
+  it("이번 주(10-19 ~ 10-25, 10-15 에 센 것)는 그대로", () => {
+    for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-15", "2026-10-07")) {
+      expect(w.week.boost).toBeUndefined();
+      for (const it of w.week.items) expect(it.base).toBe(raw(w.date, it.name));
+    }
+  });
+
+  it("1 ~ 4주 전망도 × 1.5 (재료 · 인원 준비)", () => {
+    const got = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07")[0].outlook!;
+    const want = weeklyOutlook(board, "2026-10-07", "2026-10-26", DEFAULT_LEARNED);
+    expect(got.map((w) => [w.weekday, w.holiday])).toEqual(want.map((w) => [w.weekday == null ? null : Math.round(w.weekday * 1.5), w.holiday == null ? null : Math.round(w.holiday * 1.5)]));
+  });
+
+  it("최종안(10-23 금 → 10-26 월)도 × 1.5 로 다시 센 수량을 잠정(주간 × 1.5)의 ±10% 안에", () => {
+    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07");
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-23", "2026-10-07", { v: 2, date: mon.date, week: mon.week }, null)!;
+    expect(f.boost).toBe(1.5);
+    for (const it of f.items) {
+      const a = mon.week.items.find((x) => x.name === it.name)!.qty;
+      expect(it.qty).toBeGreaterThanOrEqual(Math.floor(a * 0.9));
+      expect(it.qty).toBeLessThanOrEqual(Math.ceil(a * 1.1));
+    }
   });
 });
 

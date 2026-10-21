@@ -5,6 +5,7 @@
            수요일 밤 마지막 마감 전 카페 숫자로 셈(live.ts withLiveCafe), 없으면 화요일까지)
    [최종] 매일 15시: 3일 뒤 수량을 다시 셈(아침 09:10 수집한 어제까지 실적의 오차 보정 · 잠정 확정 수량 ±10% 안) → 매니저가 그날 18시 전에 최종 확정
           그날 기상청 예보가 비인 주말은 예정 수량 × 토 125% · 일 120% (2026-10-18 사장님 — 아래 '비 예보 주말')
+   [× 1.5] 10-26 계획부터 빵별 예측(작년 기반 추세) × 1.5 — 실제 매진이 20:40 목표가 아니라 15:30 쯤이라 (2026-10-21 사장님, 아래 '생산 수량 올림')
           금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
    마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
    [현장] 아침 6시부터 그날 — 오늘 생산(최종) + 내일 준비(최종, 하루 전에 미리 준비) 두 날을 함께 보여 줌
@@ -79,6 +80,8 @@ export interface PlanStep {
   total: number;
   /** 최종안: 비 예보 주말이라 예정 수량에 곱한 배수 (토 1.25 · 일 1.2, rainUpOf) — 없으면 보통 최종안 */
   rainUp?: number;
+  /** 빵별 예측에 곱한 생산 배수 (1.5, breadBoostOf) — 없으면 1 */
+  boost?: number;
 }
 
 export interface Outlook {
@@ -171,15 +174,32 @@ export function displayDays(now: Now): [string, string] {
   return [today, addDays(today, 1)];
 }
 
+/* ---------- 생산 수량 올림 (2026-10-21 사장님) ----------
+   이번 주 실제 매진이 20:40 목표가 아니라 15:30 쯤 — 작년보다 추워 손님이 많거나 인지도가 오른 것으로 봄
+   → 빵별 · 요일 추세는 작년 기반 계산(breadPlan) 그대로, 수량만 × 1.5. 10-22(목)에 세는 다음 주 10-26 계획부터
+   같은 요일 칸(±1)은 올린 수량 위에 그대로 · 비 예보 주말은 그 위에 다시 × 토 1.25 · 일 1.2 · 1 ~ 4주 전망도 × 1.5 */
+export const BREAD_BOOST = 1.5;
+export const BREAD_BOOST_FROM = "2026-10-26";
+/** 그날 계획의 생산 배수 (10-26 전은 1) */
+export const breadBoostOf = (date: string): number => (date >= BREAD_BOOST_FROM ? BREAD_BOOST : 1);
+
 /* ---------- 계획 세기 ---------- */
 
 function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>): PlanStep {
   const p = breadPlan(board, weather, asOf, date, learned);
+  const boost = breadBoostOf(date);
   const items: PlanItem[] = p.items.map((it) => {
-    const k = clampStep(it.name, it.qty, steps[it.name] ?? 0);
-    return { name: it.name, qty: snapUnit(it.name, it.qty + k * breadUnit(it.name)), base: it.qty, ...(k ? { step: k } : {}) };
+    const base = Math.round(it.qty * boost);
+    const k = clampStep(it.name, base, steps[it.name] ?? 0);
+    return { name: it.name, qty: snapUnit(it.name, base + k * breadUnit(it.name)), base, ...(k ? { step: k } : {}) };
   });
-  return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0) };
+  return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(boost !== 1 ? { boost } : {}) };
+}
+
+/** 1 ~ 4주 전망 × 그 주 생산 배수 */
+function boostOutlook(o: Outlook[]): Outlook[] {
+  const x = (v: number | null, b: number) => (v == null ? null : Math.round(v * b));
+  return o.map((w) => ({ ...w, weekday: x(w.weekday, breadBoostOf(w.from)), holiday: x(w.holiday, breadBoostOf(w.from)) }));
 }
 
 /** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 */
@@ -188,7 +208,7 @@ export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, th
   return dates.map((date, i) => ({
     date,
     week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}),
-    ...(i === 0 ? { outlook: weeklyOutlook(board, asOf, date, learned) } : {}),
+    ...(i === 0 ? { outlook: boostOutlook(weeklyOutlook(board, asOf, date, learned)) } : {}),
   }));
 }
 
