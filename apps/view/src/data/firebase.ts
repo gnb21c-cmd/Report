@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, cleanSurveys, DESK_LIVE, DESK_REVISIT, DESK_STATS, mergeSurveyDocs, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_REVISIT, DESK_STATS, deskEventsFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import demoDeskLive from "./demoDeskLive.json";
 import demoRevisit from "./demoRevisit.json";
 import type { Source } from "./source";
@@ -174,6 +174,25 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
       };
       const [a, b] = await Promise.all([legacy(), inbox()]);
       return mergeSurveyDocs(a, b);
+    },
+    // 통합데스크 이벤트 입장 수 (2026-10-21) — deskStats 의 event-날짜 문서 모두 (하루 한 문서 · 손님 정보 없음)
+    async deskEvents() {
+      const docs: { id: string; json?: unknown }[] = [];
+      let token = "";
+      for (let n = 0; n < 30; n++) {
+        const res = await call(`${base(cfg, board)}/${DESK_STATS}?pageSize=300${token ? `&pageToken=${encodeURIComponent(token)}` : ""}&key=${cfg.apiKey}`, { cache: "no-store" });
+        for (const d of res?.documents || []) docs.push({ id: String(d.name || "").split("/").pop() || "", json: fieldsOf(d).json });
+        token = res?.nextPageToken || "";
+        if (!token) break;
+      }
+      return deskEventsFrom(docs);
+    },
+    async deskEventDay(date) {
+      const res = await fetch(`${base(cfg, board)}/${DESK_STATS}/${DESK_EVENT_PREFIX}${date}?key=${cfg.apiKey}`, { cache: "no-store" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`이벤트 입장 수 받기 오류 ${res.status}`);
+      const e = parseDeskEvent(fieldsOf(await res.json()).json);
+      return e && e.day === date ? e.count : null;
     },
   };
 }

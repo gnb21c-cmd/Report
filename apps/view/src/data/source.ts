@@ -23,5 +23,9 @@ export interface Source {
   live(date: string): Promise<LiveDoc | null>;
   /** 통합데스크 설문 집계 (설문 보고함 surveyInbox + 예전 settings/surveys, 없으면 null) */
   surveys(): Promise<SurveyDoc | null>;
+  /** 통합데스크 이벤트 입장 수 — 날짜 → 그날 수 (deskStats/event-날짜 · 2026-10-21) */
+  deskEvents(): Promise<Record<string, number>>;
+  /** 그날 하나만 (오늘 · 5분마다) — 문서가 없으면 null */
+  deskEventDay(date: string): Promise<number | null>;
 }
 

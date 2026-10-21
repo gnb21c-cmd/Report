@@ -26,6 +26,8 @@ export interface DataState {
   live: Record<string, LiveDoc | null>;
   /** 통합데스크 설문 집계 — 첫 화면 '설문조사' 칸 (없으면 null) */
   surveys: SurveyDoc | null;
+  /** 통합데스크 이벤트 입장 수 — 날짜 → 그날 수 (매일 20:00 · 키즈 '이벤트 무료입장' = max(POS 0원 상품, 이것) · 2026-10-21) */
+  deskEvents: Record<string, number>;
 }
 
 const SYNCED = "report.syncedAt";
@@ -34,6 +36,7 @@ const WEATHER = "report.weather";
 const WEATHER_CURSOR = "report.weatherCursor";
 const SETTINGS = "report.settings";
 const SURVEYS = "report.surveys";
+const DESK_EVENTS = "report.deskEvents";
 /** 마지막으로 받은 마감 전 영업정보 (오늘 · 어제) — 다시 열 때 바로 보이게 */
 const LIVE = "report.live";
 /** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
@@ -98,6 +101,7 @@ export function useData() {
       return c ? cleanSettings(c) : null;
     })(),
     surveys: __DEMO__ ? sampleSurveys(todayKst()) : cleanSurveys(local.get<SurveyDoc>(SURVEYS)),
+    deskEvents: __DEMO__ ? {} : local.get<Record<string, number>>(DESK_EVENTS) || {},
     // 체험판: 첫 수집 시각(10:15) 뒤에만 오늘 마감 전 숫자
     live: __DEMO__ ? (new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16) >= LIVE_FROM ? { [todayKst()]: demoLive(todayKst()) } : {}) : cachedLive(),
   }));
@@ -110,10 +114,17 @@ export function useData() {
     const days = [today, addDays(today, -1)];
     // 받기에 실패한 날(인터넷 끊김)은 갖고 있던 것을 그대로 — 없는 문서(아직 수집 전)는 null
     const got = await Promise.all(days.map((d) => src.live(d).then((x) => ({ ok: true, x }), () => ({ ok: false, x: null }))));
+    // 오늘 이벤트 입장 수 (통합데스크가 20:00 · 뒤에 바뀌면 다시 씀) — 문서 하나
+    const ev = await src.deskEventDay(today).catch(() => null);
     set((p) => {
       const live = Object.fromEntries(days.map((d, i) => [d, got[i].ok ? got[i].x : p.live[d] ?? null]));
       local.set(LIVE, live);
-      return { ...p, live };
+      let deskEvents = p.deskEvents;
+      if (ev != null && deskEvents[today] !== ev) {
+        deskEvents = { ...deskEvents, [today]: ev };
+        local.set(DESK_EVENTS, deskEvents);
+      }
+      return { ...p, live, deskEvents };
     });
   }, [picked]);
 
@@ -136,9 +147,10 @@ export function useData() {
       const got = await src.reports(local.get<string>(CURSOR));
       await saveCached(got.reports);
       if (got.last) local.set(CURSOR, got.last);
-      const [status, wx, settings, surveys] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null), src.surveys().catch(() => null)]);
+      const [status, wx, settings, surveys, deskEvents] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null), src.surveys().catch(() => null), src.deskEvents().catch(() => null)]);
       local.set(SETTINGS, settings);
       if (surveys) local.set(SURVEYS, surveys);
+      if (deskEvents) local.set(DESK_EVENTS, deskEvents);
       let weather = local.get<WeatherMap>(WEATHER) || {};
       if (wx.days.length) {
         weather = { ...weather };
@@ -148,7 +160,7 @@ export function useData() {
       }
       const now = new Date().toISOString();
       local.set(SYNCED, now);
-      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings, surveys: surveys && JSON.stringify(surveys) !== JSON.stringify(p.surveys) ? surveys : p.surveys }));
+      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings, surveys: surveys && JSON.stringify(surveys) !== JSON.stringify(p.surveys) ? surveys : p.surveys, deskEvents: deskEvents && JSON.stringify(deskEvents) !== JSON.stringify(p.deskEvents) ? deskEvents : p.deskEvents }));
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }
