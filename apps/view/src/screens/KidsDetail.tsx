@@ -21,6 +21,7 @@ import {
   shortLabel,
   sum,
   yearMonthly,
+  revisitByDays,
   revisitSummary,
   type Board,
   type DeskRevisit,
@@ -77,7 +78,7 @@ function CompareCard({ rows, unit, title = "작년 같은 기간과 비교" }: {
 }
 
 /** 재방문 간격 (2026-10-19 사장님) — 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md · 손님 정보 없음)
-    맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 재방문까지 걸린 일수 많은 순 7개 */
+    맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 7개를 빨리 온 순(일수 짧은 순)으로 */
 function RevisitCard() {
   const [r, setR] = useState<DeskRevisit | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
@@ -152,9 +153,14 @@ function RevisitCol({ title, range, end, top, foot, empty, cur }: { title: strin
       </div>
       {top.length ? (
         <ol>
-          {top.map((t) => (
-            <li key={t.rank}>
-              <span className="rk">{t.rank}위</span> <b className="num">{t.days}일</b> <span className="num">{count(t.count, "명")}</span>
+          {/* 빨리 온 순(일수 짧은 순) — 가장 많은 것에 '최다' (2026-10-21 사장님) */}
+          {revisitByDays(top).map((t) => (
+            <li key={t.days}>
+              <b className="num">{t.days}일</b>
+              <span className="num">
+                {t.rank === 1 && <span className="rk">최다 </span>}
+                {count(t.count, "명")}
+              </span>
             </li>
           ))}
         </ol>
