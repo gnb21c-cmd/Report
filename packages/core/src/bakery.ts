@@ -4,7 +4,7 @@
           (새벽 00:47 ~ 05:17 에 미리 계산해 두고 매니저 앱에는 6시부터 보임 — 수요일 확정 실적은 아직 없어
            수요일 밤 마지막 마감 전 카페 숫자로 셈(live.ts withLiveCafe), 없으면 화요일까지)
    [최종] 매일 15시: 3일 뒤 수량을 다시 셈(아침 09:10 수집한 어제까지 실적의 오차 보정 · 잠정 확정 수량 ±10% 안) → 매니저가 그날 18시 전에 최종 확정
-          그날 기상청 예보가 비인 주말은 예정 수량 × 토 125% · 일 120% (2026-10-18 사장님 — 아래 '비 예보 주말')
+          (비 예보 주말 × 토 125% · 일 120% 는 2026-10-21 부터 홀드 — 아래 '비 예보 주말')
    [늘림] 10-26 계획부터 빵별 예측(작년 기반 추세) × 평일 1.5 · 휴일 1.3 — 실제 매진이 20:40 목표가 아니라 15:30 쯤이라 (2026-10-21 사장님, 아래 '생산 수량 올림')
           금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
    마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
@@ -178,7 +178,7 @@ export function displayDays(now: Now): [string, string] {
    이번 주 실제 매진이 20:40 목표가 아니라 15:30 쯤 — 작년보다 추워 손님이 많거나 인지도가 오른 것으로 봄
    → 빵별 · 요일 추세는 작년 기반 계산(breadPlan) 그대로, 수량만 평일 · 금요일 × 1.5 · 휴일(토 · 일 · 공휴일) × 1.3
      (사장님 판단: 평일 300개 조금 넘게 · 휴일 900개 가까이 — 10-26 주 미리 셈 평일 196 → 302 · 토 691 → 898 · 일 652 → 848)
-   10-22(목)에 세는 다음 주 10-26 계획부터. 같은 요일 칸(±1)은 올린 수량 위에 그대로 · 비 예보 주말은 그 위에 다시 × 토 1.25 · 일 1.2 · 1 ~ 4주 전망도 같은 배수 */
+   10-22(목)에 세는 다음 주 10-26 계획부터. 같은 요일 칸(±1)은 올린 수량 위에 그대로 · 1 ~ 4주 전망도 같은 배수 · 비 예보 주말 배수는 홀드 */
 export const BREAD_BOOST: Readonly<Record<DayKind, number>> = { 평일: 1.5, 금요일: 1.5, 휴일: 1.3 };
 export const BREAD_BOOST_FROM = "2026-10-26";
 /** 그날 계획의 생산 배수 (10-26 전은 1) */
@@ -216,13 +216,17 @@ export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, th
 /* ---------- 비 예보 주말 (2026-10-18 사장님) ----------
    3일 전 15시 최종안 때 기상청 단기예보로 그날이 비(영업 시간 06 ~ 21시 중 비 · 강우)면 손님이 늘므로
    예정 수량(매니저 잠정 확정, 없으면 주간 수량)을 토요일 125% · 일요일 120% 로 올림 — ±10% 범위 없이, 몽블랑은 5개 단위
-   평일 · 맑음 · 구름 · 눈 · 관측(지난 날)은 그대로 보통 최종안 · 10-26 계획부터 (RAIN_WEEKEND_FROM) */
+   평일 · 맑음 · 구름 · 눈 · 관측(지난 날)은 그대로 보통 최종안 · 10-26 계획부터 (RAIN_WEEKEND_FROM)
+   [홀드 2026-10-21 사장님] 생산 늘림(평일 × 1.5 · 휴일 × 1.3)으로 모수가 커져, 비가 많이 오면 도리어 손님이 줄 수 있음
+     → 쓰지 않음 (규칙은 남겨 둠). 늘림 결과를 보고 다음 주에 다시 정함 — 다시 쓰려면 RAIN_WEEKEND_HOLD = false */
+export const RAIN_WEEKEND_HOLD = true;
 export const RAIN_WEEKEND_UP: Readonly<Record<number, number>> = { 6: 1.25, 0: 1.2 };
 /** 비 예보 주말을 쓰는 첫 계획 날 (2026-10-18 사장님 — 10-24 · 10-25 는 예전 그대로) */
 export const RAIN_WEEKEND_FROM = "2026-10-26";
 
-/** 그날 비 예보 주말 배수 (아니면 null) */
-export function rainUpOf(date: string, w: DayWeather | undefined): number | null {
+/** 그날 비 예보 주말 배수 (아니면 null · 홀드 중이면 늘 null) */
+export function rainUpOf(date: string, w: DayWeather | undefined, hold = RAIN_WEEKEND_HOLD): number | null {
+  if (hold) return null;
   const up = RAIN_WEEKEND_UP[weekday(date)];
   if (!up || date < RAIN_WEEKEND_FROM || !w || w.source !== "forecast") return null;
   return w.key === "rain" || w.key === "heavyrain" ? up : null;

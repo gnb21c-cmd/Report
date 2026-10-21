@@ -21,6 +21,7 @@ import {
   restep,
   RAIN_WEEKEND_UP,
   RAIN_WEEKEND_FROM,
+  RAIN_WEEKEND_HOLD,
   rainUpOf,
   BREAD_BOOST,
   BREAD_BOOST_FROM,
@@ -185,60 +186,47 @@ describe("최종안 (3일 전 15시)", () => {
   });
 });
 
-describe("비 예보 주말 — 3일 전 최종 때 예정 수량 × 토 125% · 일 120% (2026-10-18 사장님, 10-26 계획부터)", () => {
+describe("비 예보 주말 — 홀드 (2026-10-21 사장님: 생산 늘림으로 모수가 커져 비가 많이 오면 도리어 손님이 줄 수 있음 · 늘림 결과를 보고 다음 주에 다시 정함)", () => {
   const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07");
   const of = (d: string) => week.find((w) => w.date === d)!;
   const W = (date: string, key: DayWeather["key"], source: DayWeather["source"] = "forecast"): WeatherMap => ({ [date]: { date, key, label: key, icon: "", tempMax: 18, tempMin: 12, rainMm: key === "sunny" ? 0 : 6, source } });
   const q = (st: { items: { name: string; qty: number }[] }, n: string) => st.items.find((i) => i.name === n)!.qty;
 
-  it("배수 — 토 1.25 · 일 1.2 · 비 · 강우 예보만 (평일 · 맑음 · 구름 · 눈 · 관측은 아님)", () => {
-    expect(RAIN_WEEKEND_UP).toEqual({ 6: 1.25, 0: 1.2 });
-    expect(rainUpOf("2026-10-31", W("2026-10-31", "rain")["2026-10-31"])).toBe(1.25); // 토
-    expect(rainUpOf("2026-11-01", W("2026-11-01", "heavyrain")["2026-11-01"])).toBe(1.2); // 일
-    expect(rainUpOf("2026-10-30", W("2026-10-30", "rain")["2026-10-30"])).toBeNull(); // 금
-    expect(rainUpOf("2026-10-31", W("2026-10-31", "cloudy")["2026-10-31"])).toBeNull();
-    expect(rainUpOf("2026-10-31", W("2026-10-31", "snow")["2026-10-31"])).toBeNull();
-    expect(rainUpOf("2026-10-31", W("2026-10-31", "rain", "observed")["2026-10-31"])).toBeNull();
-    expect(rainUpOf("2026-10-31", undefined)).toBeNull();
-  });
-  it("10-26 계획부터 — 10-24(토) · 10-25(일)은 비 예보여도 그대로 (2026-10-18 사장님)", () => {
-    expect(RAIN_WEEKEND_FROM).toBe("2026-10-26");
-    expect(rainUpOf("2026-10-24", W("2026-10-24", "rain")["2026-10-24"])).toBeNull();
-    expect(rainUpOf("2026-10-25", W("2026-10-25", "heavyrain")["2026-10-25"])).toBeNull();
+  it("홀드 중 — 비 · 강우 예보 주말이어도 배수 없음", () => {
+    expect(RAIN_WEEKEND_HOLD).toBe(true);
+    expect(rainUpOf("2026-10-31", W("2026-10-31", "rain")["2026-10-31"])).toBeNull();
+    expect(rainUpOf("2026-11-01", W("2026-11-01", "heavyrain")["2026-11-01"])).toBeNull();
   });
 
-  it("토요일 비 예보 → 매니저 잠정 확정(없으면 주간 수량) × 1.25 · ±10% 범위 없이 · 칸은 이어 감", () => {
+  it("토요일 비 예보여도 보통 최종안 — 잠정 확정 ±10% 안 · rainUp 없음 · 칸은 이어 감", () => {
     const sat = of("2026-10-31");
     const order: OrderDoc = { v: 2, date: sat.date, provisional: { 소금빵: L(40) }, final: {} };
     const f = makeFinal(board, W(sat.date, "rain"), DEFAULT_LEARNED, "2026-10-28", "2026-10-07", { v: 2, date: sat.date, week: sat.week }, order, { 소금빵: 2 })!;
-    expect(f.rainUp).toBe(1.25);
-    const s = f.items.find((i) => i.name === "소금빵")!;
-    expect(s.qty).toBe(50); // 40 × 1.25
-    expect([s.lo, s.hi]).toEqual([undefined, undefined]);
-    expect(s.step).toBe(2); // 같은 요일 칸은 다음 토요일로 이어 감
-    expect(q(f, "크루아상")).toBe(Math.round(q(sat.week, "크루아상") * 1.25)); // 잠정 확정 없는 빵 = 주간 수량 × 1.25
-    expect(f.total).toBe(f.items.reduce((a, b) => a + b.qty, 0));
-  });
-
-  it("일요일 강우 예보 → × 1.2 (반올림) · 몽블랑은 5개 단위", () => {
-    const sun = of("2026-11-01");
-    const order: OrderDoc = { v: 2, date: sun.date, provisional: { 소금빵: L(37), 몽블랑: L(15) }, final: {} };
-    const f = makeFinal(board, W(sun.date, "heavyrain"), DEFAULT_LEARNED, "2026-10-29", "2026-10-07", { v: 2, date: sun.date, week: sun.week }, order)!;
-    expect(f.rainUp).toBe(1.2);
-    expect(q(f, "소금빵")).toBe(44); // 37 × 1.2 = 44.4
-    expect(q(f, "몽블랑")).toBe(20); // 15 × 1.2 = 18 → 5개 단위
-  });
-
-  it("주말이라도 맑음 · 평일 비는 그대로 (잠정 ±10% 안)", () => {
-    const sat = of("2026-10-31");
-    const order: OrderDoc = { v: 2, date: sat.date, provisional: { 소금빵: L(40) }, final: {} };
-    const f = makeFinal(board, W(sat.date, "sunny"), DEFAULT_LEARNED, "2026-10-28", "2026-10-07", { v: 2, date: sat.date, week: sat.week }, order)!;
     expect(f.rainUp).toBeUndefined();
-    expect(q(f, "소금빵")).toBeGreaterThanOrEqual(36);
-    expect(q(f, "소금빵")).toBeLessThanOrEqual(44);
-    const fri = of("2026-10-30");
-    const g = makeFinal(board, W(fri.date, "rain"), DEFAULT_LEARNED, "2026-10-27", "2026-10-07", { v: 2, date: fri.date, week: fri.week }, null)!;
-    expect(g.rainUp).toBeUndefined();
+    const s = f.items.find((i) => i.name === "소금빵")!;
+    expect(s.qty).toBeGreaterThanOrEqual(36);
+    expect(s.qty).toBeLessThanOrEqual(44);
+    expect([s.lo, s.hi]).toEqual([36, 44]);
+    expect(s.step).toBe(2);
+    const cw = q(sat.week, "크루아상");
+    expect(q(f, "크루아상")).toBeGreaterThanOrEqual(Math.floor(cw * 0.9));
+    expect(q(f, "크루아상")).toBeLessThanOrEqual(Math.ceil(cw * 1.1));
+  });
+
+  // 다시 켤 때의 규칙 (홀드를 풀면 이대로) — 토 1.25 · 일 1.2 · 비 · 강우 예보만 · 10-26 계획부터
+  it("규칙(홀드를 풀면) — 토 1.25 · 일 1.2 · 비 · 강우 예보만 (평일 · 맑음 · 구름 · 눈 · 관측은 아님)", () => {
+    const on = (d: string, w?: DayWeather) => rainUpOf(d, w, false);
+    expect(RAIN_WEEKEND_UP).toEqual({ 6: 1.25, 0: 1.2 });
+    expect(on("2026-10-31", W("2026-10-31", "rain")["2026-10-31"])).toBe(1.25); // 토
+    expect(on("2026-11-01", W("2026-11-01", "heavyrain")["2026-11-01"])).toBe(1.2); // 일
+    expect(on("2026-10-30", W("2026-10-30", "rain")["2026-10-30"])).toBeNull(); // 금
+    expect(on("2026-10-31", W("2026-10-31", "cloudy")["2026-10-31"])).toBeNull();
+    expect(on("2026-10-31", W("2026-10-31", "snow")["2026-10-31"])).toBeNull();
+    expect(on("2026-10-31", W("2026-10-31", "rain", "observed")["2026-10-31"])).toBeNull();
+    expect(on("2026-10-31", undefined)).toBeNull();
+    expect(RAIN_WEEKEND_FROM).toBe("2026-10-26");
+    expect(on("2026-10-24", W("2026-10-24", "rain")["2026-10-24"])).toBeNull();
+    expect(on("2026-10-25", W("2026-10-25", "heavyrain")["2026-10-25"])).toBeNull();
   });
 });
 
