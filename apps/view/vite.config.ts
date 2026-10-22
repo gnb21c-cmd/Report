@@ -24,7 +24,8 @@ export default defineConfig(({ mode }) => {
             registerType: "autoUpdate",
             manifest: false,
             includeAssets: ["icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "manifest.webmanifest"],
-            workbox: { navigateFallback: "/index.html", navigateFallbackDenylist: [/^\/__/, /^\/a\//, /^\/d\//, /^\/d1\//] },
+            // 다른 앱 주소(A · D 매니저 · D-1 태블릿 · 근무자 화면 /w/)는 보고 앱 화면으로 가로채지 않음 — 보고 앱을 깐 폰에서 근무자 QR 을 찍어도 근무자 화면이 열리게 (2026-10-22)
+            workbox: { navigateFallback: "/index.html", navigateFallbackDenylist: [/^\/__/, /^\/a\//, /^\/d\//, /^\/d1\//, /^\/w\//] },
           }),
         ],
     build: demo ? { outDir: "dist-demo", emptyOutDir: true } : undefined,
