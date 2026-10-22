@@ -78,6 +78,8 @@ export function kidsPrice(date: string): { price: number; kind: "평일" | "휴�
 
 /** 잔 수에서 뺄 것 (옵션·원두·상품 등) */
 const NOT_CUP = /추가|변경|사이즈|업그레이드|연하게|진하게|원두|드립백|원액|시럽|굿즈|텀블러|쿠폰|상품권|할인|포장비|봉투|컵\s*홀더|아이스크림/;
+/** 잔이 아닌 이름 (옵션 · 원두 · 상품 등) — 근무자 화면 바리스타 목록에서도 뺌 */
+export const isNotCupName = (name: string) => NOT_CUP.test(name || "");
 /** 잔으로 셀 것 — 카페 POS 바리스타 상품 + 이름으로 맥주 등 */
 const CUP_NAME = /맥주|beer|생맥|필스너|에일|라거|하이볼|와인|커피|라떼|아메리카노|아메(?![가-힣])|에스프레소|에이드|주스|스무디|프라페|밀크티|티(?![가-힣])|차(?![가-힣])|tea|coffee/i;
 

@@ -6,6 +6,7 @@
    - 시작했을 때 지난 칸(15분 안)을 아직 못 받았으면 바로 받음 (PC 를 다시 켰거나 비켜 줬다 돌아왔을 때 · 칸 시각 규칙 packages/core/src/live.ts liveLoopStep)
    - 칸 사이 1분마다 A [신규 다시 확인] 요청(config/naverAsk)을 보고 새 요청이면 여기서 바로 네이버 수집(naver.ts) — 실행기가 하나라 따로 시작시키면 밤까지 기다림
    - 칸 사이 1분마다 이 PC 실행기를 기다리는 다른 일(아침 네이버 다시 하기 · 손으로 시작한 수집 등)이 있는지 보고, 있으면 자기를 다시 시작시켜 두고 비켜 줌
+   - 근무자 화면(2026-10-22): 칸마다 섹터 숫자(work.ts) · 칸 사이 1분마다 통합데스크의 재방문 이벤트 예정 수 → floor/{태블릿 키}/work/event (숫자만)
    환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작) · LOOP_END(끝 시각 HH:MM, 시험용)
          LOOP_ONCE=1(한 번만 받고 끝 — 날짜를 정한 시험) · COLLECT_DRY=1(올리지 않음, 신규 다시 확인 요청은 맡지 않음)
    공개 저장소라 기록에는 시각 · 성공/실패 · 개수만
@@ -14,8 +15,8 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { kstMinutes, LIVE_FROM, LIVE_LOOP_END, liveLoopStep, liveSlotBy, naverAskTodo, type NaverAsk, type NaverAskResult } from "@report/core";
-import { fbLogin, readConfigJson, readLive, writeConfigJson, type Fb } from "./firebase";
+import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOOP_END, liveLoopStep, liveSlotBy, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
+import { fbLogin, readConfigJson, readDeskLive, readFloorKey, readLive, writeConfigJson, writeWork, type Fb } from "./firebase";
 import { mask, say } from "./okpos";
 
 const env = (k: string) => process.env[k] || "";
@@ -128,11 +129,36 @@ async function askCheck(): Promise<boolean> {
   return true;
 }
 
-/** 한 칸 받기 — 마감 전 영업정보(OKPOS 카페 · 키즈 + 네이버) → 통합데스크 설문 파일 */
+/** 한 칸 받기 — 마감 전 영업정보(OKPOS 카페 · 키즈 + 네이버) → 통합데스크 설문 파일 → 근무자 화면 숫자 */
 async function collect(slot: number): Promise<void> {
   say(`── ${hm(slot)} 칸 (${hm(now())} 시작)`);
   if ((await run("live.ts", { LIVE_DATE: "" }, 10)) !== 0) fails.push(`${hm(slot)} 칸`);
   if ((await run("survey.ts", {}, 3)) !== 0) fails.push(`${hm(slot)} 설문`);
+  if ((await run("work.ts", {}, 3)) !== 0) fails.push(`${hm(slot)} 근무자 화면`);
+}
+
+/* ---------- 근무자 화면 — 재방문 이벤트 예정 수 (통합데스크 현황 → 숫자만, 1분마다 · 바뀌었을 때만 쓰고 10분마다는 다시) ---------- */
+let floorKey: string | null = null;
+let floorAt = 0;
+let eventSig = "";
+let eventAt = 0;
+async function eventCheck(): Promise<void> {
+  if (dry) return;
+  const f = await cloud();
+  if (!floorKey || Date.now() - floorAt > 60 * 60e3) {
+    floorKey = await readFloorKey(f);
+    floorAt = Date.now();
+  }
+  if (!floorKey) return;
+  const desk = parseDeskLive(await readDeskLive(f));
+  const doc: WorkEventDoc = { v: 1, event: desk && desk.day === today() ? workEventOf(desk) : null };
+  if (checkWorkEvent(doc).length) return once("근무자 화면 이벤트: 검사에 걸려 쓰지 않음");
+  const sig = JSON.stringify(doc.event ? { ...doc.event, at: "" } : null);
+  if (sig === eventSig && Date.now() - eventAt < 10 * 60e3) return;
+  await writeWork(f, floorKey, "event", today(), JSON.stringify(doc));
+  if (!eventSig) say(`${hm(now())} 근무자 화면 이벤트: ${doc.event ? "통합데스크 숫자 옮김" : "통합데스크가 아직 안 보냄"}`);
+  eventSig = sig;
+  eventAt = Date.now();
 }
 
 async function main() {
@@ -140,7 +166,8 @@ async function main() {
   if (env("LOOP_ONCE") === "1") {
     const a = await run("live.ts", {}, 10);
     const b = await run("survey.ts", {}, 3);
-    process.exit(a || b ? 1 : 0);
+    const c = await run("work.ts", {}, 3);
+    process.exit(a || b || c ? 1 : 0);
   }
   const end = minutesOf(env("LOOP_END") || LIVE_LOOP_END);
   if (!Number.isFinite(end)) throw new Error("끝 시각 모양이 이상함 (HH:MM)");
@@ -178,6 +205,11 @@ async function main() {
       if (await askCheck()) continue;
     } catch (e) {
       once(`신규 다시 확인 요청 보기: ${mask((e as Error).message)}`);
+    }
+    try {
+      await eventCheck();
+    } catch (e) {
+      once(`근무자 화면 이벤트: ${mask((e as Error).message)}`);
     }
     try {
       const n = await othersWaiting();

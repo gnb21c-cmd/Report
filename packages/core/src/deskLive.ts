@@ -64,6 +64,8 @@ export interface DeskLive {
   walk: { tickets: number; extra: number; service: number };
   over: { paid: number; count: number; due: number };
   keys: { total: number; used: number; free: number; walkable: number; flex: number; map: Record<number, DeskKey>; holders: DeskHolder[] };
+  /** 재방문 이벤트 돈까스 예정 (2026-10-22 사장님 · 근무자 화면, docs/WORK.md) — 오늘 아직 안 온 이벤트 대상 예약 수 · 내일 ~ 글피. 옛 판은 없음(null) */
+  revisitDue: { today: number | null; ahead: { date: string; n: number }[] } | null;
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -126,7 +128,27 @@ export function parseDeskLive(json: unknown): DeskLive | null {
     walk: { tickets: n0(x.walk?.tickets), extra: n0(x.walk?.extra), service: n0(x.walk?.service) },
     over: { paid: n0(x.over?.paid), count: n0(x.over?.count), due: n0(x.over?.due) },
     keys: { total, used: Object.keys(map).length, free: total - Object.keys(map).length, walkable: n0(x.keys.walkable), flex: n0(x.keys.flex), map, holders },
+    revisitDue: revisitDueOf(x.revisitDue, x.day),
   };
+}
+
+const nat = (x: unknown): number | null => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x < 10000 ? x : null);
+const plusDays = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
+
+/** 재방문 이벤트 예정 — 오늘 수 · 내일 ~ 글피(오늘 뺀 3일)만, 이상한 값은 버림 */
+function revisitDueOf(x: any, day: string): DeskLive["revisitDue"] {
+  if (!x || typeof x !== "object") return null;
+  const last = plusDays(day, 3);
+  const seen = new Set<string>();
+  const ahead: { date: string; n: number }[] = [];
+  for (const a of Array.isArray(x.ahead) ? x.ahead.slice(0, 10) : []) {
+    const date = typeof a?.date === "string" && DAY.test(a.date) ? a.date : "";
+    const n = nat(a?.n);
+    if (!date || n == null || date <= day || date > last || seen.has(date)) continue;
+    seen.add(date);
+    ahead.push({ date, n });
+  }
+  return { today: nat(x.today), ahead: ahead.sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 /** 통합데스크 시각 → 몇 분 전 (폰 시각 기준, 한국 시간) */

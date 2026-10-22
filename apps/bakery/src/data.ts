@@ -4,7 +4,7 @@
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap } from "@report/core";
+import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
 
 export type Kind = "provisional" | "final";
 
@@ -126,6 +126,32 @@ export function tabletKey(): string | null {
   return m ? m[1] : null;
 }
 export const tabletUrl = (floor: string) => `${location.origin}/d1/${floor}/`;
+
+/** 근무자 화면 주소 뒤 키 번호 (2026-10-22 — 현장 태블릿과 같은 키, 수량만 복사본) */
+export function workerKey(): string | null {
+  const m = location.pathname.match(/\/w\/([A-Za-z0-9_-]{4,64})/);
+  return m ? m[1] : null;
+}
+export const workerUrl = (floor: string) => `${location.origin}/w/${floor}/`;
+
+/** 근무자 화면 — floor/{키}/work/now (섹터 숫자) · event (재방문 이벤트 예정 수)만 읽음 (로그인 없음) */
+export interface WorkApi {
+  now(): Promise<WorkDoc | null>;
+  event(): Promise<WorkEventDoc | null>;
+}
+export function workApi(fk: string): WorkApi {
+  const get = async <T,>(doc: "now" | "event"): Promise<T | null> => {
+    try {
+      const d = await http(`${docs()}/floor/${fk}/work/${doc}?key=${env.apiKey}`);
+      return JSON.parse(d.fields?.json?.stringValue || "null") as T | null;
+    } catch (e) {
+      if ((e as CloudError).status === 404) return null;
+      if ((e as CloudError).status === 403) throw new CloudError("이 주소는 더 이상 쓰지 않습니다 — 매니저에게 새 주소(키 번호)를 받아 주세요.", 403);
+      throw e;
+    }
+  };
+  return { now: () => get<WorkDoc>("now"), event: () => get<WorkEventDoc>("event") };
+}
 
 
 async function readJson<T>(board: string, coll: string, date: string, auth: boolean): Promise<T | null> {
@@ -327,4 +353,15 @@ export function demoApi(): Api {
       return doc;
     },
   };
+}
+
+/** 체험판 근무자 화면 — 체험 자료로 센 숫자 + 가짜 이벤트 예정 수 */
+export function demoWorkApi(): WorkApi {
+  const today = nowKst().date;
+  const doc: WorkDoc = { v: 1, ...workSummary(new Board(sampleUntilYesterday(addDays(today, 1))), today, new Date().toISOString()) };
+  const ev: WorkEventDoc = {
+    v: 1,
+    event: { at: `${today} ${nowKst().time}`, day: today, today: 4, ahead: [1, 2, 3].map((k, i) => ({ date: addDays(today, k), n: [6, 9, 3][i] })) },
+  };
+  return { now: async () => doc, event: async () => ev };
 }

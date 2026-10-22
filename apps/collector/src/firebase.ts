@@ -192,6 +192,15 @@ export async function readFloorKey(fb: Fb): Promise<string | null> {
   }
 }
 
+/** 근무자 화면 복사본 쓰기 — floor/{열쇠}/work/{now | event} = { date, at, json } (숫자만, core work.ts) */
+export async function writeWork(fb: Fb, floor: string, doc: "now" | "event", date: string, json: string): Promise<void> {
+  await http(`${base(fb)}/floor/${floor}/work/${doc}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields: { date: str(date), at: { timestampValue: new Date().toISOString() }, json: str(json) } }),
+  });
+}
+
 /** 현장 태블릿 복사본 쓰기 — floor/{열쇠}/days/{날짜} */
 export async function writeFloor(fb: Fb, floor: string, days: { date: string; json: string }[]): Promise<void> {
   if (!days.length) return;

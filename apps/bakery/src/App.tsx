@@ -40,19 +40,24 @@ import {
   type OrderRow,
   type PlanDoc,
 } from "@report/core";
-import { cloudApi, CloudError, demoApi, floorApi, login, logout, session, tabletKey, tabletUrl, type Api, type Kind } from "./data";
-import { finalImage, shareImage, weekImage, type ImgRow } from "./image";
+import { cloudApi, CloudError, demoApi, demoWorkApi, floorApi, login, logout, session, tabletKey, tabletUrl, workApi, workerKey, workerUrl, type Api, type Kind } from "./data";
+import { Worker } from "./Worker";
+import { finalImage, qrImage, qrSvg, shareImage, weekImage, type ImgRow } from "./image";
 
 export function App() {
   if (__DEMO__) return <Demo />;
   const key = tabletKey();
   if (key) return <Floor api={floorApi(key)} />;
+  // 근무자 화면 (…/w/<키>/ — 태블릿과 같은 키, 2026-10-22)
+  const wk = workerKey();
+  if (wk) return <Worker api={workApi(wk)} />;
   return <ManagerGate />;
 }
 
-/** 체험판 — 주소 끝 #d1 이면 태블릿 화면 */
+/** 체험판 — 주소 끝 #d1 이면 태블릿 화면 · #w 면 근무자 화면 */
 function Demo() {
   const api = useMemo(() => demoApi(), []);
+  const work = useMemo(() => demoWorkApi(), []);
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
     const f = () => setHash(location.hash);
@@ -62,9 +67,9 @@ function Demo() {
   return (
     <>
       <div className="demo-bar">
-        체험판 · 가짜 자료 · <a href="#">D 매니저</a> · <a href="#d1">D-1 현장 태블릿</a>
+        체험판 · 가짜 자료 · <a href="#">D 매니저</a> · <a href="#d1">D-1 현장 태블릿</a> · <a href="#w">근무자 화면</a>
       </div>
-      {hash === "#d1" ? <Floor api={api} /> : <Manager api={api} who="체험 매니저" board="demo" onLogout={() => {}} />}
+      {hash === "#d1" ? <Floor api={api} /> : hash === "#w" ? <Worker api={work} /> : <Manager api={api} who="체험 매니저" board="demo" onLogout={() => {}} />}
     </>
   );
 }
@@ -838,6 +843,32 @@ function TabletKeyView({ api }: { api: Api }) {
           <p className="warn">{admin ? "아직 키 번호가 없습니다 — 아래에 숫자를 정해 저장하면 태블릿 주소가 생깁니다." : "아직 키 번호가 없습니다 — 운영자가 정하면 태블릿 주소가 생깁니다."}</p>
         )}
       </section>
+      {key && (
+        <section className="card">
+          <h2>근무자 화면 주소</h2>
+          <p className="muted">재방문 이벤트 돈까스 예정 수 · 바리스타 · 베이커리 · 키친 평균 수요량과 상품별 판매 개수만 (매출 금액 없음). 키 번호는 태블릿과 같아 바꾸면 이 주소도 같이 바뀝니다.</p>
+          <div className="url-box">{workerUrl(key)}</div>
+          {/* QR — 근무자가 폰 카메라로 찍으면 바로 열림 (뽑아서 붙이거나 그림으로 보냄) */}
+          <div className="qr-box" dangerouslySetInnerHTML={{ __html: qrSvg(workerUrl(key)) }} aria-label="근무자 화면 주소 QR" />
+          <div className="btn-row">
+            <button className="primary" onClick={async () => setMsg(await share(`근무자 화면 (크롬으로 열고 홈 화면에 추가 · 로그인 없음)\n${workerUrl(key)}`, "근무자 화면 주소"))}>
+              주소 카톡으로 보내기
+            </button>
+            <button
+              className="ghost"
+              onClick={async () => {
+                try {
+                  setMsg(await shareImage(await qrImage(workerUrl(key), "근무자 화면", "휴대폰 카메라로 찍으면 열려요 · 로그인 없음"), "근무자화면_QR.png", "근무자 화면 QR"));
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              QR 그림 보내기 · 저장
+            </button>
+          </div>
+        </section>
+      )}
       {api.setFloorKey && admin && (
         <section className="card">
           <h2>{key ? "키 번호 바꾸기" : "키 번호 정하기"}</h2>

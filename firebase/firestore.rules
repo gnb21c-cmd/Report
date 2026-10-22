@@ -140,6 +140,15 @@ service cloud.firestore {
       allow update: if isAdmin(resource.data.board)
         && request.resource.data.board == resource.data.board
         && request.resource.data.keys().hasOnly(["board", "at", "active"]);
+      // 근무자 화면 (…/w/<키>/, 2026-10-22) — now = 섹터 숫자 · event = 재방문 이벤트 예정 수. 숫자만 (매출 금액 · 손님 정보 없음)
+      //   바리스타 POS 하루 수집(입력 계정)이 씀 · 키가 살아 있을 때만 읽음 (태블릿과 같은 키)
+      match /work/{doc} {
+        allow read: if get(/databases/$(database)/documents/floor/$(fk)).data.active == true;
+        allow write: if (doc == "now" || doc == "event")
+          && isSender(get(/databases/$(database)/documents/floor/$(fk)).data.board)
+          && request.resource.data.keys().hasOnly(["date", "at", "json"])
+          && request.resource.data.json is string && request.resource.data.json.size() < 200000;
+      }
       match /days/{date} {
         allow read: if get(/databases/$(database)/documents/floor/$(fk)).data.active == true;
         allow write: if isSender(get(/databases/$(database)/documents/floor/$(fk)).data.board)
