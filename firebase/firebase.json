@@ -22,6 +22,10 @@
         "destination": "/d1/index.html"
       },
       {
+        "source": "/w/**",
+        "destination": "/w/index.html"
+      },
+      {
         "source": "/a",
         "destination": "/a/index.html"
       },
@@ -46,6 +50,15 @@
       },
       {
         "source": "/d1/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/w/**",
         "headers": [
           {
             "key": "Cache-Control",

@@ -24,3 +24,4 @@ export * from "./survey";
 export * from "./deskLive";
 export * from "./deskRevisit";
 export * from "./deskEvent";
+export * from "./work";

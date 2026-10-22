@@ -5,6 +5,7 @@
    폰의 '공유하기'(navigator.share files)로 카톡을 고름. 안 되는 기기는 그림 파일을 내려받음
    ============================================================ */
 import { shortLabel, weekday, WEEKDAY_KO } from "@report/core";
+import qrcode from "qrcode-generator";
 
 const FONT = `system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif`;
 const C = { bg: "#ffffff", ink: "#1a1714", sub: "#6b625a", line: "#e4ddd5", accent: "#8a5a3b", soft: "#f6efe8", wait: "#b25b00" };
@@ -171,6 +172,12 @@ export async function shareImage(b: Blob, name: string, title: string): Promise<
   } catch (e) {
     if ((e as Error).name === "AbortError") return "";
   }
+  saveImage(b, name);
+  return "이 기기는 바로 공유가 안 되어 그림 파일을 내려받았습니다 — 카톡에서 사진으로 보내 주세요.";
+}
+
+/** 그림 파일로 내려받기만 (공유 창 없이 — 뽑아서 붙일 QR 등) */
+export function saveImage(b: Blob, name: string): void {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(b);
   a.download = name;
@@ -178,5 +185,47 @@ export async function shareImage(b: Blob, name: string, title: string): Promise<
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  return "이 기기는 바로 공유가 안 되어 그림 파일을 내려받았습니다 — 카톡에서 사진으로 보내 주세요.";
+}
+
+/* ---------- 주소 QR (2026-10-22 — 근무자 화면 · 현장 태블릿 주소를 폰 카메라로) ---------- */
+/** QR 칸 (true = 검은 칸) — 오류 고침 M */
+export function qrModules(text: string): boolean[][] {
+  const q = qrcode(0, "M");
+  q.addData(text, "Byte");
+  q.make();
+  const n = q.getModuleCount();
+  return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c)));
+}
+
+/** 화면에 그릴 QR (SVG 글) */
+export function qrSvg(text: string, px = 220): string {
+  const m = qrModules(text);
+  const n = m.length + 8; // 둘레 4칸 비움
+  let d = "";
+  m.forEach((row, r) => row.forEach((on, c) => on && (d += `M${c + 4} ${r + 4}h1v1h-1z`)));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" width="${px}" height="${px}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+
+/** 주소 QR 그림 한 장 — 제목 · QR · 안내 (뽑아서 매장에 붙임) */
+export function qrImage(url: string, title: string, note: string): Promise<Blob> {
+  const m = qrModules(url);
+  const n = m.length + 8;
+  const cell = Math.floor((W - PAD * 2) / n);
+  const size = cell * n;
+  const top = 170;
+  const { c, g } = canvas(top + size + 190);
+  font(g, 54, true);
+  g.fillStyle = C.ink;
+  g.textAlign = "center";
+  g.fillText(title, W / 2, 90);
+  // 칸 경계가 픽셀에 맞아야 칸 사이 흰 줄이 안 생김 (QR 이 잘 읽히게)
+  const x0 = Math.round((W - size) / 2);
+  g.fillStyle = "#000";
+  m.forEach((row, r) => row.forEach((on, col) => on && g.fillRect(x0 + (col + 4) * cell, top + (r + 4) * cell, cell, cell)));
+  font(g, 34);
+  g.fillStyle = C.sub;
+  g.fillText(note, W / 2, top + size + 60);
+  font(g, 26);
+  g.fillText(fit(g, url, W - PAD * 2), W / 2, top + size + 120);
+  return blob(c);
 }

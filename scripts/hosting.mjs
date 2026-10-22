@@ -15,8 +15,9 @@ cpSync(join(root, "apps/view/dist"), out, { recursive: true });
 mkdirSync(join(out, "a"), { recursive: true });
 copyFileSync(a, join(out, "a/index.html"));
 // D 매니저(…/d/) · D-1 현장 태블릿(…/d1/<열쇠>/) — 같은 HTML 한 장, 주소로 화면이 갈림
-for (const dir of ["d", "d1"]) {
+// + 근무자 화면(…/w/<키>/, 2026-10-22) — 같은 HTML
+for (const dir of ["d", "d1", "w"]) {
   mkdirSync(join(out, dir), { recursive: true });
   copyFileSync(d, join(out, dir, "index.html"));
 }
-console.log("firebase/public ← B(…/b/<열쇠>/) + A(…/a/) + D(…/d/) · D-1(…/d1/<열쇠>/)");
+console.log("firebase/public ← B(…/b/<열쇠>/) + A(…/a/) + D(…/d/) · D-1(…/d1/<열쇠>/) · 근무자(…/w/<열쇠>/)");

@@ -62,6 +62,26 @@ export function toReport(f: Record<string, any>): DayReport | null {
   return any ? r : null;
 }
 
+/** 그 기간 보고만 (근무자 화면처럼 자주 셀 때 — 모음 전부 대신 날짜 문서만 한 번에) · 보고 설정(휴일 더하기/빼기)도 */
+export async function readRange(c: ReadCfg, from: string, to: string): Promise<{ reports: DayReport[]; settings: ReportSettings | null }> {
+  const names: string[] = [];
+  for (let d = from; d <= to; d = new Date(Date.parse(`${d}T12:00:00Z`) + 86400e3).toISOString().slice(0, 10)) names.push(`projects/${c.projectId}/databases/(default)/documents/boards/${c.board}/reports/${d}`);
+  const res = await call(`https://firestore.googleapis.com/v1/projects/${c.projectId}/databases/(default)/documents:batchGet?key=${c.apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ documents: names }),
+  });
+  const reports = (Array.isArray(res) ? res : []).map((r: any) => (r.found ? toReport(fieldsOf(r.found)) : null)).filter((r): r is DayReport => !!r);
+  let settings: ReportSettings | null = null;
+  try {
+    const f = fieldsOf(await call(`${base(c)}/settings/main?key=${c.apiKey}`));
+    settings = f.json ? cleanSettings(JSON.parse(f.json)) : null;
+  } catch {
+    /* 설정 없음 = 기본값 */
+  }
+  return { reports, settings };
+}
+
 export async function readAll(c: ReadCfg): Promise<{ reports: DayReport[]; weather: WeatherMap; settings: ReportSettings | null }> {
   const reports = (await all(c, "reports")).map(toReport).filter((r): r is DayReport => !!r);
   const weather: WeatherMap = {};
