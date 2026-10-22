@@ -37,6 +37,10 @@ on:
         description: "이미 센 주간 잠정안에 같은 요일 칸만 다시 (규칙이 바뀌었을 때 · 날짜 = 그 주간안을 센 목요일)"
         type: boolean
         default: false
+      reround:
+        description: "이미 센 주간 잠정안에 올림 단위(시나몬롤 10 · 우유모닝빵 2) · 평일 합계 범위만 다시 (날짜 = 그 주간안을 센 목요일)"
+        type: boolean
+        default: false
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -63,6 +67,7 @@ jobs:
           PLAN_TODAY: ${{ steps.when.outputs.today }}
           PLAN_DRY: ${{ steps.when.outputs.dry }}
           PLAN_RESTEP: ${{ inputs.restep == true && '1' || '' }}
+          PLAN_REROUND: ${{ inputs.reround == true && '1' || '' }}
           # 목요일 새벽 예약(UTC 수요일, '* * 3'으로 끝남) · 직접 실행의 '주간 잠정안만' → 주간안만 셈
           PLAN_MODE: ${{ ((github.event_name == 'schedule' && endsWith(github.event.schedule, '* * 3')) || inputs.week_only == true) && 'week' || '' }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

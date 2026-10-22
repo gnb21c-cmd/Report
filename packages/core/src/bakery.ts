@@ -33,12 +33,25 @@ export const FINAL_BAND = 0.1;
 /** 현장 태블릿의 하루 시작 */
 export const DAY_START = "06:00";
 
-/** 만드는 단위 (적지 않은 빵은 1개 단위) */
+/** 만드는 단위 (적지 않은 빵은 1개 단위) — 같은 요일 칸(±1)도 이 단위 */
 export const PRODUCTION_UNIT: Readonly<Record<string, number>> = { 몽블랑: 5 };
 export const breadUnit = (name: string) => PRODUCTION_UNIT[name] || 1;
 
-/** 단위에 맞추기 — 가까운 배수 (0 보다 많으면 적어도 한 단위), 범위가 있으면 범위 안의 배수 중 가까운 것 */
-export function snapUnit(name: string, qty: number, lo?: number, hi?: number): number {
+/* ---------- 올림 단위 (2026-10-22 사장님) ----------
+   시나몬롤은 10개 · 우유모닝빵은 2개(짝수) 단위로 '올림' — 10-26 계획부터 (주간안 · 최종안 · 매니저가 고친 수량)
+   같은 요일 칸(±1)은 그대로 1개씩 쌓고, 마지막 수량만 올림 · 최종안 ±10% 범위를 넘어도 올림 */
+export const ROUND_UP_UNIT: Readonly<Record<string, number>> = { 시나몬롤: 10, 우유모닝빵: 2 };
+export const ROUND_UP_FROM = "2026-10-26";
+/** 그날 올림 단위 (없으면 1) */
+export const roundUpUnit = (name: string, date?: string): number => (date && date >= ROUND_UP_FROM ? ROUND_UP_UNIT[name] || 1 : 1);
+/** 그날 그 빵을 만드는 단위 (화면 '○개 단위' 표시) */
+export const planUnit = (name: string, date?: string): number => Math.max(breadUnit(name), roundUpUnit(name, date));
+
+/** 단위에 맞추기 — 가까운 배수 (0 보다 많으면 적어도 한 단위), 범위가 있으면 범위 안의 배수 중 가까운 것
+ *  date 를 주면 그날 올림 단위(시나몬롤 10 · 우유모닝빵 2)는 올림 (범위와 상관없이) */
+export function snapUnit(name: string, qty: number, lo?: number, hi?: number, date?: string): number {
+  const up = roundUpUnit(name, date);
+  if (up > 1) return qty > 0 ? Math.max(up, Math.ceil(qty / up - 1e-6) * up) : 0;
   const u = breadUnit(name);
   const q = Math.max(0, Math.round(qty));
   if (u === 1 || q === 0) return q;
@@ -186,6 +199,58 @@ export const BREAD_BOOST_FROM = "2026-10-26";
 /** 그날 계획의 생산 배수 (10-26 전은 1) */
 export const breadBoostOf = (date: string): number => (date >= BREAD_BOOST_FROM ? BREAD_BOOST[dayKind(date)] : 1);
 
+/* ---------- 제빵 품목 순서 (2026-10-22 사장님 표) ----------
+   매니저 앱(잠정 · 최종 확정 · 7일 표 그림 · 명령서 · 결과) · 현장 태블릿이 이 순서로 보여 줌 (보고 앱 B 는 그대로)
+   POS 상품 이름으로 (사장님 표의 줄임 이름은 옆에) · 띄어쓰기는 상관없음 · 표에 없는 빵은 맨 뒤 가나다 */
+export const BREAD_ORDER: readonly string[] = [
+  "우유모닝빵",
+  "고소한옛날맘모스",
+  "갈릭소시지빵", // 표: 갈릭소세지빵
+  "시나몬롤",
+  "메가모카번", // 표: 메가번
+  "초코바게트",
+  "피칸무화과베이글",
+  "먹물트리플치즈",
+  "구수한만능감자빵",
+  "흑미로만든수수부꾸미", // 표: 수수부꾸미
+  "인절미팥빵",
+  "감자파니니",
+  "쫀득크림빵",
+  "소금빵",
+  "소보로팥소금빵",
+  "초코파삭",
+  "갈릭바게트볼", // 표: 갈릭볼
+  "아망드보스톡", // 표: 아몬드보스톡
+  "아스타나버터떡", // 표: 버터떡 1개
+  "몽블랑",
+  "찢어먹는생식빵", // 표: 식빵
+  "옥수수찰빵(3EA)", // 표: 옥수수찰빵
+  "스파이시 파누쪼", // 표: 스파이시파노쪼
+  "스위트 파누쪼", // 표: 스위트파노쪼
+  "감계무량샌드위치",
+  "에그타르트",
+  "고메스콘",
+  "초코스콘",
+  "레몬파운드", // 표: 레몬쌀파운드
+  "무화과파운드", // 표: 무화과쌀파운드
+  "애플시나몬쌀파운드", // 표: 사과파운드
+  "티라미두유볼(소)",
+  "후르츠생크림케이크", // 표: 복숭아생크림케이크 — 계절 과일에 따라 이름만 바뀜, '…생크림케이크'는 모두 이 자리 (2026-10-22 사장님)
+];
+const orderKey = (n: string) => n.replace(/\s+/g, "");
+const ORDER_INDEX = new Map(BREAD_ORDER.map((n, i) => [orderKey(n), i]));
+const CAKE_AT = BREAD_ORDER.length - 1;
+/** 표에서 몇 번째 (없으면 맨 뒤) — 이름에 '생크림케이크'가 들어가면 과일이 바뀌어도 생크림케이크 자리 */
+export function breadOrderAt(name: string): number {
+  const k = orderKey(name);
+  return ORDER_INDEX.get(k) ?? (k.includes("생크림케이크") ? CAKE_AT : BREAD_ORDER.length);
+}
+/** 표 순서대로 (표에 없는 빵은 맨 뒤 가나다) — 원래 목록은 그대로 두고 새 목록 */
+export function sortBread<T>(xs: readonly T[], nameOf: (x: T) => string = (x) => (x as { name: string }).name): T[] {
+  const at = (x: T) => breadOrderAt(nameOf(x));
+  return [...xs].sort((a, b) => at(a) - at(b) || nameOf(a).localeCompare(nameOf(b), "ko"));
+}
+
 /* ---------- 평일 하루 합계 범위 (2026-10-21 사장님) ----------
    월 ~ 목 평일은 하루 300 ~ 320개 안 — 같은 요일 칸(±1) · 날씨 · 예상 손님 추세로 날마다 달라지되 그 범위 안에서
    넘으면 320, 모자라면 300 으로 빵마다 같은 비율로 줄이거나 늘림 (빵 사이 비율 · 몽블랑 5개 단위는 그대로). 10-26 계획부터 · 금요일 · 휴일은 없음 */
@@ -196,13 +261,13 @@ export function breadBandOf(date: string): [number, number] | null {
 }
 
 /** 하루 합계를 lo ~ hi 안으로 — 넘으면 hi, 모자라면 lo 로 빵마다 같은 비율 (반올림 차이는 1개 단위 빵 중 많은 것부터 한 개씩) · 안이면 그대로 */
-export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo: number, hi: number): T[] {
+export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo: number, hi: number, date?: string): T[] {
   const total = items.reduce((a, b) => a + b.qty, 0);
   if (!items.length || total <= 0 || (total >= lo && total <= hi)) return items;
   const target = total > hi ? hi : lo;
-  const out = items.map((it) => ({ ...it, qty: snapUnit(it.name, (it.qty * target) / total) }));
+  const out = items.map((it) => ({ ...it, qty: snapUnit(it.name, (it.qty * target) / total, undefined, undefined, date) }));
   let diff = target - out.reduce((a, b) => a + b.qty, 0);
-  const ones = out.filter((i) => breadUnit(i.name) === 1 && i.qty > 0).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
+  const ones = out.filter((i) => planUnit(i.name, date) === 1 && i.qty > 0).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
   for (let k = 0; diff !== 0 && ones.length && k < 100000; k++) {
     const it = ones[k % ones.length];
     if (diff > 0) {
@@ -225,9 +290,9 @@ function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: strin
   const raw: PlanItem[] = p.items.map((it) => {
     const base = Math.round(it.qty * boost);
     const k = clampStep(it.name, base, steps[it.name] ?? 0);
-    return { name: it.name, qty: snapUnit(it.name, base + k * breadUnit(it.name)), base, ...(k ? { step: k } : {}) };
+    return { name: it.name, qty: snapUnit(it.name, base + k * breadUnit(it.name), undefined, undefined, date), base, ...(k ? { step: k } : {}) };
   });
-  const items = band ? fitTotal(raw, band[0], band[1]) : raw;
+  const items = band ? fitTotal(raw, band[0], band[1], date) : raw;
   return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(boost !== 1 ? { boost } : {}), ...(band ? { band } : {}) };
 }
 
@@ -288,17 +353,17 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
       // 비 예보 주말 — 예정 수량 × 배수 (잠정에 없던 빵은 새로 센 수량 × 배수), 같은 요일 칸은 이어 감
       if (up) {
         const b = a ?? f!.qty;
-        return { name, qty: snapUnit(name, Math.round(b * up)), base: f?.base ?? b, ...(f?.step ? { step: f.step } : {}) };
+        return { name, qty: snapUnit(name, Math.round(b * up), undefined, undefined, date), base: f?.base ?? b, ...(f?.step ? { step: f.step } : {}) };
       }
       if (a == null) return f!;
       const [lo, hi] = bandRange(a, FINAL_BAND);
-      const qty = snapUnit(name, withinBand(a, f?.qty ?? 0, FINAL_BAND), lo, hi);
+      const qty = snapUnit(name, withinBand(a, f?.qty ?? 0, FINAL_BAND), lo, hi, date);
       return { name, qty, base: f?.base ?? a, ...(f?.step ? { step: f.step } : {}), lo, hi };
     })
     .filter((i) => i.qty > 0)
     .sort((x, y) => y.qty - x.qty || x.name.localeCompare(y.name, "ko"));
   // 평일 하루 합계 범위 — 잠정 ±10% 로 묶은 뒤에도 300 ~ 320 안으로
-  const fitted = now.band ? fitTotal(items, now.band[0], now.band[1]) : items;
+  const fitted = now.band ? fitTotal(items, now.band[0], now.band[1], date) : items;
   return { ...now, items: fitted, total: fitted.reduce((a, b) => a + b.qty, 0), ...(up ? { rainUp: up } : {}) };
 }
 
@@ -552,6 +617,15 @@ export function restep(st: PlanStep, steps: Record<string, number>): PlanStep {
     const { step: _old, ...rest } = it;
     return { ...rest, qty: snapUnit(it.name, base + k * breadUnit(it.name)), base, ...(k ? { step: k } : {}) };
   });
+  return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
+}
+
+/** 이미 센 계획에 올림 단위(시나몬롤 10 · 우유모닝빵 2) · 평일 합계 범위만 다시 — 다른 빵 수량 · 칸 · 예측은 그대로
+ *  (규칙이 바뀐 날 이미 매니저 앱에 보인 계획에, 2026-10-22 — apps/collector/src/plan.ts PLAN_REROUND) */
+export function reround(st: PlanStep, date: string): PlanStep {
+  let items = st.items.map((it) => (roundUpUnit(it.name, date) > 1 ? { ...it, qty: snapUnit(it.name, it.qty, undefined, undefined, date) } : it));
+  const band = breadBandOf(date);
+  if (band) items = fitTotal(items, band[0], band[1], date);
   return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 

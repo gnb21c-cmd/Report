@@ -13,7 +13,7 @@
      예측(base) · 매니저 잠정 확정 · 있던 최종안은 그대로 (최종안은 3일 전에 잠정 확정 ±10% 안에서 새 칸을 씀)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -73,6 +73,25 @@ async function main() {
       const changed = week.items.filter((it, i) => it.qty !== doc.week!.items[i].qty);
       console.log(`칸 다시: ${d} · 바뀐 빵 ${changed.length}종 (늘림 ${changed.filter((it) => it.qty > doc.week!.items.find((x) => x.name === it.name)!.qty).length}종)`);
       if (changed.length) out.set(d, { ...doc, week });
+    }
+    await save(out);
+    return;
+  }
+
+  // 올림 단위(시나몬롤 10 · 우유모닝빵 2)를 정한 날 — 이미 센 주간 잠정안에 올림 · 평일 합계 범위만 다시 (다른 빵 · 칸 · 예측은 그대로, 2026-10-22)
+  //   매니저가 이미 잠정 확정한 수량(orders)은 그대로 — 최종안(3일 전) 때 올림이 들어감
+  if (env("PLAN_REROUND") === "1") {
+    if (weekday(today) !== WEEK_PLAN_WEEKDAY) throw new Error("올림 다시(PLAN_REROUND)는 주간안을 센 목요일 날짜로 (PLAN_TODAY)");
+    for (const d of weekDates(today)) {
+      const doc = await load(d);
+      if (!doc.week) {
+        console.log(`올림 다시: ${d} — 주간 잠정안이 없어 건너뜀`);
+        continue;
+      }
+      const week = reround(doc.week, d);
+      const changed = week.items.filter((it, i) => it.qty !== doc.week!.items[i].qty).length;
+      console.log(`올림 다시: ${d} · 바뀐 빵 ${changed}종 · 합계 ${doc.week.total === week.total ? "그대로" : "바뀜"}${week.band ? ` (범위 ${week.band[0]} ~ ${week.band[1]} 안)` : ""}`);
+      if (changed) out.set(d, { ...doc, week });
     }
     await save(out);
     return;
