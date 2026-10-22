@@ -22,7 +22,8 @@ import {
   productionStarted,
   shortLabel,
   snapUnit,
-  breadUnit,
+  planUnit,
+  sortBread,
   stepGroup,
   stepOf,
   SELL_OUT_TARGET,
@@ -237,7 +238,7 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
         for (const it of p?.week?.items || []) tot.set(it.name, (tot.get(it.name) || 0) + (o?.provisional[it.name]?.qty ?? it.qty));
         for (const [n, l] of Object.entries(o?.provisional || {})) if (!tot.has(n)) tot.set(n, l.qty);
       }
-      const names = [...tot.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")).map(([n]) => n);
+      const names = sortBread([...tot.keys()], (n) => n);
       const get = (d: string, n: string) => {
         const x = docs.find((y) => y.d === d)!;
         const c = x.o?.provisional[n];
@@ -305,11 +306,12 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const locked = (kind === "provisional" && after(addDays(date, -FINAL_LEAD))) || made;
   const done = order?.[kind] || {};
   const prov = order?.provisional || {};
-  const rows = step?.items || [];
-  // 고친 수량도 만드는 단위로 (몽블랑 5개)
+  // 사장님 표 순서 (2026-10-22, core BREAD_ORDER)
+  const rows = sortBread(step?.items || []);
+  // 고친 수량도 만드는 단위로 (몽블랑 5개 · 10-26 부터 시나몬롤 10개 · 우유모닝빵 2개 올림)
   const valueOf = (name: string, q: number) => {
     const v = edit[name];
-    if (v != null && v !== "") return snapUnit(name, Number(v) || 0);
+    if (v != null && v !== "") return snapUnit(name, Number(v) || 0, undefined, undefined, date);
     return done[name]?.qty ?? q;
   };
   const save = async (lines: Record<string, number>, label: string) => {
@@ -430,7 +432,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
               <div key={r.name} className={`row${c ? " done" : ""}${kind === "final" ? " fin" : ""}`}>
                 <span className="name">
                   {r.name}
-                  {breadUnit(r.name) > 1 && <small className="unit"> {breadUnit(r.name)}개 단위</small>}
+                  {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
                   {r.lo != null && (
                     <small className="muted">
                       {" "}
@@ -527,8 +529,8 @@ function OrderView({ api }: { api: Api }) {
   const b = useDay(api, d1);
   const [msg, setMsg] = useState("");
   const now = nowKst();
-  const ra = orderRows(a.plan, a.order, now);
-  const rb = orderRows(b.plan, b.order, now);
+  const ra = sortBread(orderRows(a.plan, a.order, now));
+  const rb = sortBread(orderRows(b.plan, b.order, now));
   const text = [orderText(d0, ra, "오늘 생산"), orderText(d1, rb, "내일 준비")].join("\n\n");
   return (
     <main className="content">
@@ -633,7 +635,7 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
   }, [api, today]);
   if (err) return <p className="error box floor-msg">{err}</p>;
   if (!cols) return <p className="muted center">불러오는 중…</p>;
-  const names = [...new Set(cols.flatMap((m) => [...m.keys()]))].sort((a, b) => (cols[0].get(b) ?? 0) - (cols[0].get(a) ?? 0) || (cols[1].get(b) ?? 0) - (cols[1].get(a) ?? 0) || a.localeCompare(b, "ko"));
+  const names = sortBread([...new Set(cols.flatMap((m) => [...m.keys()]))], (n) => n);
   if (!names.length) return <p className="empty box floor-msg">작업지시가 없는 날입니다.</p>;
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} (${WEEKDAY_KO[weekday(d)]})`;
   const sum = (i: number) => names.reduce((a, n) => a + (cols[i].get(n) ?? 0), 0);
@@ -701,7 +703,7 @@ function Result({ api, today }: { api: Api; today: string }) {
     Promise.all([api.plan(date), api.order(date), api.report(date)])
       .then(([p, o, r]) => {
         if (!live) return;
-        setRows(r ? dayResult(new Board([r]), date, p, o) : []);
+        setRows(r ? sortBread(dayResult(new Board([r]), date, p, o)) : []);
       })
       .catch((e) => live && setErr((e as Error).message));
     return () => {
