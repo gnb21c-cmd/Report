@@ -837,7 +837,13 @@ function TabletKeyView({ api }: { api: Api }) {
                 className="primary"
                 onClick={async () => {
                   try {
-                    saveImage(await qrImage(url, "현장 · 베이커리 · 키친", "근무자 전용 · 휴대폰 카메라로 찍으면 열려요"), "현장_QR.png");
+                    // 체험판 QR 은 가짜 주소라 열리지 않음 — 뽑아 붙이지 않게 그림에 크게 적음
+                    saveImage(
+                      __DEMO__
+                        ? await qrImage(url, "체험판 · 붙이지 마세요", "가짜 주소라 열리지 않아요 · 진짜 QR 은 매니저 앱에서")
+                        : await qrImage(url, "현장 · 베이커리 · 키친", "근무자 전용 · 휴대폰 카메라로 찍으면 열려요"),
+                      __DEMO__ ? "체험판_QR_붙이지마세요.png" : "현장_QR.png",
+                    );
                     setMsg("QR 그림을 내려받았습니다 — 뽑아서 붙여 주세요.");
                   } catch (e) {
                     setMsg((e as Error).message);
