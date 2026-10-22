@@ -172,6 +172,12 @@ export async function shareImage(b: Blob, name: string, title: string): Promise<
   } catch (e) {
     if ((e as Error).name === "AbortError") return "";
   }
+  saveImage(b, name);
+  return "이 기기는 바로 공유가 안 되어 그림 파일을 내려받았습니다 — 카톡에서 사진으로 보내 주세요.";
+}
+
+/** 그림 파일로 내려받기만 (공유 창 없이 — 뽑아서 붙일 QR 등) */
+export function saveImage(b: Blob, name: string): void {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(b);
   a.download = name;
@@ -179,7 +185,6 @@ export async function shareImage(b: Blob, name: string, title: string): Promise<
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  return "이 기기는 바로 공유가 안 되어 그림 파일을 내려받았습니다 — 카톡에서 사진으로 보내 주세요.";
 }
 
 /* ---------- 주소 QR (2026-10-22 — 근무자 화면 · 현장 태블릿 주소를 폰 카메라로) ---------- */
@@ -201,7 +206,7 @@ export function qrSvg(text: string, px = 220): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" width="${px}" height="${px}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
 
-/** 주소 QR 그림 한 장 — 제목 · QR · 안내 (카톡으로 보내거나 뽑아 붙임) */
+/** 주소 QR 그림 한 장 — 제목 · QR · 안내 (뽑아서 매장에 붙임) */
 export function qrImage(url: string, title: string, note: string): Promise<Blob> {
   const m = qrModules(url);
   const n = m.length + 8;

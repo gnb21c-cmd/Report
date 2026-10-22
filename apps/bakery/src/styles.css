@@ -694,8 +694,48 @@ tr.sum td {
   align-items: center;
   gap: 4px 10px;
 }
-.worker .top .back {
+.worker .top .back,
+.floor .top .back {
   padding: 6px 10px;
+  width: auto;
+  margin: 0;
+}
+.floor .top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+p.small {
+  font-size: 12.5px;
+}
+/* 생산 명령서를 폰으로(근무자 화면 베이커리 — QR 로 엶) — 다섯 칸이 한 화면에 들어오게 작게 */
+@media (max-width: 560px) {
+  .floor .top h1 {
+    font-size: 20px;
+  }
+  .floor-table {
+    font-size: 15px;
+  }
+  .floor-table th,
+  .floor-table td {
+    padding: 8px 5px;
+  }
+  .floor-table thead th {
+    font-size: 12px;
+    white-space: normal;
+    word-break: keep-all;
+    text-align: right;
+  }
+  .floor-table thead th:first-child {
+    text-align: left;
+  }
+  .floor-table th small {
+    font-size: 10.5px;
+  }
+  .floor-table td.today {
+    font-size: 1.2em;
+  }
 }
 .event-card .ev-today {
   display: grid;
@@ -754,6 +794,21 @@ tr.sum td {
 }
 .sector-btn .ic {
   font-size: 28px;
+}
+/* 첫 화면 — 베이커리 · 키친 두 칸만, 크게 */
+.sector-btns.two {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 24px;
+}
+.sector-btns.two .sector-btn {
+  padding: 36px 8px;
+  font-size: 22px;
+}
+.sector-btns.two .sector-btn .ic {
+  font-size: 52px;
+}
+.sector-btns.two .sector-btn small {
+  font-size: 13px;
 }
 .avg-boxes {
   display: grid;

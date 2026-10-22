@@ -4,7 +4,7 @@
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
+import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, isEventDonkatsu, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
 
 export type Kind = "provisional" | "final";
 
@@ -146,7 +146,7 @@ export function workApi(fk: string): WorkApi {
       return JSON.parse(d.fields?.json?.stringValue || "null") as T | null;
     } catch (e) {
       if ((e as CloudError).status === 404) return null;
-      if ((e as CloudError).status === 403) throw new CloudError("이 주소는 더 이상 쓰지 않습니다 — 매니저에게 새 주소(키 번호)를 받아 주세요.", 403);
+      if ((e as CloudError).status === 403) throw new CloudError("이 주소는 더 이상 쓰지 않습니다 — 매장에 새로 붙인 QR 을 찍어 주세요.", 403);
       throw e;
     }
   };
@@ -277,7 +277,7 @@ export function floorApi(fk: string): Api {
       return { plan: asPlan(j.plan), order: asOrder(j.order) };
     } catch (e) {
       if ((e as CloudError).status === 404) return { plan: null, order: null };
-      if ((e as CloudError).status === 403) throw new CloudError("이 주소는 더 이상 쓰지 않습니다 — 베이커리 매니저에게 새 주소(키 번호)를 받아 주세요.", 403);
+      if ((e as CloudError).status === 403) throw new CloudError("이 주소는 더 이상 쓰지 않습니다 — 매장에 새로 붙인 QR 을 찍어 주세요.", 403);
       throw e;
     }
   };
@@ -359,6 +359,11 @@ export function demoApi(): Api {
 export function demoWorkApi(): WorkApi {
   const today = nowKst().date;
   const doc: WorkDoc = { v: 1, ...workSummary(new Board(sampleUntilYesterday(addDays(today, 1))), today, new Date().toISOString()) };
+  // 체험판 자료에는 [이벤트] 돈까스가 없어 예시 숫자로 (화면 모양 보기용)
+  if (!doc.kitchen.items.some((i) => isEventDonkatsu(i.name))) {
+    doc.kitchen.donkatsu = { weekday: 12, holiday: 31 };
+    doc.kitchen.items.push({ name: "[이벤트] 수제돈까스", today: 5, week: 108, month: 240 });
+  }
   const ev: WorkEventDoc = {
     v: 1,
     event: { at: `${today} ${nowKst().time}`, day: today, today: 4, ahead: [1, 2, 3].map((k, i) => ({ date: addDays(today, k), n: [6, 9, 3][i] })) },

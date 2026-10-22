@@ -40,17 +40,16 @@ import {
   type OrderRow,
   type PlanDoc,
 } from "@report/core";
-import { cloudApi, CloudError, demoApi, demoWorkApi, floorApi, login, logout, session, tabletKey, tabletUrl, workApi, workerKey, workerUrl, type Api, type Kind } from "./data";
+import { cloudApi, CloudError, demoApi, demoWorkApi, floorApi, login, logout, session, tabletKey, workApi, workerKey, workerUrl, type Api, type Kind } from "./data";
 import { Worker } from "./Worker";
-import { finalImage, qrImage, qrSvg, shareImage, weekImage, type ImgRow } from "./image";
+import { finalImage, qrImage, qrSvg, saveImage, shareImage, weekImage, type ImgRow } from "./image";
 
 export function App() {
   if (__DEMO__) return <Demo />;
-  const key = tabletKey();
-  if (key) return <Floor api={floorApi(key)} />;
-  // 근무자 화면 (…/w/<키>/ — 태블릿과 같은 키, 2026-10-22)
-  const wk = workerKey();
-  if (wk) return <Worker api={workApi(wk)} />;
+  // 근무자 화면 (…/w/<키>/ — 태블릿과 같은 키, 2026-10-22) · 예전 현장 태블릿 주소(…/d1/<키>/)는 이 화면의 베이커리로 (합침)
+  const tk = tabletKey();
+  const wk = workerKey() || tk;
+  if (wk) return <Worker api={workApi(wk)} bakery={(back) => <Floor api={floorApi(wk)} onBack={back} />} start={tk ? "bakery" : "home"} />;
   return <ManagerGate />;
 }
 
@@ -69,7 +68,11 @@ function Demo() {
       <div className="demo-bar">
         체험판 · 가짜 자료 · <a href="#">D 매니저</a> · <a href="#d1">D-1 현장 태블릿</a> · <a href="#w">근무자 화면</a>
       </div>
-      {hash === "#d1" ? <Floor api={api} /> : hash === "#w" ? <Worker api={work} /> : <Manager api={api} who="체험 매니저" board="demo" onLogout={() => {}} />}
+      {hash === "#d1" || hash === "#w" ? (
+        <Worker key={hash} api={work} bakery={(back) => <Floor api={api} onBack={back} />} start={hash === "#d1" ? "bakery" : "home"} />
+      ) : (
+        <Manager api={api} who="체험 매니저" board="demo" onLogout={() => {}} />
+      )}
     </>
   );
 }
@@ -145,7 +148,7 @@ const MORE: [Tab, string][] = [
   ["order", "오늘·내일 명령서"],
   ["result", "결과"],
   ["outlook", "1~4주 전망"],
-  ["tablet", "태블릿 주소"],
+  ["tablet", "현장 주소 · QR"],
 ];
 
 function useDay(api: Api, date: string) {
@@ -596,7 +599,7 @@ const FLOOR_COLS: { off: number; label: string; final: boolean }[] = [
   { off: 4, label: "5일 뒤", final: false },
 ];
 
-function Floor({ api }: { api: Api }) {
+function Floor({ api, onBack }: { api: Api; onBack?: () => void }) {
   const [tick, setTick] = useState(0);
   // 1분마다 날짜 넘김 확인, 5분마다 자료 새로
   const [now, setNow] = useState(nowKst());
@@ -612,6 +615,11 @@ function Floor({ api }: { api: Api }) {
   return (
     <div className="app floor">
       <header className="top">
+        {onBack && (
+          <button className="ghost back" onClick={onBack} aria-label="뒤로">
+            ‹ 뒤로
+          </button>
+        )}
         <h1>🥐 생산 명령서 · {shortLabel(d0)}</h1>
         <span className="sub">5분마다 새로 고침 · 아침 6시에 날이 바뀜</span>
       </header>
@@ -780,7 +788,9 @@ function Result({ api, today }: { api: Api; today: string }) {
   );
 }
 
-/** 태블릿 주소 — 주소 뒤 키 번호를 정하고 바꿈. 바꾸면 예전 주소는 바로 막힘 (직원이 바뀌었을 때) */
+/** 현장 주소 — 주소 뒤 키 번호를 정하고 바꿈. 바꾸면 예전 주소 · 붙여 둔 QR 은 바로 막힘 (직원이 바뀌었을 때)
+    근무자 화면(…/w/<키>/ — 베이커리 생산 명령서 · 키친) 하나로 합침 (2026-10-22 사장님). 예전 현장 태블릿 주소(…/d1/<키>/)도 그 화면 베이커리로 열림
+    매장 한 곳에 QR 을 붙여 근무자만 찍어 봄 — 공유 · 보내기 기능은 두지 않음 */
 function TabletKeyView({ api }: { api: Api }) {
   const [key, setKey] = useState<string | null>(null);
   const [admin, setAdmin] = useState(false);
@@ -792,18 +802,18 @@ function TabletKeyView({ api }: { api: Api }) {
     api.floorKey().then((k) => setKey(k), (e) => setMsg((e as Error).message));
     api.isAdmin?.().then(setAdmin, () => setAdmin(false));
   }, [api]);
-  const url = key ? tabletUrl(key) : "";
+  const url = key ? workerUrl(key) : "";
   const save = async () => {
     if (!api.setFloorKey) return;
     if (!validFloorKey(input)) return setMsg("키 번호는 숫자 4 ~ 12자리로 적어 주세요.");
-    if (key && !confirm(`키 번호를 ${input} 로 바꿀까요?\n지금 주소(…/d1/${key}/)는 바로 막히고, 태블릿마다 새 주소로 다시 열어야 합니다.`)) return;
+    if (key && !confirm(`키 번호를 ${input} 로 바꿀까요?\n지금 주소와 붙여 둔 QR 은 바로 막히고, QR 을 새로 뽑아 붙여야 합니다.`)) return;
     setBusy(true);
     setMsg("");
     try {
       const k = await api.setFloorKey(input);
       setKey(k);
       setInput("");
-      setMsg("저장했습니다. 태블릿에서 새 주소로 열어 주세요.");
+      setMsg("저장했습니다. 아래 새 QR 을 뽑아 붙여 주세요 (예전 QR 은 막혔어요).");
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
@@ -813,20 +823,35 @@ function TabletKeyView({ api }: { api: Api }) {
   return (
     <main className="content">
       <section className="card">
-        <h2>현장 태블릿 주소</h2>
-        <p className="muted">로그인 없이 이 주소를 아는 태블릿 · 폰에서 오늘 생산 · 내일 준비를 봅니다 (빵 수량만, 매출 없음). 직원이 바뀌면 운영자가 키 번호를 바꿉니다 — 예전 주소는 바로 막힙니다.</p>
+        <h2>현장 주소 · QR</h2>
+        <p className="muted">로그인 없이 근무자가 봅니다 — 🥐 베이커리(오늘 생산 · 내일 준비) · 🥩 키친(재방문 이벤트 돈까스 예정 · 판매 개수). 수량만, 매출 금액 없음. QR 을 뽑아 매장 한 곳에 붙여 두면 필요한 사람만 찍어서 봅니다.</p>
         {key == null ? (
           <p className="muted">불러오는 중…</p>
         ) : key ? (
           <>
             <div className="url-box">{url}</div>
+            {/* QR — 근무자가 폰 카메라로 찍으면 바로 열림 */}
+            <div className="qr-box" dangerouslySetInnerHTML={{ __html: qrSvg(url) }} aria-label="현장 주소 QR" />
             <div className="btn-row">
+              <button
+                className="primary"
+                onClick={async () => {
+                  try {
+                    saveImage(await qrImage(url, "현장 · 베이커리 · 키친", "근무자 전용 · 휴대폰 카메라로 찍으면 열려요"), "현장_QR.png");
+                    setMsg("QR 그림을 내려받았습니다 — 뽑아서 붙여 주세요.");
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                QR 그림 저장 (뽑아서 붙이기)
+              </button>
               <button
                 className="ghost"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(url);
-                    setMsg("주소를 복사했습니다.");
+                    setMsg("주소를 복사했습니다 (태블릿에서 열 때).");
                   } catch {
                     setMsg("복사가 안 되면 주소를 길게 눌러 복사해 주세요.");
                   }
@@ -834,41 +859,13 @@ function TabletKeyView({ api }: { api: Api }) {
               >
                 주소 복사
               </button>
-              <button className="primary" onClick={async () => setMsg(await share(`현장 태블릿 생산 명령서 (크롬으로 열고 홈 화면에 추가 · 로그인 없음)\n${url}`, "현장 태블릿 주소"))}>
-                카톡으로 보내기
-              </button>
             </div>
+            <p className="muted small">예전 현장 태블릿 주소(…/d1/{key}/)로 열어도 이 화면의 베이커리가 열립니다.</p>
           </>
         ) : (
-          <p className="warn">{admin ? "아직 키 번호가 없습니다 — 아래에 숫자를 정해 저장하면 태블릿 주소가 생깁니다." : "아직 키 번호가 없습니다 — 운영자가 정하면 태블릿 주소가 생깁니다."}</p>
+          <p className="warn">{admin ? "아직 키 번호가 없습니다 — 아래에 숫자를 정해 저장하면 현장 주소 · QR 이 생깁니다." : "아직 키 번호가 없습니다 — 운영자가 정하면 현장 주소 · QR 이 생깁니다."}</p>
         )}
       </section>
-      {key && (
-        <section className="card">
-          <h2>근무자 화면 주소</h2>
-          <p className="muted">재방문 이벤트 돈까스 예정 수 · 바리스타 · 베이커리 · 키친 평균 수요량과 상품별 판매 개수만 (매출 금액 없음). 키 번호는 태블릿과 같아 바꾸면 이 주소도 같이 바뀝니다.</p>
-          <div className="url-box">{workerUrl(key)}</div>
-          {/* QR — 근무자가 폰 카메라로 찍으면 바로 열림 (뽑아서 붙이거나 그림으로 보냄) */}
-          <div className="qr-box" dangerouslySetInnerHTML={{ __html: qrSvg(workerUrl(key)) }} aria-label="근무자 화면 주소 QR" />
-          <div className="btn-row">
-            <button className="primary" onClick={async () => setMsg(await share(`근무자 화면 (크롬으로 열고 홈 화면에 추가 · 로그인 없음)\n${workerUrl(key)}`, "근무자 화면 주소"))}>
-              주소 카톡으로 보내기
-            </button>
-            <button
-              className="ghost"
-              onClick={async () => {
-                try {
-                  setMsg(await shareImage(await qrImage(workerUrl(key), "근무자 화면", "휴대폰 카메라로 찍으면 열려요 · 로그인 없음"), "근무자화면_QR.png", "근무자 화면 QR"));
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              QR 그림 보내기 · 저장
-            </button>
-          </div>
-        </section>
-      )}
       {api.setFloorKey && admin && (
         <section className="card">
           <h2>{key ? "키 번호 바꾸기" : "키 번호 정하기"}</h2>
@@ -878,7 +875,7 @@ function TabletKeyView({ api }: { api: Api }) {
               {busy ? "저장 중…" : key ? "바꾸기" : "저장"}
             </button>
           </div>
-          <p className="muted">짧은 번호는 남이 짐작하기 쉬우니, 외부에 알려졌다 싶으면 바로 바꿔 주세요.</p>
+          <p className="muted">짧은 번호는 남이 짐작하기 쉬우니, 외부에 알려졌다 싶으면 바로 바꾸고 QR 을 새로 붙여 주세요.</p>
         </section>
       )}
       {msg && <p className="msg center">{msg}</p>}

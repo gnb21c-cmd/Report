@@ -64,7 +64,7 @@ export interface DeskLive {
   walk: { tickets: number; extra: number; service: number };
   over: { paid: number; count: number; due: number };
   keys: { total: number; used: number; free: number; walkable: number; flex: number; map: Record<number, DeskKey>; holders: DeskHolder[] };
-  /** 재방문 이벤트 돈까스 예정 (2026-10-22 사장님 · 근무자 화면, docs/WORK.md) — 오늘 아직 안 온 이벤트 대상 예약 수 · 내일 ~ 글피. 옛 판은 없음(null) */
+  /** 재방문 이벤트 돈까스 예정 (2026-10-22 사장님 · 근무자 화면, docs/WORK.md) — 오늘 아직 안 온 이벤트 대상 예약 수 · 내일 ~ 3일 뒤. 옛 판은 없음(null) */
   revisitDue: { today: number | null; ahead: { date: string; n: number }[] } | null;
 }
 
@@ -135,7 +135,7 @@ export function parseDeskLive(json: unknown): DeskLive | null {
 const nat = (x: unknown): number | null => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x < 10000 ? x : null);
 const plusDays = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
 
-/** 재방문 이벤트 예정 — 오늘 수 · 내일 ~ 글피(오늘 뺀 3일)만, 이상한 값은 버림 */
+/** 재방문 이벤트 예정 — 오늘 수 · 내일 ~ 3일 뒤(오늘 뺀 3일)만, 이상한 값은 버림 */
 function revisitDueOf(x: any, day: string): DeskLive["revisitDue"] {
   if (!x || typeof x !== "object") return null;
   const last = plusDays(day, 3);
