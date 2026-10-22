@@ -38,10 +38,11 @@ export const PRODUCTION_UNIT: Readonly<Record<string, number>> = { 몽블랑: 5 
 export const breadUnit = (name: string) => PRODUCTION_UNIT[name] || 1;
 
 /* ---------- 올림 단위 (2026-10-22 사장님) ----------
-   시나몬롤은 10개 · 우유모닝빵은 2개(짝수) 단위로 '올림' — 10-26 계획부터 (주간안 · 최종안 · 매니저가 고친 수량)
+   시나몬롤은 10개 · 우유모닝빵은 2개(짝수) 단위로 '올림' — 10-29(목)에 발표하는 11-02 ~ 08 주간안부터 (주간안 · 최종안 · 매니저가 고친 수량)
+   (처음엔 10-26 최종안부터였으나 사장님이 11-02 계획부터로 바꿈 — 2026-10-22)
    같은 요일 칸(±1)은 그대로 1개씩 쌓고, 마지막 수량만 올림 · 최종안 ±10% 범위를 넘어도 올림 */
 export const ROUND_UP_UNIT: Readonly<Record<string, number>> = { 시나몬롤: 10, 우유모닝빵: 2 };
-export const ROUND_UP_FROM = "2026-10-26";
+export const ROUND_UP_FROM = "2026-11-02";
 /** 그날 올림 단위 (없으면 1) */
 export const roundUpUnit = (name: string, date?: string): number => (date && date >= ROUND_UP_FROM ? ROUND_UP_UNIT[name] || 1 : 1);
 /** 그날 그 빵을 만드는 단위 (화면 '○개 단위' 표시) */
@@ -620,7 +621,7 @@ export function restep(st: PlanStep, steps: Record<string, number>): PlanStep {
   return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
 
-/** 이미 센 계획에 올림 단위(시나몬롤 10 · 우유모닝빵 2) · 평일 합계 범위만 다시 — 다른 빵 수량 · 칸 · 예측은 그대로
+/** 이미 센 계획에 올림 단위(시나몬롤 10 · 우유모닝빵 2, 11-02 부터) · 평일 합계 범위만 다시 — 다른 빵 수량 · 칸 · 예측은 그대로
  *  (규칙이 바뀐 날 이미 매니저 앱에 보인 계획에, 2026-10-22 — apps/collector/src/plan.ts PLAN_REROUND) */
 export function reround(st: PlanStep, date: string): PlanStep {
   let items = st.items.map((it) => (roundUpUnit(it.name, date) > 1 ? { ...it, qty: snapUnit(it.name, it.qty, undefined, undefined, date) } : it));

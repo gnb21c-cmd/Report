@@ -338,7 +338,7 @@ describe("평일(월 ~ 목) 하루 합계 300 ~ 320개 안 — 같은 요일 칸
   });
 });
 
-describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단위 올림 (2026-10-22 사장님 표)", () => {
+describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단위 올림 (2026-10-22 사장님 표 · 올림은 11-02 계획부터)", () => {
   it("표 순서 — 우유모닝빵 · 고소한옛날맘모스 · 갈릭소시지빵 · 시나몬롤 … 티라미두유볼(소) · 생크림케이크 (POS 이름)", () => {
     expect(BREAD_ORDER.slice(0, 4)).toEqual(["우유모닝빵", "고소한옛날맘모스", "갈릭소시지빵", "시나몬롤"]);
     expect(BREAD_ORDER).toHaveLength(33);
@@ -351,24 +351,24 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
     expect(sortBread(["없는빵", "복숭아생크림케이크", "티라미두유볼(소)"], (x) => x)).toEqual(["티라미두유볼(소)", "복숭아생크림케이크", "없는빵"]);
   });
 
-  it("올림 단위 — 시나몬롤 10 · 우유모닝빵 2 · 10-26 계획부터 (그 전은 그대로 1개)", () => {
+  it("올림 단위 — 시나몬롤 10 · 우유모닝빵 2 · 11-02 계획부터 — 10-29(목)에 발표하는 11-02 ~ 08 주간안부터 (그 전은 그대로 1개, 2026-10-22 사장님)", () => {
     expect(ROUND_UP_UNIT).toEqual({ 시나몬롤: 10, 우유모닝빵: 2 });
-    expect(ROUND_UP_FROM).toBe("2026-10-26");
-    expect(snapUnit("시나몬롤", 12, undefined, undefined, "2026-10-26")).toBe(20);
-    expect(snapUnit("시나몬롤", 20, undefined, undefined, "2026-10-26")).toBe(20);
-    expect(snapUnit("시나몬롤", 20.000001, undefined, undefined, "2026-10-26")).toBe(20); // 소수 오차로 30 이 되지 않게
-    expect(snapUnit("시나몬롤", 21, undefined, undefined, "2026-10-27")).toBe(30);
-    expect(snapUnit("우유모닝빵", 7, undefined, undefined, "2026-10-26")).toBe(8);
-    expect(snapUnit("우유모닝빵", 8, undefined, undefined, "2026-10-26")).toBe(8);
-    expect(snapUnit("시나몬롤", 12, undefined, undefined, "2026-10-25")).toBe(12);
+    expect(ROUND_UP_FROM).toBe("2026-11-02");
+    expect(snapUnit("시나몬롤", 12, undefined, undefined, "2026-11-02")).toBe(20);
+    expect(snapUnit("시나몬롤", 20, undefined, undefined, "2026-11-02")).toBe(20);
+    expect(snapUnit("시나몬롤", 20.000001, undefined, undefined, "2026-11-02")).toBe(20); // 소수 오차로 30 이 되지 않게
+    expect(snapUnit("시나몬롤", 21, undefined, undefined, "2026-11-03")).toBe(30);
+    expect(snapUnit("우유모닝빵", 7, undefined, undefined, "2026-11-02")).toBe(8);
+    expect(snapUnit("우유모닝빵", 8, undefined, undefined, "2026-11-02")).toBe(8);
+    expect(snapUnit("시나몬롤", 12, undefined, undefined, "2026-11-01")).toBe(12);
     expect(snapUnit("시나몬롤", 12)).toBe(12);
-    expect(snapUnit("시나몬롤", 0, undefined, undefined, "2026-10-26")).toBe(0);
+    expect(snapUnit("시나몬롤", 0, undefined, undefined, "2026-11-02")).toBe(0);
     // 최종안 ±10% 범위가 있어도 올림 (사장님 '올림') — 범위 위로 넘어가도 다음 배수
-    expect(snapUnit("시나몬롤", 13, 11, 14, "2026-10-26")).toBe(20);
-    expect(planUnit("시나몬롤", "2026-10-26")).toBe(10);
-    expect(planUnit("몽블랑", "2026-10-26")).toBe(5);
-    expect(planUnit("소금빵", "2026-10-26")).toBe(1);
-    expect(planUnit("시나몬롤", "2026-10-25")).toBe(1);
+    expect(snapUnit("시나몬롤", 13, 11, 14, "2026-11-02")).toBe(20);
+    expect(planUnit("시나몬롤", "2026-11-02")).toBe(10);
+    expect(planUnit("몽블랑", "2026-11-02")).toBe(5);
+    expect(planUnit("소금빵", "2026-11-02")).toBe(1);
+    expect(planUnit("시나몬롤", "2026-11-01")).toBe(1);
   });
 
   it("주간안 · 최종안에서 시나몬롤은 10개 · 우유모닝빵은 짝수로 올림 · 평일 300 ~ 320 은 다른 빵으로 맞춤", () => {
@@ -378,7 +378,7 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
         return day(d, cups, [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)], ["시나몬롤", Math.round(cups * 0.13)], ["우유모닝빵", Math.round(cups * 0.07)]]);
       });
     const board = new Board([...make2("2025-08-01", "2025-12-31"), ...make2("2026-08-01", "2026-10-07")]);
-    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07");
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-07");
     expect(week.flatMap((w) => w.week.items).some((i) => i.name === "시나몬롤")).toBe(true);
     for (const w of week)
       for (const it of w.week.items) {
@@ -390,16 +390,16 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
       expect(w.week.total).toBeLessThanOrEqual(320);
     }
     const mon = week[0];
-    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-23", "2026-10-07", { v: 2, date: mon.date, week: mon.week }, null)!;
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-07", { v: 2, date: mon.date, week: mon.week }, null)!;
     for (const it of f.items) if (it.name === "시나몬롤") expect(it.qty % 10).toBe(0);
-    // 이번 주(10-19 ~ 25)는 그대로
-    const before = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-15", "2026-10-07");
+    // 그 전 주(10-26 ~ 11-01, 10-22 에 발표)는 그대로
+    const before = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-07");
     const c = before.flatMap((w) => w.week.items).filter((i) => i.name === "시나몬롤");
     expect(c.length).toBeGreaterThan(0);
     expect(c.some((i) => i.qty % 10 !== 0)).toBe(true);
   });
 
-  it("이미 보인 10-26 주간안에 올림만 다시 — 시나몬롤 12 → 20 · 우유모닝빵 7 → 8 · 평일 합계는 다른 빵으로 320 안 · 칸 · 예측은 그대로", () => {
+  it("이미 보인 11-02 주간안에 올림만 다시 — 시나몬롤 12 → 20 · 우유모닝빵 7 → 8 · 평일 합계는 다른 빵으로 320 안 · 칸 · 예측은 그대로", () => {
     const items = [
       { name: "소금빵", qty: 150, base: 140, step: 3 },
       { name: "쫀득크림빵", qty: 121, base: 121 },
@@ -407,8 +407,8 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
       { name: "우유모닝빵", qty: 7, base: 7 },
       { name: "몽블랑", qty: 30, base: 31 },
     ]; // 320
-    const st = { madeOn: "2026-10-22", asOf: "2026-10-21", kind: "평일" as const, visitors: 235, weather: "모름", items, total: 320, boost: 1.5, band: [300, 320] as [number, number] };
-    const r = reround(st, "2026-10-26");
+    const st = { madeOn: "2026-10-29", asOf: "2026-10-28", kind: "평일" as const, visitors: 235, weather: "모름", items, total: 320, boost: 1.5, band: [300, 320] as [number, number] };
+    const r = reround(st, "2026-11-02");
     const q = (n: string) => r.items.find((i) => i.name === n)!;
     expect([q("시나몬롤").qty, q("우유모닝빵").qty]).toEqual([20, 8]);
     expect(r.total).toBe(320);
@@ -417,10 +417,10 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
     expect([q("소금빵").base, q("소금빵").step]).toEqual([140, 3]);
     expect(q("소금빵").qty + q("쫀득크림빵").qty).toBeLessThan(271);
     // 토요일(범위 없음)은 올림만
-    const sat = reround({ ...st, kind: "휴일", band: undefined }, "2026-10-31");
+    const sat = reround({ ...st, kind: "휴일", band: undefined }, "2026-11-07");
     expect(sat.total).toBe(320 + 8 + 1);
-    // 10-26 전은 그대로
-    expect(reround(st, "2026-10-25").items).toEqual(items);
+    // 11-02 전은 그대로
+    expect(reround(st, "2026-11-01").items).toEqual(items);
   });
 });
 
