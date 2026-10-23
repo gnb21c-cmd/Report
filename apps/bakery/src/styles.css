@@ -599,9 +599,9 @@ tr.sum td {
 }
 
 /* D-1 한 표 — 제품명 · 오늘 생산은 빨간 테두리, 3 ~ 5일 뒤 잠정은 짙은 회색 */
+/* 가로 넘침 칸(overflow)을 두지 않음 — 있으면 위쪽 고정이 안 됨 (표가 화면보다 넓으면 화면 전체가 옆으로 밀림) */
 .floor-wrap {
   padding: 0 16px 24px;
-  overflow-x: auto;
 }
 .floor-table {
   width: 100%;
@@ -647,13 +647,38 @@ tr.sum td {
   font-weight: 500;
 }
 .note-row th {
-  padding: 4px 14px 0;
+  padding: 6px 14px 2px;
 }
-.tentative-note {
-  text-align: center;
-  font-size: 15px !important;
-  color: #5f5f5f !important;
-  border-bottom: 2px solid #8f8f8f !important;
+/* 잠정 안내 — 표 폭 전체에 한 줄로 길게(오른쪽 맞춤), 3 ~ 5일 뒤 칸 이름 위 회색 줄로 묶음 (2026-10-23 사장님) */
+.floor-table thead th.tentative-note {
+  text-align: right;
+  font-size: 16px;
+  font-weight: 600;
+  color: #5f5f5f;
+}
+.floor-table thead tr:last-child th.tentative {
+  box-shadow: inset 0 2px 0 #8f8f8f, inset 0 -2px 0 var(--border);
+}
+/* 엑셀 틀 고정처럼 — 아래로 내려도 우유모닝빵 줄 위(제목 · 새로 고침 안내 · 잠정 안내 · 칸 이름과 날짜)는 화면 위에 붙어 있음 (2026-10-23 사장님)
+   제목 높이(--fh) · 잠정 안내 줄 높이(--nh)는 화면이 재서 넣음 (Floor) */
+.floor .top {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--page);
+}
+.floor-table .note-row th {
+  position: sticky;
+  top: var(--fh, 0px);
+  z-index: 3;
+  background: var(--surface);
+}
+.floor-table thead tr:last-child th {
+  position: sticky;
+  top: calc(var(--fh, 0px) + var(--nh, 0px));
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: inset 0 -2px 0 var(--border);
 }
 /* 빨간 테두리 — 제품명 · 오늘 생산 칸 둘레 */
 .floor-table .hl-left {
@@ -729,6 +754,11 @@ p.small {
   }
   .floor-table thead th:first-child {
     text-align: left;
+  }
+  .floor-table thead th.tentative-note {
+    text-align: right;
+    font-size: 13px;
+    white-space: nowrap;
   }
   .floor-table th small {
     font-size: 10.5px;
