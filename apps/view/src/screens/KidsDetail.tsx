@@ -7,7 +7,7 @@
    현장 판매 수 · 이벤트 무료입장: 1일 ~ 말일 막대 (작년 = 회색, 올해 = 빨강)
    네이버 판매 수 맨 위 재방문 간격 (2026-10-19 사장님): 통합데스크 일수 모음 — 지난 30일 한 줄 + 과거 · 이벤트 반반 많은 순 7개
    ============================================================ */
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   changePct,
   count,
@@ -22,10 +22,11 @@ import {
   sum,
   yearMonthly,
   revisitByDays,
-  revisitSummary,
+  revisitStats,
   type Board,
   type DeskRevisit,
   type Metrics,
+  type RevisitStats,
   type RevisitTop,
 } from "@report/core";
 import { BarChart } from "../charts/BarChart";
@@ -79,7 +80,7 @@ function CompareCard({ rows, unit, title = "작년 같은 기간과 비교" }: {
 
 /** 재방문 간격 (2026-10-19 사장님) — 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md · 손님 정보 없음)
     맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 7개를 빨리 온 순(일수 짧은 순)으로 */
-function RevisitCard() {
+function RevisitCard({ board }: { board: Board }) {
   const [r, setR] = useState<DeskRevisit | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
   const [err, setErr] = useState("");
@@ -102,6 +103,9 @@ function RevisitCard() {
     };
   }, []);
   const ev = r?.event;
+  // 아래 칸 숫자 — 통합데스크가 읽은 방문 기록 안에서만 · 비율 분모는 보고 앱 네이버 판매수량 (2026-10-23 사장님)
+  const ps = r?.past ? revisitStats(r.past, r.history, board) : null;
+  const es = r && ev && ev.started ? revisitStats(ev, r.history, board) : null;
   return (
     <section className="card revisit" aria-label="재방문 간격">
       <h2>
@@ -113,38 +117,32 @@ function RevisitCard() {
       {state === "bad" && <p className="sub">모양이 맞지 않아 숨겼어요 — 키즈 POS 통합데스크를 새 판으로 바꿔 주세요.</p>}
       {r && (
         <>
-          <div className="revisit-sum">
-            <b>지난 30일 재방문</b> <span>{revisitSummary(r.recent)}</span>
-          </div>
+          {/* 위 한 줄 요약(지난 30일) · 맨 아래 설명은 뺌 (2026-10-23 사장님) — 기간은 숫자가 나온 날짜(방문 기록을 읽은 날부터)로 */}
           <div className="revisit-cols">
             <RevisitCol
               title="과거"
-              range={r.past ? `${md(r.past.from)} ~ ${md(r.past.to)}` : ""}
+              range={ps && ps.days ? `${md(ps.from)} ~ ${md(ps.to)}` : ""}
               top={r.past?.top || []}
-              foot={r.past ? `재방문 ${count(r.past.revisits)}번 · ${count(r.past.people)}명` : ""}
+              stats={ps && ps.days ? ps : null}
               empty={r.past ? "아직 재방문 없음" : "기간 없음"}
             />
             <RevisitCol
               title="이벤트"
               cur
-              range={ev ? (ev.started ? `${md(ev.from)} ~ ${md(ev.to)}` : `${md(ev.from)}부터`) : ""}
+              range={ev ? (es && es.days ? `${md(es.from)} ~ ${md(es.to)}` : `${md(ev.from)}부터`) : ""}
               end={ev && ev.end && ev.to < ev.end ? `${md(ev.end)}까지 진행` : ""}
               top={ev?.top || []}
-              foot={ev && ev.started ? `재방문 ${count(ev.revisits)}번 · ${count(ev.people)}명` : ""}
+              stats={es && es.days ? es : null}
               empty={!ev ? "이벤트 기간 없음" : ev.started ? "아직 재방문 없음" : `${md(ev.from)}부터 모아요`}
             />
           </div>
-          <p className="note">
-            통합데스크 {md(r.day)} {r.sentAt.slice(11, 16)} 기준 · 방문 기록 {r.history.days ? `${md(r.history.from)} ~ ${md(r.history.to)} (${count(r.history.days)}일)` : "없음"}
-            {r.past && r.history.from > r.past.from ? " — 지난 방문 기록을 아직 다 안 읽었어요 (통합데스크가 20:00 마다 이어서 읽어요)" : ""}
-          </p>
         </>
       )}
     </section>
   );
 }
 
-function RevisitCol({ title, range, end, top, foot, empty, cur }: { title: string; range: string; end?: string; top: RevisitTop[]; foot: string; empty: string; cur?: boolean }) {
+function RevisitCol({ title, range, end, top, stats, empty, cur }: { title: string; range: string; end?: string; top: RevisitTop[]; stats: RevisitStats | null; empty: string; cur?: boolean }) {
   return (
     <div className={`revisit-col${cur ? " cur" : ""}`}>
       <div className="revisit-head">
@@ -167,17 +165,20 @@ function RevisitCol({ title, range, end, top, foot, empty, cur }: { title: strin
       ) : (
         <p className="sub">{empty}</p>
       )}
-      {foot && (
-        <div className="note">
-          {foot.split(" · ").map((x, i) => (
-            <Fragment key={i}>
-              {i ? " · " : ""}
-              <span className="nw">{x}</span>
-            </Fragment>
-          ))}
-        </div>
-      )}
       {end && <div className="note">{end}</div>}
+      {/* 아래 칸 — 월 평균 재방문 수 · 재방문자 비율 (2026-10-23 사장님). 30일이 안 모였으면 월 평균 대신 지금까지 수 */}
+      {stats && (
+        <dl className="revisit-stats">
+          <div>
+            <dt>{stats.perMonth != null ? "월 평균 재방문" : `재방문 (${count(stats.days)}일)`}</dt>
+            <dd className="num">{count(stats.perMonth ?? stats.revisits, "번")}</dd>
+          </div>
+          <div>
+            <dt>재방문자 비율</dt>
+            <dd className="num">{stats.rate == null ? "—" : `${stats.rate}%`}</dd>
+          </div>
+        </dl>
+      )}
     </div>
   );
 }
@@ -216,7 +217,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
     <>
       <DetailHeader title="네이버 판매 수" {...props} />
       <main className="content">
-        <RevisitCard />
+        <RevisitCard board={board} />
         {!day.naverInput && (
           <div className="banner">{day.has.kids ? `${shortLabel(date)} 네이버 표가 아직 입력되지 않아 키즈 POS(입장 발행 − 현장)로 추정한 값입니다.` : `${shortLabel(date)} 네이버 표가 아직 입력되지 않았습니다.`}</div>
         )}

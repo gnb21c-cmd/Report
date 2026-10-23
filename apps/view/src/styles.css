@@ -1913,16 +1913,6 @@ button.quad-box {
   margin-left: 4px;
   white-space: nowrap;
 }
-.revisit-sum {
-  background: var(--surface-2, rgba(127, 127, 127, 0.08));
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 14.5px;
-  line-height: 1.45;
-}
-.revisit-sum b {
-  margin-right: 4px;
-}
 .revisit-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1947,9 +1937,6 @@ button.quad-box {
   color: var(--text-secondary);
   font-size: 12.5px;
   text-align: left;
-}
-.revisit-col .note .nw {
-  white-space: nowrap;
 }
 .revisit-col.cur .revisit-head b {
   color: var(--cur);
@@ -1984,6 +1971,39 @@ button.quad-box {
 }
 .revisit-col li .num:nth-child(2) {
   text-align: right;
+}
+/* 아래 칸 — 월 평균 재방문 수 · 재방문자 비율 (2026-10-23 사장님) */
+.revisit-col {
+  display: flex;
+  flex-direction: column;
+}
+.revisit-stats {
+  margin: auto 0 0;
+  padding-top: 8px;
+}
+.revisit-stats div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 0;
+  border-top: 2px solid var(--border);
+  white-space: nowrap;
+}
+.revisit-stats div + div {
+  border-top-width: 1px;
+}
+.revisit-stats dt {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.revisit-stats dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.revisit-col.cur .revisit-stats dd {
+  color: var(--cur);
 }
 @media (max-width: 360px) {
   .revisit-cols {
