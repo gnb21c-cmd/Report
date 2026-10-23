@@ -10,7 +10,6 @@
     "to": "2026-10-25",
     "revisits": 512,
     "people": 301,
-    "visitors": 1640,
     "top": [
       { "days": 7, "count": 82 },
       { "days": 14, "count": 61 },
@@ -27,7 +26,6 @@
     "end": "2027-02-28",
     "revisits": 74,
     "people": 58,
-    "visitors": 412,
     "top": [
       { "days": 6, "count": 21 },
       { "days": 7, "count": 15 },

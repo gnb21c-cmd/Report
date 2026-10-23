@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_REVISIT, DESK_STATS, deskEventsFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_REVISIT, DESK_STATS, deskEventsFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import demoDeskLive from "./demoDeskLive.json";
 import demoRevisit from "./demoRevisit.json";
 import type { Source } from "./source";
@@ -264,7 +264,11 @@ export async function deskLiveNow(): Promise<{ live: DeskLive | null; bad?: bool
 /** 재방문 간격 — 키즈 POS 통합데스크가 매일 20:00 덮어쓰는 deskStats/revisit (astanakiz docs/REVISIT.md · 손님 정보 없음)
     없으면 revisit: null · 모양이 틀리면 bad · 인터넷 · 권한 오류는 throw */
 export async function deskRevisitNow(): Promise<{ revisit: DeskRevisit | null; bad?: boolean }> {
-  if (__DEMO__) return { revisit: parseDeskRevisit(demoRevisit) };
+  if (__DEMO__) {
+    // 체험판: 예시 날짜를 어제 보낸 것처럼 옮김 (체험판 보고 자료와 날짜가 맞아야 재방문자 비율이 나옴)
+    const off = (Date.parse(addDays(todayKst(), -1)) - Date.parse(demoRevisit.day)) / 86400e3;
+    return { revisit: parseDeskRevisit(JSON.stringify(demoRevisit).replace(/\d{4}-\d{2}-\d{2}/g, (d) => addDays(d, off))) };
+  }
   const cfg = firebaseConfig();
   const board = boardKey();
   if (!cfg || !board) return { revisit: null };

@@ -80,7 +80,7 @@ function CompareCard({ rows, unit, title = "작년 같은 기간과 비교" }: {
 
 /** 재방문 간격 (2026-10-19 사장님) — 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md · 손님 정보 없음)
     맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 7개를 빨리 온 순(일수 짧은 순)으로 */
-function RevisitCard() {
+function RevisitCard({ board }: { board: Board }) {
   const [r, setR] = useState<DeskRevisit | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
   const [err, setErr] = useState("");
@@ -103,9 +103,9 @@ function RevisitCard() {
     };
   }, []);
   const ev = r?.event;
-  // 아래 칸 숫자 — 통합데스크가 읽은 방문 기록 안에서만 (2026-10-23 사장님)
-  const ps = r?.past ? revisitStats(r.past, r.history) : null;
-  const es = r && ev && ev.started ? revisitStats(ev, r.history) : null;
+  // 아래 칸 숫자 — 통합데스크가 읽은 방문 기록 안에서만 · 비율 분모는 보고 앱 네이버 판매수량 (2026-10-23 사장님)
+  const ps = r?.past ? revisitStats(r.past, r.history, board) : null;
+  const es = r && ev && ev.started ? revisitStats(ev, r.history, board) : null;
   return (
     <section className="card revisit" aria-label="재방문 간격">
       <h2>
@@ -217,7 +217,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
     <>
       <DetailHeader title="네이버 판매 수" {...props} />
       <main className="content">
-        <RevisitCard />
+        <RevisitCard board={board} />
         {!day.naverInput && (
           <div className="banner">{day.has.kids ? `${shortLabel(date)} 네이버 표가 아직 입력되지 않아 키즈 POS(입장 발행 − 현장)로 추정한 값입니다.` : `${shortLabel(date)} 네이버 표가 아직 입력되지 않았습니다.`}</div>
         )}
