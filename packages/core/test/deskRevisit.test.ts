@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDeskRevisit, revisitByDays, revisitRows, revisitSummary } from "../src";
+import { parseDeskRevisit, REVISIT_MONTH_MIN_DAYS, revisitByDays, revisitRows, revisitStats, revisitSummary } from "../src";
 import sample from "../../../apps/view/src/data/demoRevisit.json";
 
 /** 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md) — 체험판 예시 */
@@ -67,5 +67,53 @@ describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장�
     expect(by.find((t) => t.days === 7)!.rank).toBe(1);
     expect(top[0].days).toBe(7); // 받은 목록은 그대로
     expect(revisitByDays([])).toEqual([]);
+  });
+});
+
+/* 아래 칸 — 월 평균 재방문 수 · 재방문자 비율 (2026-10-23 사장님 — 왼쪽 과거 4월 ~ 10월 · 오른쪽 이벤트 11월 ~ 5월) */
+describe("재방문 간격 아래 칸 — 월 평균 재방문 수 · 재방문자 비율", () => {
+  it("그 기간에 온 손님 수(visitors)를 받음 — 옛 판(칸 없음) · 이상한 값 · 재방문한 손님보다 적으면 null (틀린 비율을 보여 주지 않음)", () => {
+    const r = parseDeskRevisit(raw())!;
+    expect([r.past!.visitors, r.event!.visitors]).toEqual([1640, 412]);
+    const x = raw();
+    delete x.past.visitors;
+    x.event.visitors = 30; // 재방문한 손님(58명)보다 적음
+    const y = parseDeskRevisit(x)!;
+    expect([y.past!.visitors, y.event!.visitors]).toEqual([null, null]);
+    const z = raw();
+    z.past.visitors = 1640.5;
+    expect(parseDeskRevisit(z)!.past!.visitors).toBeNull();
+  });
+
+  it("월 평균 = 재방문 수 ÷ (모인 일수 ÷ 30.44) · 재방문자 비율 = 다시 온 손님 ÷ 그 기간에 온 손님 (소수 한 자리 %)", () => {
+    const r = parseDeskRevisit(raw())!;
+    // 과거 4/1 ~ 10/25 = 208일 → 512 ÷ 6.83달 ≈ 75번 · 301 ÷ 1640 = 18.4%
+    expect(revisitStats(r.past!, r.history)).toEqual({ from: "2026-04-01", to: "2026-10-25", days: 208, revisits: 512, perMonth: 75, rate: 18.4 });
+  });
+
+  it("통합데스크가 지난 방문 기록을 아직 다 안 읽었으면 읽은 날부터만 셈 (기간 표시도 그 날부터)", () => {
+    const x = raw();
+    x.history = { from: "2026-09-12", to: "2026-10-23", days: 42 };
+    x.past.to = "2026-10-23";
+    x.past.revisits = 190;
+    const r = parseDeskRevisit(x)!;
+    const s = revisitStats(r.past!, r.history);
+    expect([s.from, s.to, s.days, s.perMonth]).toEqual(["2026-09-12", "2026-10-23", 42, 138]);
+  });
+
+  it(`${REVISIT_MONTH_MIN_DAYS}일이 안 모였으면 월 평균을 내지 않음 (부풀린 숫자 대신 지금까지 수와 일수)`, () => {
+    expect(REVISIT_MONTH_MIN_DAYS).toBe(30);
+    const r = parseDeskRevisit(raw())!;
+    // 이벤트 10/26 ~ 11/20 = 26일
+    expect(revisitStats(r.event!, r.history)).toEqual({ from: "2026-10-26", to: "2026-11-20", days: 26, revisits: 74, perMonth: null, rate: 14.1 });
+  });
+
+  it("그 기간에 온 손님 수가 없으면(옛 판) 비율은 null · 방문 기록이 기간 뒤에 시작하면 0일", () => {
+    const x = raw();
+    delete x.past.visitors;
+    const r = parseDeskRevisit(x)!;
+    expect(revisitStats(r.past!, r.history).rate).toBeNull();
+    const s = revisitStats(r.past!, { from: "2026-11-01", to: "2026-11-20", days: 20 });
+    expect([s.days, s.perMonth]).toEqual([0, null]);
   });
 });
