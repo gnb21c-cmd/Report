@@ -6,7 +6,7 @@
    D-1 — 현장 태블릿 (…/d1/<열쇠>/, 로그인 없음): 아침 6시부터 오늘 생산 + 내일 준비 두 칸
    매출 금액은 어디에도 보이지 않음 (수량 · 예상 손님 수만). 규칙은 packages/core/src/bakery.ts
    ============================================================ */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   addDays,
   Board,
@@ -612,8 +612,25 @@ function Floor({ api, onBack }: { api: Api; onBack?: () => void }) {
     };
   }, []);
   const [d0] = displayDays(now);
+  // 위쪽 고정(엑셀 틀 고정처럼) — 제목 높이 · 잠정 안내 줄 높이를 재서 칸 이름 줄이 그 밑에 붙게 (글자가 줄바꿈되면 높이가 바뀌어 다시 잼)
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const set = () => {
+      const fh = el.querySelector("header.top")?.getBoundingClientRect().height ?? 0;
+      const nh = el.querySelector(".floor-table .note-row")?.getBoundingClientRect().height ?? 0;
+      // 아래로 내림 — 고정된 줄 사이에 틈이 보이지 않게
+      el.style.setProperty("--fh", `${Math.floor(fh)}px`);
+      el.style.setProperty("--nh", `${Math.floor(nh)}px`);
+    };
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className="app floor">
+    <div className="app floor" ref={root}>
       <header className="top">
         {onBack && (
           <button className="ghost back" onClick={onBack} aria-label="뒤로">
@@ -657,9 +674,8 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
       <table className="floor-table">
         <thead>
           <tr className="note-row">
-            <th colSpan={3} />
-            <th colSpan={3} className="tentative-note">
-              최종확정 아님. 소폭 변경될 수 있음
+            <th colSpan={FLOOR_COLS.length + 1} className="tentative-note">
+              3일 뒤 이후의 생산수량은 소폭 변경 될 수 있습니다.
             </th>
           </tr>
           <tr>
