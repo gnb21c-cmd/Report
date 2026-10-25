@@ -5,7 +5,8 @@
       위치는 마감 전 · 후 모든 날 같게. 글자는 칸에 맞춰(줄 바꿈 · 잘림 없이) 가능한 크게
    ③ 당월 매출 합계 · 전년 동기간 매출 합계 / OO년 총 매출 합계 (→ 누계 상세, 해는 마감일 따라)
    ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
-      입장권 판매 총 수량 → 키즈 실시간 (2026-10-16 — 키즈 POS 통합데스크의 지금 현황: 네이버 · 열쇠 · 입장료)
+      오늘(마감 전)만 첫 칸이 '오늘 현재 팔린 수량 (업데이트 시간기준)' → 누르면 키즈 실시간 (2026-10-16 — 키즈 POS 통합데스크의 지금 현황: 네이버 · 열쇠 · 입장료)
+      지난 날(마감된 실적)은 '입장권 판매 총 수량' 숫자만 — 누를 수 없고 아래 글 없음 (근무자 오해 막음, 2026-10-25 사장님)
    ⑤ 카페 소비 인원 · 1인 평균소비 · 설문조사 세 칸 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
       설문조사(2026-10-14): 통합데스크가 20시에 남기는 설문 보고 — '현재 진행중 N건', 누르면 설문마다 항목을 순위 순(1위가 맨 위) · 응답 수 · %, 진행 중 · 최근 설문이 맨 위
    ⑥ 당월 · 전년 동기간 줄 다음에 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세), 그 아래 OO년 총 매출 · 정산완료 줄
@@ -98,14 +99,26 @@ export function Home({ d, open, weather, cash, cashFrom, settle, surveys }: { d:
 
       {/* 키즈 입장 4칸 한 줄 (섹터 바로 아래) — 이름 · 장수 모두 가운데. 네이버 아래 회색 '(中 신규 41장)', 네 칸 같은 크기 */}
       <div className="stats four">
-        <button className="stat tap" onClick={() => open({ name: "kidsLive" })} title="키즈 실시간 — 통합데스크 지금 현황">
-          <div className="stat-label">
-            입장권 판매
-            <br />총 수량
+        {live?.today ? (
+          <button className="stat tap" onClick={() => open({ name: "kidsLive" })} title="키즈 실시간 — 통합데스크 지금 현황">
+            <div className="stat-label">
+              오늘 현재
+              <br />
+              팔린 수량
+            </div>
+            <div className="stat-value">{count(kidsTickets(day), "장")}</div>
+            <span className="note">(업데이트 시간기준)</span>
+          </button>
+        ) : (
+          <div className="stat">
+            <div className="stat-label">
+              입장권 판매
+              <br />총 수량
+            </div>
+            <div className="stat-value">{count(kidsTickets(day), "장")}</div>
+            <span className="note" />
           </div>
-          <div className="stat-value">{count(kidsTickets(day), "장")}</div>
-          <span className="note">(지금 현황)</span>
-        </button>
+        )}
         <button className="stat tap" onClick={() => open({ name: "naver" })} title={day.newKnown ? "" : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}>
           <div className="stat-label">네이버판매</div>
           <div className="stat-value">{count(day.naver, "장")}</div>
