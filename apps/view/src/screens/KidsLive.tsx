@@ -3,7 +3,8 @@
    키즈 POS 통합데스크가 1분마다 · 바뀌면 바로 클라우드 deskLive/now 에 올리는 지금 현황 (astanakiz docs/LIVE.md · docs/KIDS_LIVE.md)
    - 열 때 · 아래로 당겼다 놓을 때 · [새로고침] · 앱으로 돌아올 때 다시 읽음
    - 위에서 아래로: 기준 시각 → 오늘 입장(총 = 네이버 + 현장) → 열쇠 45칸 → 입장료 매출 → 네이버 예약(시간 칸) (열쇠를 오늘 입장 바로 밑으로 — 사장님 10/16)
-   - 열쇠는 번호 · 색(반납 조건)만, 번호를 누르면 손님 이름 · 전화번호 그대로 (열쇠 미반납 때 관리자가 전화 — 사장님 지시)
+   - 열쇠는 번호 · 색만 (테두리 = 누구 열쇠: 네이버 흰색 · 현장 판매 파랑 · 서비스 점선 / 바탕 = 반납 조건 — 통합데스크 V2.0 과 같게),
+     번호를 누르면 손님 이름 · 전화번호 그대로 (열쇠 미반납 때 관리자가 전화 — 사장님 지시)
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, DESK_LIVE_STALE_MIN, todayKst, won, type DeskHolder, type DeskLive } from "@report/core";
@@ -197,7 +198,8 @@ function Body({ live, now, all, onAll, onPick }: { live: DeskLive; now: Date; al
               );
             const h = k.holders[m.h];
             return (
-              <button key={no} className={`klive-key num ${m.c}${h.kind === "s" ? " svc" : ""}`} onClick={() => onPick(no)} aria-label={`${no}번 ${KIND[h.kind]} ${COLOR[m.c]}`}>
+              // 테두리 = 누구 열쇠 (네이버 흰색 · 현장 판매 파랑 · 서비스 점선) — 통합데스크 V2.0 과 같게 (2026-10-25 사장님)
+              <button key={no} className={`klive-key num ${m.c}${h.kind === "s" ? " svc" : h.kind === "w" ? " walk" : ""}`} onClick={() => onPick(no)} aria-label={`${no}번 ${KIND[h.kind]} ${COLOR[m.c]}`}>
                 {no}
               </button>
             );
@@ -208,16 +210,19 @@ function Body({ live, now, all, onAll, onPick }: { live: DeskLive; now: Date; al
             <i /> 빈 열쇠
           </span>
           <span>
-            <i className="in" /> 이용 중
+            <i className="in" /> 네이버 예약
+          </span>
+          <span>
+            <i className="walk" /> 현장 판매
+          </span>
+          <span>
+            <i className="svc" /> 서비스 키
           </span>
           <span>
             <i className="pink" /> 반납 시간(10분 안)
           </span>
           <span>
             <i className="red" /> 반납 시간 넘음
-          </span>
-          <span>
-            <i className="svc" /> 서비스 키
           </span>
         </div>
       </section>
