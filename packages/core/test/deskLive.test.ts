@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySettings, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, parseDeskLive, type DeskLive } from "../src";
+import { applySettings, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, kidsOverPaid, parseDeskLive, type DayReport, type DeskLive } from "../src";
 import sample from "../../../apps/view/src/data/demoDeskLive.json";
 
 /** 통합데스크 체험판(10/5 13:50)에서 만든 글 — 체험판 화면과 같은 것 */
@@ -48,10 +48,13 @@ describe("키즈 실시간 — 통합데스크 현황 글 (2026-10-16 사장님)
     applySettings(null);
     const l = parseDeskLive(raw())!;
     l.over.paid = 10000;
+    // 초과요금 결제는 통합데스크 숫자(over.paid)가 아니라 POS '퇴장시간 … 지연' 결제로 (2026-10-25 — 데스크는 POS 결제 없이도 4건 25,000원을 보냄)
     const s = deskLiveSales(l);
     expect(s.kind).toBe("휴일"); // 2026-10-05 대체공휴일
-    expect([s.tickets, s.price, s.fee, s.over, s.total]).toEqual([39, 14000, 546000, 10000, 556000]);
+    expect([s.tickets, s.price, s.fee, s.over, s.overCount, s.total]).toEqual([39, 14000, 546000, null, null, 546000]);
     expect(s.due).toBe(l.over.due);
+    const p = deskLiveSales(l, { count: 2, amount: 25000 });
+    expect([p.over, p.overCount, p.total]).toEqual([25000, 2, 571000]);
     const weekday = parseDeskLive({ ...raw(), day: "2026-10-16", at: "2026-10-16 14:00:00" })!;
     expect(deskLiveSales(weekday).price).toBe(12000);
   });
@@ -65,5 +68,25 @@ describe("키즈 실시간 — 통합데스크 현황 글 (2026-10-16 사장님)
     expect(deskLiveSlotNow(l, "13:50")).toBe("13:30");
     expect(deskLiveSlotNow(l, "13:55")).toBe("14:00");
     expect(deskLiveSlotNow(l, "08:00")).toBeNull();
+  });
+});
+
+describe("초과요금 결제 — POS 기준 (2026-10-25 사장님: 10월 지연 결제는 10-24 세 건뿐인데 데스크는 날마다 4건 25,000원)", () => {
+  const kids = (products: [string, string, number, number][]): DayReport =>
+    ({ date: "2026-10-24", kids: { products } } as unknown as DayReport);
+  it("키즈 POS 의 '퇴장시간 + ○○분 지연' 상품만 — 건수 · 금액", () => {
+    const r = kids([
+      ["[휴일] 1시간 50분 입장권", "현장결제", 16, 224000],
+      ["퇴장시간 + 40~49분 지연", "기타", 1, 20000],
+      ["퇴장시간 + 30~39분 지연", "기타", 1, 15000],
+      ["퇴장시간 + 10~19분 지연", "기타", 1, 5000],
+      ["초코우유", "기타", 3, 6000],
+    ]);
+    expect(kidsOverPaid(r)).toEqual({ count: 3, amount: 40000 });
+  });
+  it("지연 상품이 없으면 0건 · 키즈 POS 자료가 없으면 null (모름)", () => {
+    expect(kidsOverPaid(kids([["[휴일] 1시간 50분 입장권", "현장결제", 9, 126000]]))).toEqual({ count: 0, amount: 0 });
+    expect(kidsOverPaid({ date: "2026-10-25" } as DayReport)).toBeNull();
+    expect(kidsOverPaid(undefined)).toBeNull();
   });
 });

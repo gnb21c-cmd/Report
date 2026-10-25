@@ -7,7 +7,7 @@
      번호를 누르면 손님 이름 · 전화번호 그대로 (열쇠 미반납 때 관리자가 전화 — 사장님 지시)
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, DESK_LIVE_STALE_MIN, todayKst, won, type DeskHolder, type DeskLive } from "@report/core";
+import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, DESK_LIVE_STALE_MIN, kidsOverPaid, todayKst, won, type Board, type DeskHolder, type DeskLive } from "@report/core";
 import { deskLiveNow } from "../data/firebase";
 
 const KIND: Record<DeskHolder["kind"], string> = { n: "네이버", w: "현장", s: "서비스 키" };
@@ -17,7 +17,8 @@ const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 /** 당겨서 새로고침 — 이만큼(px) 넘게 당겼다 놓으면 */
 const PULL = 70;
 
-export function KidsLive({ onBack }: { onBack: () => void }) {
+/** board = 보고 자료 (오늘은 마감 전 숫자) — 초과요금 결제는 POS 기준으로 (통합데스크 금액은 안 씀, 2026-10-25 사장님) */
+export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }) {
   const [live, setLive] = useState<DeskLive | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
   const [err, setErr] = useState("");
@@ -128,16 +129,16 @@ export function KidsLive({ onBack }: { onBack: () => void }) {
             <p className="sub">틀린 숫자를 보여 드리지 않으려고 숨겼어요. 키즈 POS 통합데스크를 새 판으로 바꿔 주세요.</p>
           </section>
         )}
-        {live && <Body live={live} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} />}
+        {live && <Body live={live} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} />}
       </main>
       {live && pick != null && live.keys.map[pick] && <KeySheet live={live} no={pick} onClose={() => setPick(null)} />}
     </>
   );
 }
 
-function Body({ live, now, all, onAll, onPick }: { live: DeskLive; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void }) {
+function Body({ live, pos, now, all, onAll, onPick }: { live: DeskLive; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void }) {
   const { people: p, naver: n, keys: k } = live;
-  const s = deskLiveSales(live);
+  const s = deskLiveSales(live, pos);
   const nowHm = live.day === todayKst(now) ? new Date(now.getTime() + 9 * 3600e3).toISOString().slice(11, 16) : live.at.slice(11, 16);
   const cur = deskLiveSlotNow(live, nowHm);
   const busySlots = n.slots.filter((x) => x.done || x.conf || x.t === cur);
@@ -237,21 +238,17 @@ function Body({ live, now, all, onAll, onPick }: { live: DeskLive; now: Date; al
             </span>
             <b className="num">{won(s.fee)}</b>
           </div>
+          {/* 초과요금은 POS 로 실제 결제한 '퇴장시간 지연'만 (통합데스크 금액은 안 씀 — 현장에서 안 받거나 안내만 하고 돌려보낼 수도 있어서, 2026-10-25 사장님) */}
           <div>
-            <span>초과요금 결제 {count(live.over.count)}건</span>
-            <b className="num">{won(s.over)}</b>
+            <span>초과요금 결제 (POS){s.overCount != null ? ` ${count(s.overCount)}건` : ""}</span>
+            <b className="num">{s.over != null ? won(s.over) : "—"}</b>
           </div>
           <div className="sum">
             <span>합계</span>
             <b className="num">{won(s.total)}</b>
           </div>
         </div>
-        {s.due > 0 && (
-          <p className="note">
-            아직 받지 않은 초과요금 <b className="bad num">{won(s.due)}</b> (반납 전 손님 · 반납할 때 POS 결제)
-          </p>
-        )}
-        <p className="note">장수 × 단가로 센 지금까지 · 할인 · 무료입장은 다음 날 아침 확정 보고에서 맞춰져요</p>
+        <p className="note">장수 × 단가로 센 지금까지 · 초과요금은 POS 결제 기준(15분마다{s.over == null ? " — 오늘 POS 숫자를 기다리는 중" : ""}) · 할인 · 무료입장은 다음 날 아침 확정 보고에서 맞춰져요</p>
       </section>
 
       <section className="card klive-card">
@@ -351,17 +348,8 @@ function KeySheet({ live, no, onClose }: { live: DeskLive; no: number; onClose: 
           </dd>
           <dt>상태</dt>
           <dd>
+            {/* 통합데스크의 초과요금 금액 · 결제 표시는 안 씀 — 실제 결제는 POS (2026-10-25 사장님) */}
             {COLOR[m.c]}
-            {h.over > 0 ? (
-              <>
-                {" · "}
-                <b className="bad">초과요금 {won(h.over)}</b>
-              </>
-            ) : h.paid > 0 ? (
-              ` · 초과요금 ${won(h.paid)} 결제함`
-            ) : (
-              ""
-            )}
           </dd>
           <dt>입장</dt>
           <dd className="num">
@@ -373,7 +361,7 @@ function KeySheet({ live, no, onClose }: { live: DeskLive; no: number; onClose: 
           {h.kind === "s" ? (
             <>
               <dt>수령인</dt>
-              <dd>{h.of || "서비스 키"} · 판매 아님 · 초과요금 없음</dd>
+              <dd>{h.of || "서비스 키"} · 판매 아님</dd>
             </>
           ) : (
             <>
