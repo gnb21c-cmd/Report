@@ -58,20 +58,23 @@ export const roundUpUnit = (name: string, date?: string): number => {
 export const planUnit = (name: string, date?: string): number => Math.max(breadUnit(name), roundUpUnit(name, date));
 
 /* ---------- 정해 둔 수량 (2026-10-25 사장님) ----------
-   팥앙금샌드(옛 고소한옛날맘모스)는 12 ~ 16개로 정함 — 평일(금요일 포함) 12개 · 휴일 16개, 10-29 최종안부터 (그 뒤 주간안 · 최종안 모두)
+   팥앙금샌드(옛 고소한옛날맘모스)는 12 ~ 16개로 정함 — 평일(금요일 포함) 12개 · 휴일 16개, 이미 발표한 주의 10-29 ~ 11-01 최종안만
+   11-02 주간안(10-29 목 발표)부터는 10-28 까지 판매로 다른 빵처럼 예측 (4개 단위 올림은 그대로 — 2026-10-25 사장님)
    예측 · 같은 요일 칸(±1) · 최종안 ±10% 를 쓰지 않음 · 평일 합계 300 ~ 320 맞춤 때도 그대로 (다른 빵으로 맞춤)
    최종안 때 매니저가 잠정 확정에서 고친 수량(주간안과 다름)이면 그대로 */
 export interface FixedQty {
   /** 쓰기 시작하는 계획 날 */
   from: string;
+  /** 마지막 계획 날 */
+  to: string;
   weekday: number;
   holiday: number;
 }
-export const FIXED_QTY: Readonly<Record<string, FixedQty>> = { 팥앙금샌드: { from: "2026-10-29", weekday: 12, holiday: 16 } };
+export const FIXED_QTY: Readonly<Record<string, FixedQty>> = { 팥앙금샌드: { from: "2026-10-29", to: "2026-11-01", weekday: 12, holiday: 16 } };
 /** 그날 정해 둔 수량 (없으면 null) — 옛 이름도 새 이름으로 찾음 */
 export function fixedQtyOf(name: string, date: string): number | null {
   const f = FIXED_QTY[breadNewName(name)];
-  return f && date >= f.from ? (dayKind(date) === "휴일" ? f.holiday : f.weekday) : null;
+  return f && date >= f.from && date <= f.to ? (dayKind(date) === "휴일" ? f.holiday : f.weekday) : null;
 }
 
 /** 단위에 맞추기 — 가까운 배수 (0 보다 많으면 적어도 한 단위), 범위가 있으면 범위 안의 배수 중 가까운 것

@@ -186,23 +186,23 @@ describe("팥앙금샌드 4개 단위 올림 — 예측 6개면 8개 · 지금 �
   });
 });
 
-describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10-29 최종안부터, 2026-10-25 사장님)", () => {
-  it("정해 둔 값 · 옛 이름도 · 금요일은 평일 · 공휴일은 휴일", () => {
-    expect(FIXED_QTY).toEqual({ 팥앙금샌드: { from: "2026-10-29", weekday: 12, holiday: 16 } });
+describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10-29 ~ 11-01 최종안만, 2026-10-25 사장님)", () => {
+  it("정해 둔 값 · 옛 이름도 · 금요일은 평일 · 11-02 부터는 없음", () => {
+    expect(FIXED_QTY).toEqual({ 팥앙금샌드: { from: "2026-10-29", to: "2026-11-01", weekday: 12, holiday: 16 } });
     expect(fixedQtyOf("고소한옛날맘모스", "2026-10-28")).toBeNull();
     expect(fixedQtyOf("고소한옛날맘모스", "2026-10-29")).toBe(12); // 목
     expect(fixedQtyOf("고소한옛날맘모스", "2026-10-30")).toBe(12); // 금
     expect(fixedQtyOf("고소한옛날맘모스", "2026-10-31")).toBe(16); // 토
     expect(fixedQtyOf("팥앙금샌드", "2026-11-01")).toBe(16); // 일
-    expect(fixedQtyOf("팥앙금샌드", "2026-11-02")).toBe(12);
-    expect(fixedQtyOf("팥앙금샌드", "2026-12-25")).toBe(16); // 성탄절
-    expect(fixedQtyOf("소금빵", "2026-11-02")).toBeNull();
+    expect(fixedQtyOf("팥앙금샌드", "2026-11-02")).toBeNull();
+    expect(fixedQtyOf("소금빵", "2026-10-30")).toBeNull();
   });
 
-  it("주간안 — 예측 · 같은 요일 칸 없이 그 수량 · 평일 합계 300 ~ 320 은 다른 빵으로 맞춤", () => {
-    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 팥앙금샌드: 3 }, "2026-11-07": { 고소한옛날맘모스: -2 } });
+  it("10-29 ~ 11-01 날짜를 셀 때 — 예측 · 같은 요일 칸 없이 그 수량 · 평일 합계 300 ~ 320 은 다른 빵으로 맞춤", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-21", { "2026-10-29": { 고소한옛날맘모스: 3 }, "2026-10-31": { 고소한옛날맘모스: -2 } }).filter((w) => w.date >= "2026-10-29");
+    expect(week.length).toBe(4);
     for (const w of week) {
-      const it = w.week.items.find((i) => i.name === "팥앙금샌드")!;
+      const it = w.week.items.find((i) => i.name === "고소한옛날맘모스")!;
       expect(it.qty).toBe(dayKind(w.date) === "휴일" ? 16 : 12);
       expect(it.step).toBeUndefined();
       if (breadBandOf(w.date)) {
@@ -211,6 +211,17 @@ describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10
         expect(w.week.total - m).toBeLessThanOrEqual(320);
       }
     }
+  });
+
+  it("11-02 주간안(10-29 발표)부터는 10-28 까지 판매로 예측 — 정해 둔 수량 아님 · 4개 단위 올림 · 같은 요일 칸도 씀", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
+    for (const w of week) {
+      const it = w.week.items.find((i) => i.name === "팥앙금샌드")!;
+      expect(it.qty % 4).toBe(0);
+      expect(it.qty).toBe(snapUnit("팥앙금샌드", it.base!, undefined, undefined, w.date));
+    }
+    const withStep = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-07": { 고소한옛날맘모스: 2 } });
+    expect(withStep[5].week.items.find((i) => i.name === "팥앙금샌드")?.step).toBe(2);
   });
 
   it("10-29 최종안 — 이미 나간 주간안(4개)이어도 12개 · 매니저가 잠정 확정 때 고친 수량이면 그대로 · 10-28 최종안은 그대로 4개 단위", () => {
