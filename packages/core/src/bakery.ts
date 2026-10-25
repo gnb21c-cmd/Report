@@ -12,7 +12,8 @@
    생산 = 최종 수량, 폐기 = 생산 − 판매(정가 + 50% 할인). 그날 아침 6시부터는 최종 수량을 못 바꿈 (productionStarted)
    보고 앱(B)은 마감일의 plans · orders 를 그날 생산 기록으로 읽어 영수증 판매와 맞춤 (dayResult · breadTotals)
    ============================================================ */
-import { addDays, weekday, WEEKDAY_KO } from "./dates";
+import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, renameLast, renameSum } from "./breadNames";
+import { addDays, dayRange, weekday, WEEKDAY_KO } from "./dates";
 import { bandRange, breadPlan, dayKind, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
 import { NOT_BREAD } from "./rules";
@@ -40,11 +41,19 @@ export const breadUnit = (name: string) => PRODUCTION_UNIT[name] || 1;
 /* ---------- 올림 단위 (2026-10-22 사장님) ----------
    시나몬롤은 10개 · 우유모닝빵은 2개(짝수) 단위로 '올림' — 10-29(목)에 발표하는 11-02 ~ 08 주간안부터 (주간안 · 최종안 · 매니저가 고친 수량)
    (처음엔 10-26 최종안부터였으나 사장님이 11-02 계획부터로 바꿈 — 2026-10-22)
-   같은 요일 칸(±1)은 그대로 1개씩 쌓고, 마지막 수량만 올림 · 최종안 ±10% 범위를 넘어도 올림 */
-export const ROUND_UP_UNIT: Readonly<Record<string, number>> = { 시나몬롤: 10, 우유모닝빵: 2 };
+   같은 요일 칸(±1)은 그대로 1개씩 쌓고, 마지막 수량만 올림 · 최종안 ±10% 범위를 넘어도 올림
+   팥앙금샌드(옛 고소한옛날맘모스)는 4개 단위 올림 (2026-10-25 사장님 — 예측 6개면 8개) — 지금 나가 있는 명령서(10-26 부터)도:
+   매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (roundUnitOrder · apps/collector/src/plan.ts PLAN_UNIT_FIX)
+   빵 이름이 바뀌어도 같은 빵 (옛 이름 · 새 이름 모두 새 이름의 단위, breadNames.ts) */
+export const ROUND_UP_UNIT: Readonly<Record<string, number>> = { 시나몬롤: 10, 우유모닝빵: 2, 팥앙금샌드: 4 };
 export const ROUND_UP_FROM = "2026-11-02";
+/** 빵마다 올림을 시작하는 날이 다르면 (없으면 ROUND_UP_FROM) */
+export const ROUND_UP_FROM_OF: Readonly<Record<string, string>> = { 팥앙금샌드: "2026-10-26" };
 /** 그날 올림 단위 (없으면 1) */
-export const roundUpUnit = (name: string, date?: string): number => (date && date >= ROUND_UP_FROM ? ROUND_UP_UNIT[name] || 1 : 1);
+export const roundUpUnit = (name: string, date?: string): number => {
+  const n = breadNewName(name);
+  return date && date >= (ROUND_UP_FROM_OF[n] ?? ROUND_UP_FROM) ? ROUND_UP_UNIT[n] || 1 : 1;
+};
 /** 그날 그 빵을 만드는 단위 (화면 '○개 단위' 표시) */
 export const planUnit = (name: string, date?: string): number => Math.max(breadUnit(name), roundUpUnit(name, date));
 
@@ -77,6 +86,8 @@ export interface PlanItem {
   /** 최종 계산에서: 잠정 수량 ±10% 범위 */
   lo?: number;
   hi?: number;
+  /** 새 빵(명란소금빵) 처음 4주: 매진으로 더한 개수 (평일 +3 · 휴일 +6 씩 쌓임, NEW_BREAD) — 다음 주간안이 이어 받음 */
+  add?: number;
 }
 
 /** 한 번 센 계획 (주간 또는 최종) */
@@ -205,7 +216,7 @@ export const breadBoostOf = (date: string): number => (date >= BREAD_BOOST_FROM 
    POS 상품 이름으로 (사장님 표의 줄임 이름은 옆에) · 띄어쓰기는 상관없음 · 표에 없는 빵은 맨 뒤 가나다 */
 export const BREAD_ORDER: readonly string[] = [
   "우유모닝빵",
-  "고소한옛날맘모스",
+  "팥앙금샌드", // 옛 고소한옛날맘모스 (2026-10-25 이름 바꿈 — 옛 이름도 이 자리, breadNames.ts)
   "갈릭소시지빵", // 표: 갈릭소세지빵
   "시나몬롤",
   "메가모카번", // 표: 메가번
@@ -214,11 +225,12 @@ export const BREAD_ORDER: readonly string[] = [
   "먹물트리플치즈",
   "구수한만능감자빵",
   "흑미로만든수수부꾸미", // 표: 수수부꾸미
-  "인절미팥빵",
+  "저당팥빵", // 옛 인절미팥빵 (2026-10-25 이름 바꿈)
   "감자파니니",
   "쫀득크림빵",
   "소금빵",
   "소보로팥소금빵",
+  "명란소금빵", // 2026-10-24 새 빵 — 소보로팥소금빵 다음 (2026-10-25 사장님)
   "초코파삭",
   "갈릭바게트볼", // 표: 갈릭볼
   "아망드보스톡", // 표: 아몬드보스톡
@@ -238,12 +250,11 @@ export const BREAD_ORDER: readonly string[] = [
   "티라미두유볼(소)",
   "후르츠생크림케이크", // 표: 복숭아생크림케이크 — 계절 과일에 따라 이름만 바뀜, '…생크림케이크'는 모두 이 자리 (2026-10-22 사장님)
 ];
-const orderKey = (n: string) => n.replace(/\s+/g, "");
-const ORDER_INDEX = new Map(BREAD_ORDER.map((n, i) => [orderKey(n), i]));
+const ORDER_INDEX = new Map(BREAD_ORDER.map((n, i) => [breadKey(n), i]));
 const CAKE_AT = BREAD_ORDER.length - 1;
-/** 표에서 몇 번째 (없으면 맨 뒤) — 이름에 '생크림케이크'가 들어가면 과일이 바뀌어도 생크림케이크 자리 */
+/** 표에서 몇 번째 (없으면 맨 뒤) — 이름에 '생크림케이크'가 들어가면 과일이 바뀌어도 생크림케이크 자리 · 이름이 바뀐 빵은 옛 이름도 같은 자리 */
 export function breadOrderAt(name: string): number {
-  const k = orderKey(name);
+  const k = breadKey(breadNewName(name));
   return ORDER_INDEX.get(k) ?? (k.includes("생크림케이크") ? CAKE_AT : BREAD_ORDER.length);
 }
 /** 표 순서대로 (표에 없는 빵은 맨 뒤 가나다) — 원래 목록은 그대로 두고 새 목록 */
@@ -261,8 +272,21 @@ export function breadBandOf(date: string): [number, number] | null {
   return date >= BREAD_BOOST_FROM && dayKind(date) === "평일" ? [WEEKDAY_BREAD_BAND[0], WEEKDAY_BREAD_BAND[1]] : null;
 }
 
-/** 하루 합계를 lo ~ hi 안으로 — 넘으면 hi, 모자라면 lo 로 빵마다 같은 비율 (반올림 차이는 1개 단위 빵 중 많은 것부터 한 개씩) · 안이면 그대로 */
+/** 하루 합계를 lo ~ hi 안으로 — 넘으면 hi, 모자라면 lo 로 빵마다 같은 비율 (반올림 차이는 1개 단위 빵 중 많은 것부터 한 개씩) · 안이면 그대로
+ *  새 빵(명란소금빵 — NEW_BREAD)은 범위 밖에 따로 (그 수량 그대로 · 나머지 빵만 lo ~ hi, 2026-10-25 사장님) */
 export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo: number, hi: number, date?: string): T[] {
+  if (items.some((i) => bandOutside(i.name))) {
+    const fitted = new Map(fitTotal(items.filter((i) => !bandOutside(i.name)), lo, hi, date).map((i) => [i.name, i]));
+    return items.map((i) => fitted.get(i.name) ?? i);
+  }
+  // 올림 단위 빵(시나몬롤 10 · 우유모닝빵 2 · 팥앙금샌드 4)은 올린 수량 그대로 두고 범위는 다른 빵으로 맞춤 (2026-10-25)
+  //   — 같이 늘리면 이미 올린 수량을 또 올려 부풀어서 (예측 11 → 올림 20 → 늘림 21 → 또 올림 30)
+  const fixed = items.filter((i) => roundUpUnit(i.name, date) > 1);
+  if (fixed.length && fixed.length < items.length) {
+    const f = fixed.reduce((a, b) => a + b.qty, 0);
+    const rest = new Map(fitTotal(items.filter((i) => roundUpUnit(i.name, date) <= 1), lo - f, hi - f, date).map((i) => [i.name, i]));
+    return items.map((i) => rest.get(i.name) ?? i);
+  }
   const total = items.reduce((a, b) => a + b.qty, 0);
   if (!items.length || total <= 0 || (total >= lo && total <= hi)) return items;
   const target = total > hi ? hi : lo;
@@ -282,18 +306,116 @@ export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo
   return out;
 }
 
+/* ---------- 새 빵 (2026-10-25 사장님) — 명란소금빵 ----------
+   10-24 부터 POS 에서 팔기 시작(생산 계획 없이 만들어 거의 매일 매진) → 10-29(목) 발표 11-02 ~ 주간안부터 계획에 넣음 (그 전 날짜 계획에는 안 넣음)
+   - 처음 4주(첫 판매부터 28일 실적이 쌓일 때까지) 하루 수량 = max(그날 소금빵 수량의 1/3, 계획 전 판매의 하루 평균 — 평일 · 휴일 따로) + 매진 더하기
+     계획 전 판매 = 계획에 넣기 전(11-01 까지) 그냥 만들어 판 날들 (거의 매진이라 '지금 팔리는 수량'을 감안 — 사장님)
+     매진 더하기 = 목요일 주간안 발표 때마다 지난 7일 결과로: 평일(월 ~ 금) 3일 이상 매진이면 평일마다 +3, 계획에 든 휴일이 모두 매진이면 휴일마다 +6 — 주마다 쌓임
+     (매진 = 지시 수량만큼 다 팔림) · 같은 요일 ±1 칸은 쓰지 않음 · 최종안(3일 전)은 주간안(매니저 잠정 확정) 수량 그대로
+   - 28일 실적이 쌓이면 다른 빵처럼 판매 추이로 (breadPlan)
+   - 평일 하루 합계 300 ~ 320 범위 밖에 따로 (그 수량 그대로 더함 — fitTotal) */
+export interface NewBreadRule {
+  /** 계획에 넣는 첫 날 */
+  from: string;
+  /** 처음 수량을 견주는 빵 · 비율 */
+  of: string;
+  ratio: number;
+  /** 매진 더하기 — 평일 · 휴일 하루마다 */
+  weekdayAdd: number;
+  holidayAdd: number;
+  /** 지난 7일 중 평일 매진이 이만큼이면 평일 더하기 */
+  weekdaySellouts: number;
+  /** 첫 판매부터 이만큼(일) 실적이 쌓이면 판매 추이로 */
+  learnDays: number;
+}
+export const NEW_BREAD: Readonly<Record<string, NewBreadRule>> = {
+  명란소금빵: { from: "2026-11-02", of: "소금빵", ratio: 1 / 3, weekdayAdd: 3, holidayAdd: 6, weekdaySellouts: 3, learnDays: 28 },
+};
+/** 평일 합계 범위 밖에 따로 두는 빵 */
+const bandOutside = (name: string) => name in NEW_BREAD;
+/** 지금까지 쌓인 매진 더하기 (평일 · 휴일 하루마다) */
+export interface NewBreadAdd {
+  weekday: number;
+  holiday: number;
+}
+const isHoliday = (d: string) => dayKind(d) === "휴일";
+
+/** 그 빵이 처음 팔린 날 (asOf 까지 · 없으면 null) */
+export function firstSold(board: Board, name: string, asOf: string): string | null {
+  if (!board.first) return null;
+  for (const d of dayRange(board.first, asOf)) if ((breadSold(board, d, "9999-12-31").get(breadNewName(name)) || 0) > 0) return d;
+  return null;
+}
+
+/** 처음 4주 규칙을 쓰는지 — 첫 판매부터 asOf 까지 learnDays 일이 안 됐으면 (아직 안 팔렸어도) */
+export function newBreadEarly(board: Board, name: string, asOf: string): boolean {
+  const rule = NEW_BREAD[name];
+  if (!rule) return false;
+  const f = firstSold(board, name, asOf);
+  return !f || dayRange(f, asOf).length < rule.learnDays;
+}
+
+/** 계획 전 판매의 하루 평균 (그날과 같은 평일 · 휴일 · 판 날만, 없으면 0) */
+function preSoldAvg(board: Board, name: string, rule: NewBreadRule, asOf: string, date: string): number {
+  const f = firstSold(board, name, asOf);
+  if (!f) return 0;
+  const to = [asOf, addDays(rule.from, -1)].sort()[0];
+  const xs = (f <= to ? dayRange(f, to) : []).filter((d) => isHoliday(d) === isHoliday(date)).map((d) => breadSold(board, d, "9999-12-31").get(breadNewName(name)) || 0).filter((q) => q > 0);
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+}
+
+/** 다음 주간안의 매진 더하기 = 앞 주간안의 더하기 + 지난 7일 결과 (계획에 들었던 날만 — 지시 수량만큼 다 팔렸으면 매진) */
+export function newBreadNext(prev: NewBreadAdd, results: { date: string; made: number | null; sold: number }[], rule: NewBreadRule): NewBreadAdd {
+  const planned = results.filter((r) => (r.made || 0) > 0);
+  const out = (r: { made: number | null; sold: number }) => r.sold >= (r.made || 0);
+  const wk = planned.filter((r) => !isHoliday(r.date));
+  const hd = planned.filter((r) => isHoliday(r.date));
+  return {
+    weekday: prev.weekday + (wk.filter(out).length >= rule.weekdaySellouts ? rule.weekdayAdd : 0),
+    holiday: prev.holiday + (hd.length && hd.every(out) ? rule.holidayAdd : 0),
+  };
+}
+
+/** 그날 계획에 새 빵 넣기 — 넣는 날 전이면 빼고, 처음 4주면 규칙 수량(범위 밖), 그 뒤면 판매 추이 그대로 */
+function withNewBread(board: Board, items: PlanItem[], asOf: string, date: string, adds: Record<string, NewBreadAdd>): PlanItem[] {
+  let out = items;
+  for (const [name, rule] of Object.entries(NEW_BREAD)) {
+    if (date < rule.from) {
+      out = out.filter((i) => i.name !== name);
+      continue;
+    }
+    if (!newBreadEarly(board, name, asOf)) continue;
+    const of = out.find((i) => i.name === rule.of)?.qty ?? 0;
+    const base = Math.max(Math.round(of * rule.ratio), Math.round(preSoldAvg(board, name, rule, asOf, date)));
+    const add = (isHoliday(date) ? adds[name]?.holiday : adds[name]?.weekday) || 0;
+    out = out.filter((i) => i.name !== name);
+    if (base + add > 0) out = [...out, { name, qty: snapUnit(name, base + add, undefined, undefined, date), base, ...(add ? { add } : {}) }];
+  }
+  return out;
+}
+
 /* ---------- 계획 세기 ---------- */
 
-function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>): PlanStep {
+/** 같은 요일 칸 — 이름이 바뀐 빵은 새 이름으로 이어 받음 (옛 이름 칸 → 새 이름 계획) */
+const stepsByNew = (steps: Record<string, number>) => {
+  const out: Record<string, number> = {};
+  for (const [n, k] of Object.entries(steps)) out[breadNewName(n)] = (out[breadNewName(n)] || 0) + k;
+  return out;
+};
+
+function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>, adds: Record<string, NewBreadAdd> = {}): PlanStep {
   const p = breadPlan(board, weather, asOf, date, learned);
   const boost = breadBoostOf(date);
   const band = breadBandOf(date);
+  const st = stepsByNew(steps);
   const raw: PlanItem[] = p.items.map((it) => {
     const base = Math.round(it.qty * boost);
-    const k = clampStep(it.name, base, steps[it.name] ?? 0);
+    const k = clampStep(it.name, base, st[breadNewName(it.name)] ?? 0);
     return { name: it.name, qty: snapUnit(it.name, base + k * breadUnit(it.name), undefined, undefined, date), base, ...(k ? { step: k } : {}) };
   });
-  const items = band ? fitTotal(raw, band[0], band[1], date) : raw;
+  const fitted = band ? fitTotal(raw, band[0], band[1], date) : raw;
+  // 새 빵(명란소금빵) — 다른 빵을 범위에 맞춘 뒤 그날 소금빵 수량으로 (범위 밖)
+  const items = withNewBread(board, fitted, asOf, date, adds);
   return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(boost !== 1 ? { boost } : {}), ...(band ? { band } : {}) };
 }
 
@@ -303,12 +425,13 @@ function boostOutlook(o: Outlook[]): Outlook[] {
   return o.map((w) => ({ ...w, weekday: x(w.weekday, "평일", w.from), holiday: x(w.holiday, "휴일", w.from) }));
 }
 
-/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 */
-export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
+/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸
+ *  adds = 새 빵마다 지금까지 쌓인 매진 더하기 (newBreadNext — apps/collector/src/plan.ts) */
+export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}, adds: Record<string, NewBreadAdd> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
   const dates = weekDates(thursday);
   return dates.map((date, i) => ({
     date,
-    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}),
+    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}, adds),
     ...(i === 0 ? { outlook: boostOutlook(weeklyOutlook(board, asOf, date, learned)) } : {}),
   }));
 }
@@ -347,10 +470,16 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
   for (const it of plan.week.items) anchor.set(it.name, it.qty);
   for (const [n, l] of Object.entries(order?.provisional || {})) anchor.set(n, l.qty);
   const names = [...new Set([...anchor.keys(), ...fresh.keys()])];
+  const weekItem = new Map(plan.week.items.map((i) => [i.name, i]));
   const items: PlanItem[] = names
     .map((name) => {
       const f = fresh.get(name);
       const a = anchor.get(name);
+      // 새 빵 처음 4주 — 주간안(매니저 잠정 확정) 수량 그대로 (매진 더하기는 주간안 발표 때만)
+      if (NEW_BREAD[name] && a != null && newBreadEarly(board, name, asOf)) {
+        const add = weekItem.get(name)?.add;
+        return { name, qty: a, base: weekItem.get(name)?.base ?? a, ...(add ? { add } : {}) };
+      }
       // 비 예보 주말 — 예정 수량 × 배수 (잠정에 없던 빵은 새로 센 수량 × 배수), 같은 요일 칸은 이어 감
       if (up) {
         const b = a ?? f!.qty;
@@ -450,7 +579,7 @@ export function orderText(date: string, rows: OrderRow[], label = "생산 명령
   const [, m, d] = date.split("-").map(Number);
   const list = rows.filter((r) => (r.qty || 0) > 0);
   const total = list.reduce((a, r) => a + (r.qty || 0), 0);
-  return [`[${m}월 ${d}일 ${label}] 총 ${total}개`, ...list.map((r) => `· ${r.name} ${r.qty}개${r.state === "확정" ? "" : ` (${r.state})`}`)].join("\n");
+  return [`[${m}월 ${d}일 ${label}] 총 ${total}개`, ...list.map((r) => `· ${breadLabel(r.name, date)} ${r.qty}개${r.state === "확정" ? "" : ` (${r.state})`}`)].join("\n");
 }
 
 /** 한국 시간 지금 */
@@ -482,9 +611,10 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
   // 지난 날이라 최종 확정 안 한 빵은 모두 '자동'
   const rows = orderRows(plan, order, { date: "9999-12-31", time: "00:00" });
   const made = new Map(rows.map((r) => [r.name, r.qty]));
-  const sold = new Map(board.products(date, date, "베이커리").filter((p) => !NOT_BREAD.has(p.name)).map((p) => [p.name, p.qty]));
-  const halfBy = board.report(date)?.cafe?.bakeryHalfBy || {};
-  const lastBy = board.report(date)?.cafe?.bakeryLastBy || {};
+  // 이름이 바뀐 빵은 그날 계획 이름으로 묶어 견줌 (10-24 부터 저당팥빵으로 팔려도 11-01 까지 계획은 인절미팥빵 — breadNames.ts)
+  const sold = breadSold(board, date, date);
+  const halfBy = renameSum(board.report(date)?.cafe?.bakeryHalfBy || {}, date);
+  const lastBy = renameLast(board.report(date)?.cafe?.bakeryLastBy || {}, date);
   const baseOf = new Map<string, number>();
   for (const it of plan?.week?.items || []) baseOf.set(it.name, it.base ?? it.qty);
   for (const it of plan?.final?.items || []) baseOf.set(it.name, it.base ?? it.qty);
@@ -543,7 +673,8 @@ export function bakeryProducts(board: Board, date: string, plan: PlanDoc | null 
   for (const d of [...board.byDate.keys()].filter((k) => k <= date).sort()) {
     for (const p of board.products(d, d, "베이커리")) {
       if (NOT_BREAD.has(p.name)) continue;
-      const r = row(p.name);
+      // 이름이 바뀐 빵은 고른 날 기준 이름 하나로 (breadNames.ts)
+      const r = row(breadNameOn(p.name, date));
       const q = Math.max(0, p.qty); // 마이너스(짝 못 찾은 반품 등)는 판매로 안 셈
       if (q > 0) r.last = d;
       if (d >= from) r.recent += q;
@@ -612,9 +743,10 @@ export function stepOf(r: BreadResult, date: string): number | null {
 
 /** 이미 센 계획 단계에 칸만 다시 (규칙이 바뀌어 같은 요일 칸이 달라졌을 때 — 예측 base 는 그대로) · 칸 × 단위 · ±30% · 합계 다시 */
 export function restep(st: PlanStep, steps: Record<string, number>): PlanStep {
+  const byNew = stepsByNew(steps);
   const items = st.items.map((it) => {
     const base = it.base ?? it.qty;
-    const k = clampStep(it.name, base, steps[it.name] ?? 0);
+    const k = clampStep(it.name, base, byNew[breadNewName(it.name)] ?? 0);
     const { step: _old, ...rest } = it;
     return { ...rest, qty: snapUnit(it.name, base + k * breadUnit(it.name)), base, ...(k ? { step: k } : {}) };
   });
@@ -628,6 +760,47 @@ export function reround(st: PlanStep, date: string): PlanStep {
   const band = breadBandOf(date);
   if (band) items = fitTotal(items, band[0], band[1], date);
   return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
+}
+
+/** 이미 나간 계획에 올림 단위만 (그 빵만 올림 — 다른 빵 · 합계 범위 · 칸은 그대로, 2026-10-25 팥앙금샌드 4개 단위). 바뀐 것이 없으면 그대로 */
+export function roundUnitOnly(st: PlanStep, date: string): PlanStep {
+  let changed = false;
+  const items = st.items.map((it) => {
+    const u = roundUpUnit(it.name, date);
+    if (u <= 1 || it.qty % u === 0) return it;
+    changed = true;
+    return { ...it, qty: snapUnit(it.name, it.qty, undefined, undefined, date) };
+  });
+  return changed ? { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) } : st;
+}
+
+/** 이미 확정한 수량(잠정 · 최종)에 올림 단위 — 매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (2026-10-25 사장님)
+ *  plan = 올리기 전 계획 (잠정은 주간안, 최종은 최종안 수량과 견줌) · kept = 매니저가 고쳐 그대로 둔 빵 */
+export function roundUnitOrder(order: OrderDoc, plan: PlanDoc | null, by: string, at: string): { order: OrderDoc; changed: string[]; kept: string[] } {
+  const date = order.date;
+  const changed: string[] = [];
+  const kept: string[] = [];
+  const fix = (lines: Record<string, OrderLine>, ref: PlanStep | undefined) => {
+    const out: Record<string, OrderLine> = {};
+    for (const [name, l] of Object.entries(lines)) {
+      const u = roundUpUnit(name, date);
+      if (u <= 1 || l.qty % u === 0) {
+        out[name] = l;
+        continue;
+      }
+      const planned = ref?.items.find((i) => i.name === name)?.qty;
+      if (planned !== l.qty) {
+        out[name] = l;
+        kept.push(name);
+        continue;
+      }
+      out[name] = { qty: snapUnit(name, l.qty, undefined, undefined, date), by, at };
+      changed.push(name);
+    }
+    return out;
+  };
+  const next = { ...order, provisional: fix(order.provisional, plan?.week), final: fix(order.final, plan?.final) };
+  return { order: changed.length ? next : order, changed, kept };
 }
 
 /** 칸을 예측의 ±30% 안으로 (적어도 ±1 칸은 허용) */

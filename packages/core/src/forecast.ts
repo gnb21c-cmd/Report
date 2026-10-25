@@ -15,6 +15,7 @@
       작년 · 최근 빵 자료가 없으면 예전처럼 예상 방문객 × 방문객 1명당 개수
    계산은 여기 한 곳 — 작업지시 앱 · GitHub 예약 작업이 같은 식을 씀
    ============================================================ */
+import { breadNameOn, breadSold } from "./breadNames";
 import { addDays, dayRange, weekday } from "./dates";
 import type { Board } from "./metrics";
 import { holidayName, NOT_BREAD } from "./rules";
@@ -309,8 +310,9 @@ export function breadWeatherFactor(w?: DayWeather | null): number {
   return 1;
 }
 
-/** 빵별 비율 — 최근 SHARE_DAYS 일 같은 날 유형(2일 안 되면 모든 날)에서 그날 빵 판매 중 그 빵 몫, 최근 날일수록 무겁게 */
-function breadShares(board: Board, asOf: string, kind: DayKind, active: Set<string>): Map<string, number> {
+/** 빵별 비율 — 최근 SHARE_DAYS 일 같은 날 유형(2일 안 되면 모든 날)에서 그날 빵 판매 중 그 빵 몫, 최근 날일수록 무겁게
+    이름이 바뀐 빵은 계획 날(date) 기준 이름으로 묶음 (breadNames.ts) */
+function breadShares(board: Board, asOf: string, kind: DayKind, active: Set<string>, date: string): Map<string, number> {
   const all = dayRange(addDays(asOf, -(SHARE_DAYS - 1)), asOf).filter((d) => (breadOn(board, d) || 0) > 0);
   let days = all.filter((d) => dayKind(d) === kind);
   if (days.length < 2) days = all;
@@ -320,10 +322,10 @@ function breadShares(board: Board, asOf: string, kind: DayKind, active: Set<stri
     const age = (Date.parse(asOf) - Date.parse(d)) / 864e5;
     const wt = Math.pow(0.5, age / SHARE_HALF_LIFE);
     const total = breadOn(board, d) || 0;
-    for (const p of board.products(d, d, "베이커리")) {
-      if (!active.has(p.name) || p.qty <= 0) continue;
-      const s = (wt * p.qty) / total;
-      m.set(p.name, (m.get(p.name) || 0) + s);
+    for (const [name, qty] of breadSold(board, d, date)) {
+      if (!active.has(name) || qty <= 0) continue;
+      const s = (wt * qty) / total;
+      m.set(name, (m.get(name) || 0) + s);
       t += s;
     }
   }
@@ -338,19 +340,20 @@ export function breadPlan(board: Board, weather: WeatherMap, asOf: string, date:
   let same = days.filter((d) => dayKind(d) === v.kind);
   if (same.length < 2) same = days;
   // 최근 2주에 팔린 빵 (딸기잼 같은 베이커리 생산품이 아닌 상품은 빼고 — 지난 자료엔 베이커리로 남아 있을 수 있음)
-  const active = new Set(board.products(addDays(asOf, -13), asOf, "베이커리").map((p) => p.name).filter((n) => !NOT_BREAD.has(n)));
+  // 이름이 바뀐 빵(인절미팥빵 → 저당팥빵 등)은 계획 날 기준 이름 하나로 (2026-10-25, breadNames.ts)
+  const active = new Set(board.products(addDays(asOf, -13), asOf, "베이커리").map((p) => breadNameOn(p.name, date)).filter((n) => !NOT_BREAD.has(n)));
   let vis = 0;
   const qty = new Map<string, number[]>();
   for (const d of same) {
     vis += visitorsOn(board, d)!;
-    const sold = new Map(board.products(d, d, "베이커리").map((p) => [p.name, p.qty]));
+    const sold = breadSold(board, d, date);
     for (const name of active) {
       const xs = qty.get(name) || [];
       xs.push(sold.get(name) || 0);
       qty.set(name, xs);
     }
   }
-  const shares = fb.value != null ? breadShares(board, asOf, v.kind, active) : null;
+  const shares = fb.value != null ? breadShares(board, asOf, v.kind, active, date) : null;
   const total = fb.value != null ? fb.value * breadWeatherFactor(weather[date]) * v.season.factor : null;
   const items: BreadLine[] = [...qty.entries()]
     .map(([name, xs]) => {

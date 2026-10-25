@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   count,
   bakeryProducts,
+  breadLabel,
   breadTotals,
   dayResult,
   producedOf,
@@ -504,7 +505,7 @@ function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; r
               <tbody>
                 {list.map((r) => (
                   <tr key={r.name}>
-                    <td>{r.name}</td>
+                    <td>{breadLabel(r.name, date)}</td>
                     <td className="num">{n(producedOf(r))}</td>
                     <td className="num">{n(r.full)}</td>
                     <td className="num">{n(r.half)}</td>
@@ -564,7 +565,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
             <tbody>
               {rows.map((r) => (
                 <tr key={r.name}>
-                  <td>{r.name}</td>
+                  <td>{breadLabel(r.name, date)}</td>
                   <td className="num">{hasSales ? n(producedOf(r)) : "—"}</td>
                   <td className="num">{hasSales ? n(r.full) : "—"}</td>
                   <td className="num">{hasSales ? n(r.half) : "—"}</td>
@@ -616,7 +617,7 @@ function BakeryList({ board, date, doc }: { board: Board; date: string; doc: Bak
       <tbody>
         {rows.map((r) => (
           <tr key={r.name}>
-            <td>{r.name}</td>
+            <td>{breadLabel(r.name, date)}</td>
             {showOrder && <td className="num">{n(r.order)}</td>}
             <td className={`num${showOrder && r.order != null && r.day > r.order ? " warn" : ""}`}>{n(r.day)}</td>
             <td className="num">{n(r.recent)}</td>
@@ -670,7 +671,7 @@ function BakeryList({ board, date, doc }: { board: Board; date: string; doc: Bak
                 <tbody>
                   {old.map((r) => (
                     <tr key={r.name}>
-                      <td>{r.name}</td>
+                      <td>{breadLabel(r.name, date)}</td>
                       <td className="num">{r.last ? r.last.replaceAll("-", ".") : "—"}</td>
                     </tr>
                   ))}

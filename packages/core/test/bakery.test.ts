@@ -339,10 +339,10 @@ describe("평일(월 ~ 목) 하루 합계 300 ~ 320개 안 — 같은 요일 칸
 });
 
 describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단위 올림 (2026-10-22 사장님 표 · 올림은 11-02 계획부터)", () => {
-  it("표 순서 — 우유모닝빵 · 고소한옛날맘모스 · 갈릭소시지빵 · 시나몬롤 … 티라미두유볼(소) · 생크림케이크 (POS 이름)", () => {
-    expect(BREAD_ORDER.slice(0, 4)).toEqual(["우유모닝빵", "고소한옛날맘모스", "갈릭소시지빵", "시나몬롤"]);
-    expect(BREAD_ORDER).toHaveLength(33);
-    expect(new Set(BREAD_ORDER).size).toBe(33);
+  it("표 순서 — 우유모닝빵 · 팥앙금샌드(옛 고소한옛날맘모스) · 갈릭소시지빵 · 시나몬롤 … 티라미두유볼(소) · 생크림케이크 (POS 이름) · 10-25 명란소금빵 더함", () => {
+    expect(BREAD_ORDER.slice(0, 4)).toEqual(["우유모닝빵", "팥앙금샌드", "갈릭소시지빵", "시나몬롤"]);
+    expect(BREAD_ORDER).toHaveLength(34);
+    expect(new Set(BREAD_ORDER).size).toBe(34);
     const xs = [{ name: "소금빵" }, { name: "새 빵" }, { name: "스위트파누쪼" }, { name: "우유모닝빵" }, { name: "몽블랑" }, { name: "가 새 빵" }];
     // 띄어쓰기는 상관없음 ('스위트 파누쪼') · 표에 없는 빵은 맨 뒤 가나다
     expect(sortBread(xs).map((x) => x.name)).toEqual(["우유모닝빵", "소금빵", "몽블랑", "스위트파누쪼", "가 새 빵", "새 빵"]);
@@ -352,7 +352,7 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
   });
 
   it("올림 단위 — 시나몬롤 10 · 우유모닝빵 2 · 11-02 계획부터 — 10-29(목)에 발표하는 11-02 ~ 08 주간안부터 (그 전은 그대로 1개, 2026-10-22 사장님)", () => {
-    expect(ROUND_UP_UNIT).toEqual({ 시나몬롤: 10, 우유모닝빵: 2 });
+    expect(ROUND_UP_UNIT).toEqual({ 시나몬롤: 10, 우유모닝빵: 2, 팥앙금샌드: 4 }); // 팥앙금샌드는 2026-10-25 더함 (breadChange.test.ts)
     expect(ROUND_UP_FROM).toBe("2026-11-02");
     expect(snapUnit("시나몬롤", 12, undefined, undefined, "2026-11-02")).toBe(20);
     expect(snapUnit("시나몬롤", 20, undefined, undefined, "2026-11-02")).toBe(20);
@@ -385,9 +385,11 @@ describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단
         if (it.name === "시나몬롤") expect(it.qty % 10).toBe(0);
         if (it.name === "우유모닝빵") expect(it.qty % 2).toBe(0);
       }
+    // 평일 300 ~ 320 — 새 빵(명란소금빵, 11-02 부터)은 범위 밖에 따로 (2026-10-25)
     for (const w of week.filter((x) => breadBandOf(x.date))) {
-      expect(w.week.total).toBeGreaterThanOrEqual(300);
-      expect(w.week.total).toBeLessThanOrEqual(320);
+      const inside = w.week.total - (w.week.items.find((i) => i.name === "명란소금빵")?.qty ?? 0);
+      expect(inside).toBeGreaterThanOrEqual(300);
+      expect(inside).toBeLessThanOrEqual(320);
     }
     const mon = week[0];
     const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-07", { v: 2, date: mon.date, week: mon.week }, null)!;
