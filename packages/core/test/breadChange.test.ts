@@ -246,21 +246,25 @@ describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10
   });
 });
 
-describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보로팥소금빵과 같은 수량 · 범위 밖 (2026-10-25 사장님)", () => {
+describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보로팥소금빵의 80% (인기가 없을 수 있어 보수적으로) · 범위 밖 (2026-10-25 사장님)", () => {
   const rule = NEW_BREAD.명란소금빵;
+  /** 소보로팥소금빵 수량 → 명란 수량 (80% 반올림, 적어도 1개) */
+  const of = (q: number) => Math.max(1, Math.round(q * 0.8));
   it("정해 둔 값", () => {
-    expect(rule).toEqual({ from: "2026-11-02", same: "소보로팥소금빵", learnDays: 28 });
+    expect(rule).toEqual({ from: "2026-11-02", same: "소보로팥소금빵", ratio: 0.8, learnDays: 28 });
+    expect([of(7), of(5), of(6), of(11), of(26), of(25), of(1)]).toEqual([6, 4, 5, 9, 21, 20, 1]);
   });
 
   it("11-01 까지 날짜(이미 발표한 주 · 그 최종안)에는 안 넣음", () => {
     for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-28")) expect(names(w.week)).not.toContain("명란소금빵");
   });
 
-  it("10-29 발표 주간안 — 그날 소보로팥소금빵과 같은 수량 (매진 더하기 · 같은 요일 칸 없음) · 평일 300 ~ 320 은 다른 빵만 (명란은 그 위에)", () => {
+  it("10-29 발표 주간안 — 그날 소보로팥소금빵의 80% (매진 더하기 · 같은 요일 칸 없음) · 평일 300 ~ 320 은 다른 빵만 (명란은 그 위에)", () => {
     const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 명란소금빵: 5 }, "2026-11-07": { 명란소금빵: 5 } });
     for (const w of week) {
       const m = w.week.items.find((i) => i.name === "명란소금빵")!;
-      expect(m.qty).toBe(qtyOf(w.week, "소보로팥소금빵"));
+      expect(m.qty).toBe(of(qtyOf(w.week, "소보로팥소금빵")!));
+      expect(m.qty).toBeLessThan(qtyOf(w.week, "소보로팥소금빵")!);
       expect(m.qty).toBeGreaterThan(0);
       expect(m.step).toBeUndefined();
       expect("add" in m).toBe(false);
@@ -271,15 +275,15 @@ describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보
     }
   });
 
-  it("최종안(3일 전) — 최종안의 소보로팥소금빵과 같은 수량 · 매니저가 잠정 확정 때 고친 수량이면 그대로", () => {
+  it("최종안(3일 전) — 최종안의 소보로팥소금빵의 80% · 매니저가 잠정 확정 때 고친 수량이면 그대로", () => {
     const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-05", "2026-11-04");
     const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, null)!;
-    expect(qtyOf(f, "명란소금빵")).toBe(qtyOf(f, "소보로팥소금빵"));
+    expect(qtyOf(f, "명란소금빵")).toBe(of(qtyOf(f, "소보로팥소금빵")!));
     expect(f.total - qtyOf(f, "명란소금빵")!).toBeLessThanOrEqual(320);
-    // 소보로팥소금빵만 매니저가 고쳤으면 명란도 그 수량 (같은 수량)
+    // 소보로팥소금빵만 매니저가 고쳤으면 명란도 그 수량의 80%
     const L = (qty: number) => ({ qty, by: "매니저", at: "" });
     const s = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 소보로팥소금빵: L(40) }, final: {} })!;
-    expect(qtyOf(s, "명란소금빵")).toBe(qtyOf(s, "소보로팥소금빵"));
+    expect(qtyOf(s, "명란소금빵")).toBe(of(qtyOf(s, "소보로팥소금빵")!));
     const p = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 명란소금빵: L(40) }, final: {} })!;
     expect(qtyOf(p, "명란소금빵")).toBe(40);
   });
