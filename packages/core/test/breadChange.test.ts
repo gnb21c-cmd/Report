@@ -15,9 +15,10 @@ import {
   HOURS,
   makeFinal,
   makeWeek,
+  FIXED_QTY,
+  fixedQtyOf,
   NEW_BREAD,
   newBreadEarly,
-  newBreadNext,
   orderText,
   roundUnitOnly,
   roundUnitOrder,
@@ -43,17 +44,17 @@ function day(date: string, cups: number, bread: [string, number][]): DayReport {
   };
   return { date, cafe };
 }
-/** 판매 — 인절미팥빵은 10-23 까지 · 10-24 부터 저당팥빵, 맘모스는 10-27 까지 · 10-28 부터 팥앙금샌드, 명란소금빵은 10-24 부터 (평일 9 · 휴일 26) */
-const sales = (d: string): [string, number][] => {
+/** 판매 — 인절미팥빵은 10-23 까지 · 10-24 부터 저당팥빵(rename = false 면 늘 인절미팥빵), 맘모스는 10-27 까지 · 10-28 부터 팥앙금샌드, 명란소금빵은 10-24 부터 (평일 9 · 휴일 26) */
+const sales = (d: string, rename = true): [string, number][] => {
   const hol = dayKind(d) === "휴일";
   const cups = hol ? 200 : 100;
-  const out: [string, number][] = [["소금빵", Math.round(cups * 0.3)], ["크루아상", Math.round(cups * 0.1)]];
-  out.push([d < "2026-10-24" ? "인절미팥빵" : "저당팥빵", Math.round(cups * 0.08)]);
+  const out: [string, number][] = [["소금빵", Math.round(cups * 0.3)], ["소보로팥소금빵", Math.round(cups * 0.06)], ["크루아상", Math.round(cups * 0.1)]];
+  out.push([d < "2026-10-24" || !rename ? "인절미팥빵" : "저당팥빵", Math.round(cups * 0.08)]);
   out.push([d < "2026-10-28" ? "고소한옛날맘모스" : "팥앙금샌드", Math.round(cups * 0.03)]);
   if (d >= "2026-10-24") out.push(["명란소금빵", hol ? 26 : 9]);
   return out;
 };
-const make = (from: string, to: string) => dayRange(from, to).map((d) => day(d, dayKind(d) === "휴일" ? 200 : 100, sales(d)));
+const make = (from: string, to: string, rename = true) => dayRange(from, to).map((d) => day(d, dayKind(d) === "휴일" ? 200 : 100, sales(d, rename)));
 const board = new Board([...make("2025-08-01", "2025-12-31"), ...make("2026-08-01", "2026-12-10")]);
 const names = (st: PlanStep) => st.items.map((i) => i.name);
 const qtyOf = (st: PlanStep, n: string) => st.items.find((i) => i.name === n)?.qty;
@@ -101,6 +102,21 @@ describe("빵 이름 바꿈 — 11-02 계획부터 새 이름, 그 전은 옛 �
     }
   });
 
+  it("저당팥빵 수량 = 인절미팥빵 추세 · 예측 그대로 (이름만 바뀜 — 2026-10-25 사장님)", () => {
+    // 이름을 안 바꾸고 계속 인절미팥빵으로 팔았을 때와 같은 수량
+    const same = new Board([...make("2025-08-01", "2025-12-31", false), ...make("2026-08-01", "2026-12-10", false)]);
+    const a = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
+    const b = makeWeek(same, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
+    for (let i = 0; i < 7; i++) {
+      expect(qtyOf(a[i].week, "저당팥빵")).toBeGreaterThan(0);
+      expect(qtyOf(a[i].week, "저당팥빵")).toBe(qtyOf(b[i].week, "저당팥빵"));
+    }
+    // 이미 발표한 주(10-29 ~ 11-01 최종안) — 저당팥빵으로 판 것도 인절미팥빵 실적으로
+    const c = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-28");
+    const e = makeWeek(same, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-28");
+    for (let i = 0; i < 7; i++) expect(qtyOf(c[i].week, "인절미팥빵")).toBe(qtyOf(e[i].week, "인절미팥빵"));
+  });
+
   it("같은 요일 칸 — 옛 이름 칸을 새 이름 계획이 이어 받음", () => {
     const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 인절미팥빵: 1 } });
     expect(mon.week.items.find((i) => i.name === "저당팥빵")?.step).toBe(1);
@@ -142,8 +158,8 @@ describe("팥앙금샌드 4개 단위 올림 — 예측 6개면 8개 · 지금 �
     expect(g.reduce((a, b) => a + b.qty, 0)).toBe(320);
   });
 
-  it("주간안 — 맘모스 실적 그대로 센 수량에서 4의 배수로 올림", () => {
-    for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28")) expect(qtyOf(w.week, "팥앙금샌드")! % 4).toBe(0);
+  it("10-28 까지(정해 둔 수량 전) 주간안 — 맘모스 실적 그대로 센 수량에서 4의 배수로 올림", () => {
+    for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-21").slice(0, 3)) expect(qtyOf(w.week, "고소한옛날맘모스")! % 4).toBe(0);
   });
 
   it("이미 나간 계획 — 그 빵만 올림 (다른 빵 · 합계 범위 그대로) · 오늘(생산 시작) 전 날짜는 그대로", () => {
@@ -170,24 +186,73 @@ describe("팥앙금샌드 4개 단위 올림 — 예측 6개면 8개 · 지금 �
   });
 });
 
-describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 소금빵 1/3 · 계획 전 판매 감안 · 매진이면 평일 +3 · 휴일 +6 · 범위 밖", () => {
+describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10-29 최종안부터, 2026-10-25 사장님)", () => {
+  it("정해 둔 값 · 옛 이름도 · 금요일은 평일 · 공휴일은 휴일", () => {
+    expect(FIXED_QTY).toEqual({ 팥앙금샌드: { from: "2026-10-29", weekday: 12, holiday: 16 } });
+    expect(fixedQtyOf("고소한옛날맘모스", "2026-10-28")).toBeNull();
+    expect(fixedQtyOf("고소한옛날맘모스", "2026-10-29")).toBe(12); // 목
+    expect(fixedQtyOf("고소한옛날맘모스", "2026-10-30")).toBe(12); // 금
+    expect(fixedQtyOf("고소한옛날맘모스", "2026-10-31")).toBe(16); // 토
+    expect(fixedQtyOf("팥앙금샌드", "2026-11-01")).toBe(16); // 일
+    expect(fixedQtyOf("팥앙금샌드", "2026-11-02")).toBe(12);
+    expect(fixedQtyOf("팥앙금샌드", "2026-12-25")).toBe(16); // 성탄절
+    expect(fixedQtyOf("소금빵", "2026-11-02")).toBeNull();
+  });
+
+  it("주간안 — 예측 · 같은 요일 칸 없이 그 수량 · 평일 합계 300 ~ 320 은 다른 빵으로 맞춤", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 팥앙금샌드: 3 }, "2026-11-07": { 고소한옛날맘모스: -2 } });
+    for (const w of week) {
+      const it = w.week.items.find((i) => i.name === "팥앙금샌드")!;
+      expect(it.qty).toBe(dayKind(w.date) === "휴일" ? 16 : 12);
+      expect(it.step).toBeUndefined();
+      if (breadBandOf(w.date)) {
+        const m = qtyOf(w.week, "명란소금빵") ?? 0;
+        expect(w.week.total - m).toBeGreaterThanOrEqual(300);
+        expect(w.week.total - m).toBeLessThanOrEqual(320);
+      }
+    }
+  });
+
+  it("10-29 최종안 — 이미 나간 주간안(4개)이어도 12개 · 매니저가 잠정 확정 때 고친 수량이면 그대로 · 10-28 최종안은 그대로 4개 단위", () => {
+    const old = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-21");
+    const thu = old.find((w) => w.date === "2026-10-29")!;
+    const wk = { ...thu.week, items: thu.week.items.map((i) => (i.name === "고소한옛날맘모스" ? { ...i, qty: 4 } : i)) };
+    const plan: PlanDoc = { v: 2, date: "2026-10-29", week: wk };
+    const L = (qty: number) => ({ qty, by: "매니저", at: "t" });
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-26", "2026-10-25", plan, { v: 2, date: "2026-10-29", provisional: { 고소한옛날맘모스: L(4) }, final: {} })!;
+    expect(qtyOf(f, "고소한옛날맘모스")).toBe(12);
+    expect(f.items.find((i) => i.name === "고소한옛날맘모스")?.lo).toBeUndefined();
+    expect(f.total).toBeGreaterThanOrEqual(300);
+    expect(f.total).toBeLessThanOrEqual(320);
+    const kept = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-26", "2026-10-25", plan, { v: 2, date: "2026-10-29", provisional: { 고소한옛날맘모스: L(8) }, final: {} })!;
+    expect(qtyOf(kept, "고소한옛날맘모스")).toBe(8);
+    const sat = old.find((w) => w.date === "2026-10-31")!;
+    const fs = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-28", "2026-10-27", { v: 2, date: "2026-10-31", week: sat.week }, null)!;
+    expect(qtyOf(fs, "고소한옛날맘모스")).toBe(16);
+    const wed = old.find((w) => w.date === "2026-10-28")!;
+    const fw = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-25", "2026-10-24", { v: 2, date: "2026-10-28", week: wed.week }, null)!;
+    expect(qtyOf(fw, "고소한옛날맘모스")! % 4).toBe(0);
+  });
+});
+
+describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보로팥소금빵과 같은 수량 · 범위 밖 (2026-10-25 사장님)", () => {
   const rule = NEW_BREAD.명란소금빵;
   it("정해 둔 값", () => {
-    expect(rule).toEqual({ from: "2026-11-02", of: "소금빵", ratio: 1 / 3, weekdayAdd: 3, holidayAdd: 6, weekdaySellouts: 3, learnDays: 28 });
+    expect(rule).toEqual({ from: "2026-11-02", same: "소보로팥소금빵", learnDays: 28 });
   });
 
   it("11-01 까지 날짜(이미 발표한 주 · 그 최종안)에는 안 넣음", () => {
     for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-28")) expect(names(w.week)).not.toContain("명란소금빵");
   });
 
-  it("10-29 발표 주간안 — max(그날 소금빵의 1/3, 계획 전 판매 하루 평균) · 평일 300 ~ 320 은 다른 빵만 (명란은 그 위에)", () => {
-    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
+  it("10-29 발표 주간안 — 그날 소보로팥소금빵과 같은 수량 (매진 더하기 · 같은 요일 칸 없음) · 평일 300 ~ 320 은 다른 빵만 (명란은 그 위에)", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 명란소금빵: 5 }, "2026-11-07": { 명란소금빵: 5 } });
     for (const w of week) {
       const m = w.week.items.find((i) => i.name === "명란소금빵")!;
-      const salt = qtyOf(w.week, "소금빵")!;
-      const pre = dayKind(w.date) === "휴일" ? 26 : 9; // 계획 전 판매: 휴일 10-24 · 25 = 26 · 평일 10-26 ~ 28 = 9
-      expect(m.qty).toBe(Math.max(Math.round(salt / 3), pre));
-      expect(m.add).toBeUndefined();
+      expect(m.qty).toBe(qtyOf(w.week, "소보로팥소금빵"));
+      expect(m.qty).toBeGreaterThan(0);
+      expect(m.step).toBeUndefined();
+      expect("add" in m).toBe(false);
       if (breadBandOf(w.date)) {
         expect(w.week.total - m.qty).toBeGreaterThanOrEqual(300);
         expect(w.week.total - m.qty).toBeLessThanOrEqual(320);
@@ -195,55 +260,23 @@ describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 소금빵 1/3
     }
   });
 
-  it("계획 전 판매가 소금빵 1/3 보다 많으면 판매 쪽으로", () => {
-    const b = new Board([...make("2025-08-01", "2025-12-31"), ...dayRange("2026-08-01", "2026-10-28").map((d) => day(d, dayKind(d) === "휴일" ? 200 : 100, sales(d).map(([n, q]) => [n, n === "명란소금빵" ? 500 : q] as [string, number])))]);
-    const [mon] = makeWeek(b, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
-    expect(qtyOf(mon.week, "명란소금빵")).toBe(500);
-  });
-
-  it("매진 더하기 — 지난 7일 평일 3일 이상 매진이면 평일마다 +3 · 계획에 든 휴일이 모두 매진이면 휴일마다 +6 · 주마다 쌓임", () => {
-    const r = (date: string, made: number | null, sold: number) => ({ date, made, sold });
-    const wk = [r("2026-11-02", 10, 10), r("2026-11-03", 10, 12), r("2026-11-04", 10, 10)];
-    expect(newBreadNext({ weekday: 0, holiday: 0 }, wk, rule)).toEqual({ weekday: 3, holiday: 0 });
-    expect(newBreadNext({ weekday: 3, holiday: 6 }, [...wk.slice(0, 2), r("2026-11-04", 10, 9)], rule)).toEqual({ weekday: 3, holiday: 6 });
-    const hol = [r("2026-11-07", 30, 30), r("2026-11-08", 30, 31)];
-    expect(newBreadNext({ weekday: 3, holiday: 0 }, [...wk, ...hol], rule)).toEqual({ weekday: 6, holiday: 6 });
-    expect(newBreadNext({ weekday: 0, holiday: 0 }, [r("2026-11-07", 30, 30), r("2026-11-08", 30, 20)], rule)).toEqual({ weekday: 0, holiday: 0 });
-    // 계획에 없던 날(지시 수량 모름)은 매진으로 안 셈
-    expect(newBreadNext({ weekday: 0, holiday: 0 }, [r("2026-10-31", null, 26), r("2026-11-01", 0, 26)], rule)).toEqual({ weekday: 0, holiday: 0 });
-  });
-
-  it("쌓인 더하기를 그날 수량에 더함 (평일 · 휴일 따로) · 같은 요일 ±1 칸은 안 씀", () => {
-    const plain = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-05", "2026-11-04");
-    const more = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-05", "2026-11-04", { "2026-11-09": { 명란소금빵: 5 }, "2026-11-14": { 명란소금빵: 5 } }, { 명란소금빵: { weekday: 3, holiday: 6 } });
-    for (let i = 0; i < 7; i++) {
-      const add = dayKind(more[i].date) === "휴일" ? 6 : 3;
-      const m = more[i].week.items.find((x) => x.name === "명란소금빵")!;
-      expect(m.qty).toBe(qtyOf(plain[i].week, "명란소금빵")! + add);
-      expect(m.add).toBe(add);
-      expect(m.step).toBeUndefined();
-    }
-  });
-
-  it("최종안(3일 전) — 처음 4주는 주간안(매니저 잠정 확정) 수량 그대로 · 범위 밖", () => {
-    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-05", "2026-11-04", {}, { 명란소금빵: { weekday: 3, holiday: 6 } });
-    const wq = qtyOf(mon.week, "명란소금빵")!;
+  it("최종안(3일 전) — 최종안의 소보로팥소금빵과 같은 수량 · 매니저가 잠정 확정 때 고친 수량이면 그대로", () => {
+    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-05", "2026-11-04");
     const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, null)!;
-    expect(qtyOf(f, "명란소금빵")).toBe(wq);
-    expect(f.items.find((i) => i.name === "명란소금빵")?.add).toBe(3);
-    expect(f.total - wq).toBeLessThanOrEqual(320);
-    const p = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 명란소금빵: { qty: 40, by: "매니저", at: "" } }, final: {} })!;
+    expect(qtyOf(f, "명란소금빵")).toBe(qtyOf(f, "소보로팥소금빵"));
+    expect(f.total - qtyOf(f, "명란소금빵")!).toBeLessThanOrEqual(320);
+    // 소보로팥소금빵만 매니저가 고쳤으면 명란도 그 수량 (같은 수량)
+    const L = (qty: number) => ({ qty, by: "매니저", at: "" });
+    const s = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 소보로팥소금빵: L(40) }, final: {} })!;
+    expect(qtyOf(s, "명란소금빵")).toBe(qtyOf(s, "소보로팥소금빵"));
+    const p = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 명란소금빵: L(40) }, final: {} })!;
     expect(qtyOf(p, "명란소금빵")).toBe(40);
   });
 
   it("첫 판매(10-24)부터 28일 실적이 쌓이면 다른 빵처럼 판매 추이로", () => {
     expect(newBreadEarly(board, "명란소금빵", "2026-11-19")).toBe(true); // 27일
     expect(newBreadEarly(board, "명란소금빵", "2026-11-20")).toBe(false); // 28일
-    const w = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-26", "2026-11-25", {}, { 명란소금빵: { weekday: 9, holiday: 18 } });
-    for (const x of w) {
-      const m = x.week.items.find((i) => i.name === "명란소금빵");
-      expect(m).toBeDefined();
-      expect(m!.add).toBeUndefined();
-    }
+    const w = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-26", "2026-11-25");
+    for (const x of w) expect(x.week.items.find((i) => i.name === "명란소금빵")).toBeDefined();
   });
 });
