@@ -29,6 +29,20 @@ const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "
 
 /** 글자 · 단추(input value 포함) 이름으로 — 띄어쓰기 · 줄바꿈 무시 */
 const loose = (t: string) => new RegExp(`^\\s*${t.split("").filter((c) => c.trim()).map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*")}\\s*$`);
+/** 로그인 화면 위 창이 이런 내용이면 더 하지 않고 멈춤 (비밀번호 틀림 · 잠김 · 비밀번호 변경 · 추가 인증)
+    2026-10-24 ~ 나이스 알림 "로그인 정보를 확인하세요." = 아이디 · 비밀번호가 맞지 않음 */
+const LOGIN_STOP = /로그인 ?정보|일치하지|틀렸|틀립|잘못|오류|실패|잠금|잠겼|잠김|횟수|초과|만료|변경|인증|승인|차단|등록되지/;
+/** 나이스가 로그인을 받아 주지 않음 (아이디 · 비밀번호 틀림 · 잠김 등) — 같은 비밀번호로 다시 넣지 않게 (extra.ts) */
+export class NiceLoginRefused extends Error {}
+/** 공개 기록용 — 아이디 · 메일 · '…님'(이름) · 숫자를 가림 */
+const hide = (t: string, id: string) =>
+  (id ? t.split(id).join("(아이디)") : t)
+    .replace(/\S+@\S+/g, "(메일)")
+    .replace(/\S*님/g, "○님")
+    .replace(/\d+/g, "#")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
 const byName = (f: Frame, t: string) => f.getByText(loose(t)).or(f.getByRole("button", { name: loose(t) })).or(f.locator(`input[type=button][value="${t}"], input[type=submit][value="${t}"]`));
 
 /** 사람처럼 단계 사이에 쉼 (1.5 ~ 3초) */
@@ -222,9 +236,20 @@ export class Nibs {
     await p.waitForTimeout(3000);
     say(`Enter 뒤: ${this.where()}`);
     if (await pwBox.isVisible().catch(() => false)) {
-      const btn = await this.visible((f) => f.locator("button, a, input[type=button], input[type=submit], [role=button]").filter({ hasText: /^\s*로그인\s*$/ }));
-      if (btn) await btn.click();
-      else await this.clickText("로그인", 2000);
+      // 로그인 화면 위에 창이 떴으면(2026-10-24 ~ — 로그인 단추가 가려져 30초 멈추던 것) 그 글을 남기고(숫자 · 이름 · 아이디는 가림)
+      //   비밀번호 · 잠김 · 변경 · 추가 인증 창이면 더 하지 않고 멈춤 (다시 넣으면 계정이 잠길 수 있음 — 사람이 나이스에서 풀어야 함)
+      //   그 밖의 안내 창이면 [확인]만 누르고 들어가지는지 기다림 (로그인을 다시 넣지 않음)
+      const pop = await this.loginPopup(id);
+      if (pop) {
+        say(`[로그인 화면 위 창] ${pop}`);
+        if (LOGIN_STOP.test(pop)) throw new NiceLoginRefused(`로그인 안 됨 — 나이스 창: ${pop}`);
+        const ok = await this.visible((f) => byName(f, "확인"));
+        if (ok) await ok.click({ timeout: 5000 }).catch(() => {});
+      } else {
+        const btn = await this.visible((f) => f.locator("button, a, input[type=button], input[type=submit], [role=button]").filter({ hasText: /^\s*로그인\s*$/ }));
+        if (btn) await btn.click({ timeout: 10000 });
+        else await this.clickText("로그인", 2000);
+      }
     }
     // 들어가졌는지 = 로그아웃 단추 또는 왼쪽 메뉴가 보임 · 로그인 시각 알림 → [확인]
     let inside = false;
@@ -263,6 +288,39 @@ export class Nibs {
       return;
     }
     throw new Error("로그인 안 됨 — 아이디 · 비밀번호(NICE_ID · NICE_PW)를 확인해 주세요");
+  }
+
+  /** 로그인 화면 위에 뜬 창의 글 — 떠 있는 창(나이스 화면 창 · 팝업 · 알림)이나 로그인 단추를 덮은 것. 없으면 "" (공개 기록용으로 가림) */
+  private async loginPopup(id: string): Promise<string> {
+    for (const f of this.frames()) {
+      const t = (await f
+        .evaluate(`(() => {
+          const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none"; };
+          const out = [];
+          // 알림창 먼저 — 없으면 떠 있는 창 (로그인 칸이 든 바탕 창은 뺌)
+          for (const sel of ["[class*=alert],[class*=Alert],[role=alertdialog]", "[class*=w2window],[class*=w2popup],[class*=popup],[class*=Popup],[class*=modal],[class*=Modal],[role=dialog]"]) {
+            for (const el of document.querySelectorAll(sel)) {
+              if (el.querySelector("input[type=password]")) continue;
+              const t = (el.innerText || "").trim();
+              if (t && vis(el) && !out.some((x) => x.includes(t.slice(0, 160)))) out.push(t.slice(0, 160));
+            }
+            if (out.length) break;
+          }
+          if (!out.length)
+            for (const b of document.querySelectorAll("button,a,input[type=button],input[type=submit],[role=button]")) {
+              if (!vis(b) || !/^\\s*로그인\\s*$/.test(b.innerText || b.value || "")) continue;
+              const r = b.getBoundingClientRect();
+              let top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!top || b.contains(top) || top.contains(b)) continue;
+              while (top.parentElement && top.parentElement !== document.body && (top.innerText || "").trim().length < 8) top = top.parentElement;
+              out.push(((top.innerText || "").trim() || "(글 없는 덮개 " + top.tagName.toLowerCase() + ")").slice(0, 160));
+            }
+          return out.join(" / ");
+        })()`)
+        .catch(() => "")) as string;
+      if (t) return hide(t, id);
+    }
+    return "";
   }
 
   /** 화면 안 알림창(로그인 시각 등)의 [확인] — 떠 있는 동안 다 누름 */
