@@ -6,6 +6,7 @@
      네이버(완료 · 미입장 · 잔여 + 시간 칸) · 오늘 입장(네이버 + 현장) · 입장료 매출(장수 × 단가 + 초과요금) · 열쇠 45칸(번호 · 색, 누르면 손님 이름 · 전화)
    - 손님 이름 · 전화번호가 들어감 — 사장님 지시(열쇠 미반납 때 관리자가 전화). 문서 하나만 덮어써서 지난 기록은 안 쌓임
    ============================================================ */
+import type { DayReport } from "./part";
 import { kidsPrice } from "./rules";
 
 export const DESK_LIVE = "deskLive";
@@ -157,12 +158,31 @@ export function deskLiveAgeMin(live: Pick<DeskLive, "at">, now: Date = new Date(
   return Number.isFinite(t) ? Math.max(0, Math.floor((now.getTime() - t) / 60_000)) : Infinity;
 }
 
-/** 입장료 매출 (그 시각 기준) — 입장권 장수 × 그날 단가(kidsPrice) + 결제한 초과요금. 받을 초과요금은 따로 */
-export function deskLiveSales(live: DeskLive): { tickets: number; price: number; kind: "평일" | "휴일"; fee: number; over: number; total: number; due: number } {
+/** 키즈 POS 의 초과요금 상품 — '퇴장시간 + 10~19분 지연' 같은 이름 (기타 유료 · 보관함) */
+export const KIDS_OVER_FEE = /퇴장\s*시간.*지연/;
+
+/** 그날 키즈 POS 초과요금 결제 (건수 · 금액, 확정 또는 마감 전 숫자) — 키즈 POS 자료가 없으면 null (2026-10-25 사장님)
+ *  통합데스크의 초과요금(over.paid)은 쓰지 않음: [초과요금 결제]를 눌러 POS 에 다녀오기만 해도 결제로 세어
+ *  POS 결제가 없는 날(평일은 무제한)에도 '4건 25,000원'이 날마다 나왔음 — 10월 실제 지연 결제는 10-24 세 건(40,000원)뿐 */
+export function kidsOverPaid(report: DayReport | null | undefined): { count: number; amount: number } | null {
+  const p = report?.kids;
+  if (!p) return null;
+  let count = 0;
+  let amount = 0;
+  for (const [name, , qty, net] of p.products || []) {
+    if (!KIDS_OVER_FEE.test(name)) continue;
+    count += qty;
+    amount += net;
+  }
+  return { count, amount };
+}
+
+/** 입장료 매출 (그 시각 기준) — 입장권 장수 × 그날 단가(kidsPrice) + 초과요금 결제(POS — kidsOverPaid, 모르면 null · 합계에 안 넣음). 받을 초과요금은 따로 */
+export function deskLiveSales(live: DeskLive, pos: { count: number; amount: number } | null = null): { tickets: number; price: number; kind: "평일" | "휴일"; fee: number; over: number | null; overCount: number | null; total: number; due: number } {
   const { price, kind } = kidsPrice(live.day);
   const tickets = live.people.total;
   const fee = tickets * price;
-  return { tickets, price, kind, fee, over: live.over.paid, total: fee + live.over.paid, due: live.over.due };
+  return { tickets, price, kind, fee, over: pos ? pos.amount : null, overCount: pos ? pos.count : null, total: fee + (pos?.amount ?? 0), due: live.over.due };
 }
 
 const toMin = (t: string) => {

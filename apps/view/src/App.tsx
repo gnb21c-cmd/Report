@@ -137,7 +137,7 @@ export function App() {
   else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
   else if (view.name === "visitors") body = <VisitorsDetail board={board} {...nav} />;
-  else if (view.name === "kidsLive") body = <KidsLive onBack={back} />;
+  else if (view.name === "kidsLive") body = <KidsLive board={board} onBack={back} />;
   else if (view.name === "settle") body = <SettleDetail cashParts={cashParts} {...nav} />;
   else if (view.name === "cash") {
     const earlier = [...book.keys()].filter((k) => k <= date).sort().pop() || null;
