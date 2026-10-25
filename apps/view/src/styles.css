@@ -27,6 +27,8 @@
   /* 시간대 막대(핑크) · 추세 선(옅음 → 진함) · 작년(회색) / 올해(빨강) */
   --pink: #e0679a;
   --pink-soft: #f0aecb;
+  /* 키즈 실시간 열쇠 — 현장 판매 열쇠 테두리 (통합데스크 V2.0 --walk 와 같은 색) */
+  --walk: #2563eb;
   --pink-strong: #c2185b;
   --trend-4: #f6d3e1;
   --trend-3: #eeb0c8;
@@ -62,6 +64,7 @@
     --press: rgba(255, 255, 255, 0.05);
     --pink: #ee7fab;
     --pink-soft: #8a4964;
+    --walk: #3d8bff;
     --pink-strong: #ff8fbd;
     --trend-4: #4a2a37;
     --trend-3: #6e3a50;
@@ -98,6 +101,7 @@
   --pink: #ee7fab;
   --pink-soft: #8a4964;
   --pink-strong: #ff8fbd;
+  --walk: #3d8bff;
   --trend-4: #4a2a37;
   --trend-3: #6e3a50;
   --trend-2: #9a4e6e;
@@ -1791,15 +1795,19 @@ button.quad-box {
   border: 2px solid var(--text-primary);
   color: var(--text-primary);
 }
+/* 통합데스크 V2.0 처럼 (2026-10-25 사장님) — 테두리 = 누구 열쇠: 네이버 예약 흰색(밝은 화면은 검정) · 현장 판매 파랑 · 서비스 키 점선 / 바탕 = 이용 시간 */
 .klive-key.pink {
-  border: 2px solid var(--pink);
+  border: 2px solid var(--text-primary);
   background: var(--pink);
   color: #fff;
 }
 .klive-key.red {
-  border: 2px solid var(--bad);
+  border: 2px solid var(--text-primary);
   background: var(--bad);
   color: #fff;
+}
+.klive-key.walk {
+  border-color: var(--walk);
 }
 .klive-key.svc {
   border-style: dashed;
@@ -1821,6 +1829,9 @@ button.quad-box {
 }
 .klive-legend i.in {
   border: 2px solid var(--text-primary);
+}
+.klive-legend i.walk {
+  border: 2px solid var(--walk);
 }
 .klive-legend i.pink {
   background: var(--pink);
