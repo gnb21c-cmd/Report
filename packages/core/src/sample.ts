@@ -176,14 +176,17 @@ function kidsDay(date: string): { kids: StorePart; naver: DayReport["naver"] } {
   // 키즈 POS 음료 (자판기 칸에 더해짐)
   const juice = Math.round(rand(date + "juice") * 3 * f);
   if (juice) products.push(["딸기쥬스", "기타", juice, juice * 2500]);
+  // 키즈 POS 퇴장 지연 결제 — 휴일만 (평일은 무제한), 기타 화면 '퇴장지연페널티' 칸
+  const late = off ? Math.round(rand(date + "late") * 2) : 0;
+  if (late) products.push(["퇴장시간 + 10~19분 지연", "기타", late, late * 5000]);
   const kids: StorePart = {
     v: 1,
     store: "kids",
     date,
     basis: "receipt",
     file: "체험판",
-    sheetNet: walk * price + extra * 3000 + juice * 2500,
-    posNet: walk * price + extra * 3000 + juice * 2500,
+    sheetNet: walk * price + extra * 3000 + juice * 2500 + late * 5000,
+    posNet: walk * price + extra * 3000 + juice * 2500 + late * 5000,
     voucher: 0,
     sectors: { 바리스타: 0, 베이커리: 0, 키친: 0, 기타: 0 },
     cups: 0,
@@ -192,7 +195,7 @@ function kidsDay(date: string): { kids: StorePart; naver: DayReport["naver"] } {
     hourly: null,
     products,
     refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
-    kids: { issued: naverTotal + walk, walkIn: walk, walkInNet: walk * price, eventFree: event, other: extra * 3000 + juice * 2500, hourly: { issued: issuedH, walkIn: walkH, eventFree: eventH, other: otherH } },
+    kids: { issued: naverTotal + walk, walkIn: walk, walkInNet: walk * price, eventFree: event, other: extra * 3000 + juice * 2500 + late * 5000, hourly: { issued: issuedH, walkIn: walkH, eventFree: eventH, other: otherH } },
   };
   return { kids, naver: { v: 1, date, tickets, newVisitors } };
 }

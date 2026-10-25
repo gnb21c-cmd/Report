@@ -123,9 +123,10 @@ export function isKidsCoupon(line: Pick<SaleLine, "name" | "net">): boolean {
    카페: 생맥주(C3 필스너 · C5 바이젠 · C7 페일에일) · 상품권 판매 → 바리스타, 폭립할인(−) → 키친
          원두 · 드립백 · 콜드브루 원액('[원두200g]…' · '[드립백]…' · '[원액500ml]…' — 잔은 아님) → 바리스타, 흑미로만든수수부꾸미(빵) → 베이커리 (2026-10-14)
          상품권(1만원권) 사용 '[종이쿠폰]만원권'(−) → 그날 바리스타에서 뺌 (giftUse — 판 날 이미 바리스타 매출로 잡았으므로)
-   키즈: 음료(쥬스 · 우유 · 생수) · 자판기상품 → 자판기 매출, 퇴장 지연(이름이 '02.51-03.00' 같은 시각 칸인 것 포함) · 열쇠 분실 · 인원추가 → 키즈입장료
+   키즈: 음료(쥬스 · 우유 · 생수) · 자판기상품 → 자판기 매출, 열쇠 분실 · 인원추가 → 키즈입장료
+         퇴장 지연(이름이 '02.51-03.00' 같은 시각 칸인 것 포함) → 기타 상자 안 '퇴장지연페널티' 칸 (2026-10-25 사장님 — 예전엔 키즈입장료)
    대관은 따로 (metrics 의 rental) */
-export type EtcMove = "바리스타" | "베이커리" | "키친" | "자판기" | "키즈입장료";
+export type EtcMove = "바리스타" | "베이커리" | "키친" | "자판기" | "키즈입장료" | "퇴장지연";
 export function etcMove(store: StoreId, name: string): EtcMove | null {
   const n = name || "";
   if (store === "cafe") {
@@ -138,7 +139,7 @@ export function etcMove(store: StoreId, name: string): EtcMove | null {
   }
   if (/대관/.test(n)) return null;
   if (/쥬스|주스|우유|생수|자판기상품/.test(n)) return "자판기";
-  if (/지연/.test(n) || /^\s*\d{1,2}[.:]\d{2}\s*-\s*\d{1,2}[.:]\d{2}\s*$/.test(n)) return "키즈입장료";
+  if (/지연/.test(n) || /^\s*\d{1,2}[.:]\d{2}\s*-\s*\d{1,2}[.:]\d{2}\s*$/.test(n)) return "퇴장지연";
   if (/열쇠/.test(n)) return "키즈입장료";
   if (/추가/.test(n)) return "키즈입장료";
   return null;

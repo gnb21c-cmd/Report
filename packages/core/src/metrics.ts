@@ -5,7 +5,8 @@
    - 바리스타 · 베이커리 · 키친 = 카페아스타나 분류별 실매출
    - 기타 = 카페아스타나 기타 + 아스타나키즈 입장권 외 매출 + 자판기 · 인생네컷 · 주차
      기타로 잡히던 상품 중 사장님이 정한 것은 옮김 (rules.etcMove): 맥주 · 상품권 · 원두 · 드립백 · 콜드브루 원액 → 바리스타, 수수부꾸미(빵) → 베이커리, 폭립할인 → 키친,
-     키즈 음료 · 자판기상품 → 자판기, 키즈 퇴장 지연 · 열쇠 분실 · 인원추가 → 키즈입장료. 상품권 사용액은 그날 바리스타에서 뺌
+     키즈 음료 · 자판기상품 → 자판기, 키즈 열쇠 분실 · 인원추가 → 키즈입장료. 상품권 사용액은 그날 바리스타에서 뺌
+     키즈 퇴장 지연은 기타 상자에 그대로 두고 따로 셈 (kidsLate — 기타 화면 '퇴장지연페널티' 칸, 2026-10-25 사장님)
    - 키즈입장료 = (네이버 입장권 + 현장 입장권) × 그날 단가 (평일 12,000 / 휴일 14,000)
        · 네이버 입장권 = A 에 넣은 시간대별 판매 입장권 합. 아직 안 넣은 날은 키즈 POS 로 추정 (0원 입장 발행 − 현장)
        · 현장 입장권 = 키즈 POS 에서 돈을 받은 입장권 (반품은 지워짐)
@@ -96,8 +97,10 @@ export interface Metrics {
   eventFree: number;
   fee: { naver: number; walkIn: number };
   kidsOtherNet: number;
-  /** 키즈 POS 의 퇴장 지연 · 열쇠 분실 · 인원추가 — 기타에서 키즈입장에 옮긴 금액 */
+  /** 키즈 POS 의 열쇠 분실 · 인원추가 — 기타에서 키즈입장에 옮긴 금액 */
   kidsFees: number;
+  /** 키즈 POS 의 퇴장 지연 결제 ('퇴장시간 + 10~19분 지연' 등) — 기타 상자 안, 기타 화면 '퇴장지연페널티' 칸 (2026-10-25 사장님) */
+  kidsLate: number;
   /** 상품권 1만원권 사용 — 그날 바리스타에서 뺀 금액 */
   giftUse: number;
   /** 대관 (어린이집 · 유치원 등) — 키즈 POS '대관' 상품 + 통장 대관 입금, 키즈입장에 더함 */
@@ -133,6 +136,7 @@ function empty(from: string, to: string): Metrics {
     fee: { naver: 0, walkIn: 0 },
     kidsOtherNet: 0,
     kidsFees: 0,
+    kidsLate: 0,
     giftUse: 0,
     rental: 0,
     extra: { vending: 0, photo: 0, parking: 0 },
@@ -282,18 +286,21 @@ export class Board {
         for (const p of kids.products || []) if (/대관/.test(p[0]) && p[1] === "기타") rent += p[3];
         m.rental += rent;
         if (sales) {
-          // 기타 중 음료 · 자판기상품 → 자판기, 퇴장 지연 · 열쇠 · 인원추가 → 키즈입장료
+          // 기타 중 음료 · 자판기상품 → 자판기, 열쇠 · 인원추가 → 키즈입장료, 퇴장 지연은 기타 그대로 (따로 셈)
           let vend = 0;
           let fees = 0;
+          let late = 0;
           for (const p of kids.products || []) {
             if (p[1] !== "기타" && p[1] !== "추가인원") continue;
             const to = etcMove("kids", p[0]);
             if (to === "자판기") vend += p[3];
             else if (to === "키즈입장료") fees += p[3];
+            else if (to === "퇴장지연") late += p[3];
           }
           m.extra.vending += vend;
           m.kidsFees += fees;
-          m.kidsOtherNet += k.other - rent - vend - fees;
+          m.kidsLate += late;
+          m.kidsOtherNet += k.other - rent - vend - fees - late;
           m.box.기타 += k.other - rent - vend - fees;
         }
       }
@@ -363,6 +370,7 @@ export class Board {
       m.fee.walkIn += x.fee.walkIn;
       m.kidsOtherNet += x.kidsOtherNet;
       m.kidsFees += x.kidsFees;
+      m.kidsLate += x.kidsLate;
       m.giftUse += x.giftUse;
       m.rental += x.rental;
       for (const k of EXTRA_KINDS) m.extra[k] += x.extra[k];
@@ -691,6 +699,7 @@ function weekdayIndex(key: string): number {
 
 /* ---------- 기타 화면 — 박스를 누르면 나오는 목록 (2026-10-14 사장님) ----------
    자판기 · 네컷사진 · 주차료: 카드 단말기 건별 [시각, 금액] — 최근 것이 맨 위 (자판기는 키즈 POS 음료 · 자판기 상품도 따로)
+   퇴장지연페널티: 키즈 POS 퇴장 지연 상품별 개수 · 금액 (2026-10-25 사장님)
    매장 소액 기타: 상품별 개수 · 금액 — 카페 POS 기타 상품 + 키즈 POS 기타 중 옮기지 않은 것 (대관 · 음료 · 지연 · 열쇠 · 인원추가는 다른 칸) */
 export interface EtcProduct {
   name: string;
@@ -703,6 +712,8 @@ export interface EtcDetail {
   card: Record<ExtraKind, ExtraItem[] | null>;
   /** 키즈 POS 음료 · 자판기 상품 — 자판기 칸에 더해짐 (키즈 매출을 잡는 2026-04 부터) */
   kidsVend: EtcProduct[];
+  /** 키즈 POS 퇴장 지연 상품 — 기타 화면 '퇴장지연페널티' 칸 (키즈 매출을 잡는 2026-04 부터) */
+  late: EtcProduct[];
   /** 매장 소액 기타 상품 — 금액 많은 순 */
   small: EtcProduct[];
 }
@@ -715,6 +726,7 @@ export function etcDetail(board: Board, date: string): EtcDetail {
   }
   const small = new Map<string, EtcProduct>();
   const vend = new Map<string, EtcProduct>();
+  const late = new Map<string, EtcProduct>();
   const add = (to: Map<string, EtcProduct>, store: StoreId, p: ProductTuple) => {
     const key = `${store}|${p[0]}`;
     const x = to.get(key) || { name: p[0], store, qty: 0, net: 0 };
@@ -729,8 +741,9 @@ export function etcDetail(board: Board, date: string): EtcDetail {
       if (p[1] === "기타" && /대관/.test(p[0])) continue;
       const to = etcMove("kids", p[0]);
       if (to === "자판기") add(vend, "kids", p);
+      else if (to === "퇴장지연") add(late, "kids", p);
       else if (!to) add(small, "kids", p);
     }
   const order = (xs: Map<string, EtcProduct>) => [...xs.values()].sort((a, b) => b.net - a.net || b.qty - a.qty || a.name.localeCompare(b.name, "ko"));
-  return { card, kidsVend: order(vend), small: order(small) };
+  return { card, kidsVend: order(vend), late: order(late), small: order(small) };
 }

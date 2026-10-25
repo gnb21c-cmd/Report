@@ -54,7 +54,7 @@ const tip = (i: number) => `${HOURS[i]}시 ~ ${HOURS[i] + 1}시`;
 const TREND_COLORS = ["var(--trend-4)", "var(--trend-3)", "var(--trend-2)", "var(--trend-1)", "var(--pink-strong)"];
 
 export function SectorDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
-  // 기타는 시간대 · 분석 없이 매출 분류만 (자판기 · 인생네컷 · 주차 · 매장 소액 기타)
+  // 기타는 시간대 · 분석 없이 매출 분류만 (자판기 · 인생네컷 · 주차 · 퇴장지연페널티 · 매장 소액 기타)
   if (props.box === "기타") return <EtcDetail {...props} />;
   return <SalesDetail {...props} />;
 }
@@ -264,9 +264,10 @@ function kidsFormula(m: Metrics, date: string): string {
     : `교환권 방식(26년 3월까지) — 네이버 ${count(Math.round(m.fee.naver / 30000), "장")} × 3만원 + 현장 ${won(m.fee.walkIn)} − 카페 교환권 사용 ${won(m.kidsCoupon)} = 키즈입장 ${won(m.box.키즈입장료)}`;
 }
 
-/** 기타 — 그날 자판기 · 인생네컷 · 주차료 · 매장 소액 기타, 아래 회색 글씨 = 1/1 ~ 마감일 누적
-    박스를 누르면 아래에서 올라오는 목록: 자판기 · 네컷사진 · 주차료 = 몇 시에 얼마(최근 것이 맨 위), 매장 소액 기타 = 상품별 개수 · 금액 */
-type EtcKey = ExtraKind | "small";
+/** 기타 — 그날 자판기 · 인생네컷 · 주차료 · 퇴장지연페널티 · 매장 소액 기타, 아래 회색 글씨 = 1/1 ~ 마감일 누적
+    퇴장지연페널티 = 키즈 POS 로 실제 결제한 퇴장 지연 (2026-10-25 사장님 — 주차료와 매장 소액 기타 사이, 예전엔 키즈입장에 들어 있었음)
+    박스를 누르면 아래에서 올라오는 목록: 자판기 · 네컷사진 · 주차료 = 몇 시에 얼마(최근 것이 맨 위), 퇴장지연페널티 · 매장 소액 기타 = 상품별 개수 · 금액 */
+type EtcKey = ExtraKind | "late" | "small";
 function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & Nav) {
   const { board, date } = props;
   const m = board.day(date);
@@ -274,11 +275,12 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
   const pw = board.day(addWeek(date, -1));
   const lists = useMemo(() => etcDetail(board, date), [board, date]);
   const [sheet, setSheet] = useState<EtcKey | null>(null);
-  const small = (x: Metrics) => x.box.기타 - extraTotal(x.extra);
+  const small = (x: Metrics) => x.box.기타 - extraTotal(x.extra) - x.kidsLate;
   const rows: { id: EtcKey; label: string; day: number; ytd: number }[] = [
     { id: "vending", label: "자판기", day: m.extra.vending, ytd: y.extra.vending },
     { id: "photo", label: "네컷사진", day: m.extra.photo, ytd: y.extra.photo },
     { id: "parking", label: "주차료", day: m.extra.parking, ytd: y.extra.parking },
+    { id: "late", label: "퇴장지연페널티", day: m.kidsLate, ytd: y.kidsLate },
     { id: "small", label: "매장 소액 기타", day: small(m), ytd: small(y) },
   ];
   const per = `${date.slice(2, 4)}년 1월 1일 ~ ${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일`;
@@ -298,7 +300,7 @@ function EtcDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } & N
           ))}
         </div>
         <p className="note center-note">
-          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 = 카드 단말기 승인(나이스 · KIS) + 키즈 POS 음료 · 자판기 상품 · 네컷사진 · 주차료 = 카드 단말기 승인 · 매장 소액 기타 = 카페 POS 기타 상품 · 박스를 누르면 목록
+          {per} 기타 매출 합계 {won(y.box.기타)} · 자판기 = 카드 단말기 승인(나이스 · KIS) + 키즈 POS 음료 · 자판기 상품 · 네컷사진 · 주차료 = 카드 단말기 승인 · 퇴장지연페널티 = 키즈 POS 퇴장 지연 결제 · 매장 소액 기타 = 카페 POS 기타 상품 · 박스를 누르면 목록
         </p>
       </main>
       {sheet && open && <EtcSheet k={sheet} label={open.label} total={open.day} date={date} lists={lists} onClose={() => setSheet(null)} />}
@@ -328,12 +330,12 @@ const hm = (t: string) => t.slice(0, 5);
 /** 아래에서 올라오는 목록 — 카드 단말기 칸은 몇 시에 얼마 (최근 것이 맨 위), 매장 소액 기타는 상품별 */
 function EtcSheet({ k, label, total, date, lists, onClose }: { k: EtcKey; label: string; total: number; date: string; lists: EtcLists; onClose: () => void }) {
   const today = !!useLive()?.today;
-  const products = (xs: EtcLists["small"], storeTag: boolean) => (
+  const products = (xs: EtcLists["small"], storeTag: boolean, unit = "개") => (
     <table className="bread-tbl etc-tbl">
       <thead>
         <tr>
           <th>상품</th>
-          <th className="num">개수</th>
+          <th className="num">{unit === "건" ? "건수" : "개수"}</th>
           <th className="num">금액</th>
         </tr>
       </thead>
@@ -344,7 +346,7 @@ function EtcSheet({ k, label, total, date, lists, onClose }: { k: EtcKey; label:
               {x.name}
               {storeTag && x.store === "kids" && <span className="muted"> · 키즈</span>}
             </td>
-            <td className="num">{count(x.qty, "개")}</td>
+            <td className="num">{count(x.qty, unit)}</td>
             <td className="num">{won(x.net)}</td>
           </tr>
         ))}
@@ -352,14 +354,24 @@ function EtcSheet({ k, label, total, date, lists, onClose }: { k: EtcKey; label:
       <tfoot>
         <tr>
           <td>합계 {xs.length}종</td>
-          <td className="num">{count(xs.reduce((a, x) => a + x.qty, 0), "개")}</td>
+          <td className="num">{count(xs.reduce((a, x) => a + x.qty, 0), unit)}</td>
           <td className="num">{won(xs.reduce((a, x) => a + x.net, 0))}</td>
         </tr>
       </tfoot>
     </table>
   );
   let body: ReactNode;
-  if (k === "small") {
+  if (k === "late") {
+    const xs = lists.late;
+    body = xs.length ? (
+      <>
+        {products(xs, false, "건")}
+        <p className="note muted">키즈 POS 로 실제 결제한 '퇴장시간 + ○○분 지연' 상품 · 통합데스크 표시 금액은 넣지 않음</p>
+      </>
+    ) : (
+      <p className="empty">이날은 퇴장 지연 결제가 없습니다.</p>
+    );
+  } else if (k === "small") {
     const xs = lists.small;
     body = xs.length ? (
       <>
