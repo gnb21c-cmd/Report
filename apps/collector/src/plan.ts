@@ -11,12 +11,13 @@
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    - 규칙이 바뀌었을 때(2026-10-16 매진 목표 20:40) 이미 센 주간 잠정안에 같은 요일 칸만 다시: PLAN_RESTEP=1 · PLAN_TODAY = 그 주간안을 센 목요일
      예측(base) · 매니저 잠정 확정 · 있던 최종안은 그대로 (최종안은 3일 전에 잠정 확정 ±10% 안에서 새 칸을 씀)
-   - 새 빵(명란소금빵, 2026-10-25 · core bakery.ts NEW_BREAD): 목요일 주간안 때 이번 주 주간안의 매진 더하기 + 지난 7일 결과(평일 3일 이상 매진 +3 · 계획에 든 휴일 모두 매진 +6)
+   - 새 빵(명란소금빵, 2026-10-25 · core bakery.ts NEW_BREAD): 처음 4주는 그날 소보로팥소금빵과 같은 수량 (매진 더하기 없음)
+   - 팥앙금샌드는 10-29 ~ 11-01 최종안만 평일 12 · 휴일 16 으로 정해 둠 (core bakery.ts FIXED_QTY) — 11-02 주간안부터는 판매로 예측
    - 팥앙금샌드 4개 단위를 정한 날(2026-10-25) — 지금 나가 있는 계획 · 확정에 올림만: PLAN_UNIT_FIX=1 (내일 ~ 8일 뒤, 그 빵만 · 다른 빵 · 합계 범위 그대로)
      매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (core roundUnitOrder)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, dayKind, dayRange, dayResult, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, NEW_BREAD, newBreadNext, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type NewBreadAdd, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, dayRange, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writeOrders, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -148,26 +149,7 @@ async function main() {
       }
       const steps: Record<string, Record<string, number>> = {};
       for (const d of weekDates(today)) steps[d] = await stepsFor(d, wBoard, wAsOf);
-      // 새 빵(명란소금빵) 매진 더하기 = 이번 주 주간안의 더하기 + 지난 7일 결과 (기록에는 빵 이름 대신 개수만)
-      const adds: Record<string, NewBreadAdd> = {};
-      for (const [name, rule] of Object.entries(NEW_BREAD)) {
-        const prev: NewBreadAdd = { weekday: 0, holiday: 0 };
-        for (const d of weekDates(addDays(today, -7))) {
-          const it = (await docsOf(d)).plan?.week?.items.find((i) => i.name === name);
-          if (it?.add) prev[dayKind(d) === "휴일" ? "holiday" : "weekday"] = it.add;
-        }
-        const results: { date: string; made: number | null; sold: number }[] = [];
-        for (const d of dayRange(addDays(wAsOf, -6), wAsOf)) {
-          const x = await docsOf(d);
-          if (!x.plan) continue;
-          const r = dayResult(wBoard, d, x.plan, x.order).find((y) => y.name === name);
-          if (r) results.push({ date: d, made: r.made, sold: r.sold });
-        }
-        adds[name] = newBreadNext(prev, results, rule);
-        const planned = results.filter((r) => (r.made || 0) > 0);
-        console.log(`새 빵: 지난 7일 계획 ${planned.length}일 · 매진 ${planned.filter((r) => r.sold >= (r.made || 0)).length}일 → 쌓인 더하기 평일 +${adds[name].weekday} · 휴일 +${adds[name].holiday}`);
-      }
-      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps, adds)) {
+      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps)) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
       }
