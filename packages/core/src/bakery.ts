@@ -327,21 +327,24 @@ export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo
 
 /* ---------- 새 빵 (2026-10-25 사장님) — 명란소금빵 ----------
    10-24 부터 POS 에서 팔기 시작(생산 계획 없이 만들어 거의 매일 매진) → 10-29(목) 발표 11-02 ~ 주간안부터 계획에 넣음 (그 전 날짜 계획에는 안 넣음)
-   - 처음 4주(첫 판매부터 28일 실적이 쌓일 때까지) 하루 수량 = 그날 소보로팥소금빵 수량과 같음 (사장님 말씀 '단팥소금빵' — POS 에는 소보로팥소금빵)
-     주간안은 주간안의 소보로팥소금빵, 최종안(3일 전)은 최종안의 소보로팥소금빵과 같게 · 매니저가 잠정 확정 때 명란을 고쳤으면 그 수량 그대로
+   - 처음 4주(첫 판매부터 28일 실적이 쌓일 때까지) 하루 수량 = 그날 소보로팥소금빵 수량의 80% (반올림 · 적어도 1개)
+     (사장님 말씀 '단팥소금빵' — POS 에는 소보로팥소금빵 · 처음엔 같은 수량이었으나 인기가 없을 수 있어 약간 보수적으로, 2026-10-25)
+     주간안은 주간안의, 최종안(3일 전)은 최종안의 소보로팥소금빵으로 · 매니저가 잠정 확정 때 명란을 고쳤으면 그 수량 그대로
      같은 요일 ±1 칸 · 매진 더하기는 쓰지 않음 (처음엔 소금빵 1/3 · 매진이면 평일 +3 · 휴일 +6 이었으나 같은 날 사장님이 바꿈)
    - 28일 실적이 쌓이면 다른 빵처럼 판매 추이로 (breadPlan)
    - 평일 하루 합계 300 ~ 320 범위 밖에 따로 (그 수량 그대로 더함 — fitTotal) */
 export interface NewBreadRule {
   /** 계획에 넣는 첫 날 */
   from: string;
-  /** 처음 4주 동안 같은 수량으로 맞추는 빵 */
+  /** 처음 4주 동안 수량을 따라가는 빵 */
   same: string;
+  /** 따라가는 빵 수량에 곱하는 비율 (반올림 · 적어도 1개) */
+  ratio: number;
   /** 첫 판매부터 이만큼(일) 실적이 쌓이면 판매 추이로 */
   learnDays: number;
 }
 export const NEW_BREAD: Readonly<Record<string, NewBreadRule>> = {
-  명란소금빵: { from: "2026-11-02", same: "소보로팥소금빵", learnDays: 28 },
+  명란소금빵: { from: "2026-11-02", same: "소보로팥소금빵", ratio: 0.8, learnDays: 28 },
 };
 /** 평일 합계 범위 밖에 따로 두는 빵 */
 const bandOutside = (name: string) => name in NEW_BREAD;
@@ -361,10 +364,13 @@ export function newBreadEarly(board: Board, name: string, asOf: string): boolean
   return !f || dayRange(f, asOf).length < rule.learnDays;
 }
 
-/** 그날 목록에서 같은 수량으로 맞추는 빵의 수량 (옛 이름도 · 없으면 0) */
-const sameQty = (items: readonly PlanItem[], rule: NewBreadRule) => items.find((i) => breadNewName(i.name) === rule.same)?.qty ?? 0;
+/** 그날 목록에서 따라가는 빵 수량 × 비율 (옛 이름도 · 반올림, 따라가는 빵이 있으면 적어도 1개 · 없으면 0) */
+const sameQty = (items: readonly PlanItem[], rule: NewBreadRule) => {
+  const q = items.find((i) => breadNewName(i.name) === rule.same)?.qty ?? 0;
+  return q > 0 ? Math.max(1, Math.round(q * rule.ratio)) : 0;
+};
 
-/** 그날 계획에 새 빵 넣기 — 넣는 날 전이면 빼고, 처음 4주면 같은 빵 수량(범위 밖), 그 뒤면 판매 추이 그대로 */
+/** 그날 계획에 새 빵 넣기 — 넣는 날 전이면 빼고, 처음 4주면 따라가는 빵 수량 × 비율(범위 밖), 그 뒤면 판매 추이 그대로 */
 function withNewBread(board: Board, items: PlanItem[], asOf: string, date: string): PlanItem[] {
   let out = items;
   for (const [name, rule] of Object.entries(NEW_BREAD)) {
@@ -403,7 +409,7 @@ function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: strin
     return { name: it.name, qty: snapUnit(it.name, base + k * breadUnit(it.name), undefined, undefined, date), base, ...(k ? { step: k } : {}) };
   });
   const fitted = band ? fitTotal(raw, band[0], band[1], date) : raw;
-  // 새 빵(명란소금빵) — 다른 빵을 범위에 맞춘 뒤 그날 소보로팥소금빵과 같은 수량 (범위 밖)
+  // 새 빵(명란소금빵) — 다른 빵을 범위에 맞춘 뒤 그날 소보로팥소금빵의 80% (범위 밖)
   const items = withNewBread(board, fitted, asOf, date);
   return { madeOn, asOf, kind: p.visitors.kind, visitors: p.visitors.value, weather: p.visitors.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(boost !== 1 ? { boost } : {}), ...(band ? { band } : {}) };
 }
@@ -464,7 +470,7 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
     const q = order?.provisional?.[name]?.qty;
     return q != null && q !== weekQty.get(name) ? q : null;
   };
-  // 새 빵 처음 4주 — 최종안의 같은 빵(소보로팥소금빵)과 같게 (아래에서 범위 맞춘 뒤), 매니저가 고쳤으면 그 수량
+  // 새 빵 처음 4주 — 최종안의 따라가는 빵(소보로팥소금빵) × 비율 (아래에서 범위 맞춘 뒤), 매니저가 고쳤으면 그 수량
   const early = new Set(names.filter((n) => NEW_BREAD[n] && newBreadEarly(board, n, asOf)));
   const items: PlanItem[] = names
     .map((name) => {
@@ -488,7 +494,7 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
     .sort((x, y) => y.qty - x.qty || x.name.localeCompare(y.name, "ko"));
   // 평일 하루 합계 범위 — 잠정 ±10% 로 묶은 뒤에도 300 ~ 320 안으로 (새 빵은 범위 밖)
   const banded = now.band ? fitTotal(items, now.band[0], now.band[1], date) : items;
-  // 새 빵 처음 4주 — 범위 맞춘 최종안의 같은 빵 수량으로 (매니저가 고친 수량 · 같은 빵이 없는 날은 그대로)
+  // 새 빵 처음 4주 — 범위 맞춘 최종안의 따라가는 빵 수량 × 비율 (매니저가 고친 수량 · 따라가는 빵이 없는 날은 그대로)
   const fitted = banded.map((i) => {
     if (!early.has(i.name) || edited(i.name) != null) return i;
     const q = sameQty(banded, NEW_BREAD[i.name]);
