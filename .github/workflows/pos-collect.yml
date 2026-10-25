@@ -54,7 +54,8 @@ jobs:
   collect:
     needs: check
     if: needs.check.outputs.done != '1'
-    runs-on: ubuntu-latest
+    # 우분투 버전을 못 박음 — ubuntu-latest 가 26.04 로 바뀐 2026-10-25 아침, 크롬 자동 조종(Playwright 1.56)이 설치되지 않아 수집이 멈춤
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
