@@ -95,6 +95,8 @@ jobs:
           NICE_PROBE: ${{ (github.event_name == 'push' || inputs.probe) && '1' || '' }}
           NICE_ID: ${{ secrets.NICE_ID }}
           NICE_PW: ${{ secrets.NICE_PW }}
+          # 나이스가 받아 주지 않은 아이디 · 비밀번호 표시(HMAC) — 같은 비밀번호로 다시 로그인하지 않게 (계정 잠김 막기 · POS PC 도구 폴더)
+          NICE_STATE_DIR: ${{ runner.tool_cache }}\nice-login
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}

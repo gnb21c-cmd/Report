@@ -29,8 +29,11 @@ const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "
 
 /** 글자 · 단추(input value 포함) 이름으로 — 띄어쓰기 · 줄바꿈 무시 */
 const loose = (t: string) => new RegExp(`^\\s*${t.split("").filter((c) => c.trim()).map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*")}\\s*$`);
-/** 로그인 화면 위 창이 이런 내용이면 더 하지 않고 멈춤 (비밀번호 틀림 · 잠김 · 비밀번호 변경 · 추가 인증) */
-const LOGIN_STOP = /일치하지|틀렸|틀립|잘못|오류|실패|잠금|잠겼|잠김|횟수|초과|만료|변경|인증|승인|차단|등록되지/;
+/** 로그인 화면 위 창이 이런 내용이면 더 하지 않고 멈춤 (비밀번호 틀림 · 잠김 · 비밀번호 변경 · 추가 인증)
+    2026-10-24 ~ 나이스 알림 "로그인 정보를 확인하세요." = 아이디 · 비밀번호가 맞지 않음 */
+const LOGIN_STOP = /로그인 ?정보|일치하지|틀렸|틀립|잘못|오류|실패|잠금|잠겼|잠김|횟수|초과|만료|변경|인증|승인|차단|등록되지/;
+/** 나이스가 로그인을 받아 주지 않음 (아이디 · 비밀번호 틀림 · 잠김 등) — 같은 비밀번호로 다시 넣지 않게 (extra.ts) */
+export class NiceLoginRefused extends Error {}
 /** 공개 기록용 — 아이디 · 메일 · '…님'(이름) · 숫자를 가림 */
 const hide = (t: string, id: string) =>
   (id ? t.split(id).join("(아이디)") : t)
@@ -239,7 +242,7 @@ export class Nibs {
       const pop = await this.loginPopup(id);
       if (pop) {
         say(`[로그인 화면 위 창] ${pop}`);
-        if (LOGIN_STOP.test(pop)) throw new Error(`로그인 안 됨 — 나이스 창: ${pop}`);
+        if (LOGIN_STOP.test(pop)) throw new NiceLoginRefused(`로그인 안 됨 — 나이스 창: ${pop}`);
         const ok = await this.visible((f) => byName(f, "확인"));
         if (ok) await ok.click({ timeout: 5000 }).catch(() => {});
       } else {
@@ -294,9 +297,14 @@ export class Nibs {
         .evaluate(`(() => {
           const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none"; };
           const out = [];
-          for (const el of document.querySelectorAll("[class*=w2window],[class*=w2popup],[class*=popup],[class*=Popup],[class*=modal],[class*=Modal],[role=dialog],[role=alertdialog],[class*=alert],[class*=Alert]")) {
-            const t = (el.innerText || "").trim();
-            if (t && vis(el) && !out.includes(t)) out.push(t.slice(0, 160));
+          // 알림창 먼저 — 없으면 떠 있는 창 (로그인 칸이 든 바탕 창은 뺌)
+          for (const sel of ["[class*=alert],[class*=Alert],[role=alertdialog]", "[class*=w2window],[class*=w2popup],[class*=popup],[class*=Popup],[class*=modal],[class*=Modal],[role=dialog]"]) {
+            for (const el of document.querySelectorAll(sel)) {
+              if (el.querySelector("input[type=password]")) continue;
+              const t = (el.innerText || "").trim();
+              if (t && vis(el) && !out.some((x) => x.includes(t.slice(0, 160)))) out.push(t.slice(0, 160));
+            }
+            if (out.length) break;
           }
           if (!out.length)
             for (const b of document.querySelectorAll("button,a,input[type=button],input[type=submit],[role=button]")) {
