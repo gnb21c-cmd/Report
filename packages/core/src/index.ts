@@ -18,6 +18,7 @@ export * from "./cash";
 export * from "./extra";
 export * from "./settings";
 export * from "./forecast";
+export * from "./breadNames";
 export * from "./bakery";
 export * from "./live";
 export * from "./survey";

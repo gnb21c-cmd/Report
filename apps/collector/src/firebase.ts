@@ -87,6 +87,15 @@ export async function writePlans(fb: Fb, plans: { date: string; json: string }[]
   await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
 }
 
+/** 매니저 확정 수량 고치기 — orders/{날짜} (매니저 앱과 같은 모양: date · at · json). 지금 나간 명령서에 올림 단위를 넣을 때만 (2026-10-25 PLAN_UNIT_FIX) */
+export async function writeOrders(fb: Fb, orders: { date: string; json: string }[]): Promise<void> {
+  if (!orders.length) return;
+  const root = `projects/${fb.projectId}/databases/(default)/documents/boards/${fb.board}`;
+  const now = new Date().toISOString();
+  const writes = orders.map((o) => ({ update: { name: `${root}/orders/${o.date}`, fields: { date: str(o.date), at: { timestampValue: now }, json: str(o.json) } } }));
+  await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes }) });
+}
+
 /** 마감 전 영업정보 읽기 — live/{날짜} (없으면 null). 칸 cafe · kids · naver = 조각 JSON {p, by, at} */
 export async function readLive(fb: Fb, date: string): Promise<LiveDoc | null> {
   let doc: any;

@@ -41,6 +41,10 @@ on:
         description: "이미 센 주간 잠정안에 올림 단위(시나몬롤 10 · 우유모닝빵 2) · 평일 합계 범위만 다시 (날짜 = 그 주간안을 센 목요일)"
         type: boolean
         default: false
+      unitfix:
+        description: "지금 나간 계획 · 확정에 팥앙금샌드 4개 단위 올림만 (내일 ~ 8일 뒤 · 매니저가 고친 수량은 그대로, 2026-10-25)"
+        type: boolean
+        default: false
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -68,6 +72,7 @@ jobs:
           PLAN_DRY: ${{ steps.when.outputs.dry }}
           PLAN_RESTEP: ${{ inputs.restep == true && '1' || '' }}
           PLAN_REROUND: ${{ inputs.reround == true && '1' || '' }}
+          PLAN_UNIT_FIX: ${{ inputs.unitfix == true && '1' || '' }}
           # 목요일 새벽 예약(UTC 수요일, '* * 3'으로 끝남) · 직접 실행의 '주간 잠정안만' → 주간안만 셈
           PLAN_MODE: ${{ ((github.event_name == 'schedule' && endsWith(github.event.schedule, '* * 3')) || inputs.week_only == true) && 'week' || '' }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}

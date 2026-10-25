@@ -558,6 +558,15 @@ tr.sum td {
   width: 100%;
   padding: 11px;
 }
+/* 이름이 바뀌기 전 날짜 — 옛 이름 아래 (변경명칭:새 이름) (2026-10-25) */
+small.rename {
+  display: block;
+  font-size: 0.72em;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.2;
+  white-space: normal;
+}
 .row .name .unit {
   color: var(--accent);
   font-weight: 600;

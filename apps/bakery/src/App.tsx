@@ -10,6 +10,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   addDays,
   Board,
+  breadLabel,
+  breadNameOn,
+  breadNewName,
   CONFIRM_DEADLINE,
   count,
   dayResult,
@@ -43,6 +46,19 @@ import {
 import { cloudApi, CloudError, demoApi, demoWorkApi, floorApi, login, logout, session, tabletKey, workApi, workerKey, workerUrl, type Api, type Kind } from "./data";
 import { Worker } from "./Worker";
 import { finalImage, qrImage, qrSvg, saveImage, shareImage, weekImage, type ImgRow } from "./image";
+
+/** 빵 이름 — 이름이 바뀌기 전 날짜(11-01 까지)는 옛 이름 아래에 (변경명칭:새 이름) (2026-10-25 사장님, core breadNames.ts) */
+function BreadName({ name, date }: { name: string; date: string }) {
+  const label = breadLabel(name, date);
+  const i = label.indexOf(" (변경명칭:");
+  if (i < 0) return <>{name}</>;
+  return (
+    <>
+      {label.slice(0, i)}
+      <small className="rename">{label.slice(i + 1)}</small>
+    </>
+  );
+}
 
 export function App() {
   if (__DEMO__) return <Demo />;
@@ -246,8 +262,12 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
         for (const it of p?.week?.items || []) tot.set(it.name, (tot.get(it.name) || 0) + (o?.provisional[it.name]?.qty ?? it.qty));
         for (const [n, l] of Object.entries(o?.provisional || {})) if (!tot.has(n)) tot.set(n, l.qty);
       }
-      const names = sortBread([...tot.keys()], (n) => n);
-      const get = (d: string, n: string) => {
+      const keys = sortBread([...tot.keys()], (n) => n);
+      // 그림에는 표기 이름 (11-01 까지 옛 이름 (변경명칭:새 이름)) — 수량은 원래 이름으로 찾음
+      const keyOf = new Map(keys.map((n) => [breadLabel(n, dates[0]), n]));
+      const names = [...keyOf.keys()];
+      const get = (d: string, label: string) => {
+        const n = keyOf.get(label)!;
         const x = docs.find((y) => y.d === d)!;
         const c = x.o?.provisional[n];
         if (c) return { qty: c.qty, pending: false };
@@ -367,7 +387,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const shareFinal = async () => {
     setBusy("img");
     try {
-      const list: ImgRow[] = rows.map((r) => ({ name: r.name, qty: done[r.name]?.qty ?? r.qty, pending: !done[r.name] })).filter((r) => r.qty > 0);
+      const list: ImgRow[] = rows.map((r) => ({ name: breadLabel(r.name, date), qty: done[r.name]?.qty ?? r.qty, pending: !done[r.name] })).filter((r) => r.qty > 0);
       const b = await finalImage(date, list, who);
       setMsg(await shareImage(b, `최종생산_${date}.png`, `${shortLabel(date)} 최종 생산 지시`));
     } catch (e) {
@@ -439,7 +459,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
             return (
               <div key={r.name} className={`row${c ? " done" : ""}${kind === "final" ? " fin" : ""}`}>
                 <span className="name">
-                  {r.name}
+                  <BreadName name={r.name} date={date} />
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
                   {r.lo != null && (
                     <small className="muted">
@@ -552,7 +572,7 @@ function OrderView({ api }: { api: Api }) {
           </h2>
           {s.err && <p className="error">{s.err}</p>}
           {s.loaded && !rows.length && !s.err && <p className="empty">작업지시가 없는 날입니다.</p>}
-          <OrderList rows={rows} big={false} />
+          <OrderList rows={rows} date={d} big={false} />
         </section>
       ))}
       <section className="card">
@@ -566,7 +586,7 @@ function OrderView({ api }: { api: Api }) {
   );
 }
 
-function OrderList({ rows, big }: { rows: OrderRow[]; big: boolean }) {
+function OrderList({ rows, date, big }: { rows: OrderRow[]; date: string; big: boolean }) {
   const list = rows.filter((r) => r.state === "확정 전" || (r.qty || 0) > 0);
   if (!list.length) return null;
   const total = list.reduce((a, r) => a + (r.qty || 0), 0);
@@ -574,7 +594,9 @@ function OrderList({ rows, big }: { rows: OrderRow[]; big: boolean }) {
     <div className={`order${big ? " big" : ""}`}>
       {list.map((r) => (
         <div key={r.name} className={`order-row s-${r.state === "확정" ? "ok" : r.state === "자동" ? "auto" : "wait"}`}>
-          <span className="name">{r.name}</span>
+          <span className="name">
+            <BreadName name={r.name} date={date} />
+          </span>
           <span className="qty">{r.qty == null ? "—" : `${r.qty}개`}</span>
           <span className="state">{r.state}</span>
         </div>
@@ -656,7 +678,8 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
       .then((all) => {
         if (!live) return;
         // 오늘 · 내일 = 만들 수량, 3 ~ 5일 뒤 = 지금까지 정해진 수량(없으면 주간 계획 수량)
-        setCols(all.map((rows, i) => new Map(rows.map((r) => [r.name, (FLOOR_COLS[i].final ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
+        // 이름이 바뀐 빵은 새 이름 한 줄로 (11-01 인절미팥빵 · 11-02 저당팥빵이 두 줄로 나뉘지 않게 — 2026-10-25)
+        setCols(all.map((rows, i) => new Map(rows.map((r) => [breadNewName(r.name), (FLOOR_COLS[i].final ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
       })
       .catch((e) => live && setErr((e as Error).message));
     return () => {
@@ -695,7 +718,9 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
         <tbody>
           {names.map((n, r) => (
             <tr key={n}>
-              <td className={`hl hl-left${r === names.length - 1 ? " hl-bottom" : ""}`}>{n}</td>
+              <td className={`hl hl-left${r === names.length - 1 ? " hl-bottom" : ""}`}>
+                <BreadName name={breadNameOn(n, dates[0])} date={dates[0]} />
+              </td>
               <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cols[0].get(n) ?? "—"}</td>
               {FLOOR_COLS.slice(1).map((c, i) => (
                 <td key={c.off} className={`num${c.final ? "" : " tentative"}`}>
@@ -777,7 +802,7 @@ function Result({ api, today }: { api: Api; today: string }) {
               {rows.map((r) => (
                 <tr key={r.name}>
                   <td>
-                    {r.name}
+                    <BreadName name={r.name} date={date} />
                     {r.made != null && r.made > 0 && r.sold >= r.made && (r.soldOut || r.last) && <span className="sold-out">다 팔림{r.last ? ` ${r.last}` : ""}</span>}
                   </td>
                   <td className="num">{r.made == null ? "—" : producedOf(r)}</td>
