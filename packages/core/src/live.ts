@@ -8,6 +8,7 @@
    - B 는 받은 조각을 검사해 틀리면 보이지 않고 '확인 필요'로 (틀린 숫자를 보여 주지 않음)
    - 다음 날 아침 09:12 확정 수집(reports)이 들어오면 칸마다 확정이 이김
    ============================================================ */
+import { addDays } from "./dates";
 import { deskLiveAgeMin, type DeskLive } from "./deskLive";
 import { isNaverTicketProduct, naverTime } from "./naverAuto";
 import { NAVER_SLOTS, sum, type DayReport, type NaverPart, type StorePart } from "./part";
@@ -230,4 +231,27 @@ export function liveLoopStep(now: number, last: number | null, end: number): Liv
   if (cur !== undefined && now - cur < LIVE_EVERY_MIN) return { act: "run", slot: cur };
   const next = slots.find((s) => s > now);
   return next === undefined || next >= end ? { act: "end" } : { act: "wait", slot: next };
+}
+
+/* ---------- 스스로 이어 가기 (2026-10-27) ----------
+   GitHub 예약 실행이 몇 시간씩 늦거나 빠짐 (10-26 은 매시 날씨가 하루 5번 · 하루 수집이 14:05 에야 시작, 10-27 은 아침 수집까지 하나도 안 돎)
+   → POS 메인 PC 의 하루 수집이 끝(22:50)에 자기를 다시 시작시켜 '밤 대기'로 켜 두고, 아침 09:27 에
+     오늘 아직 한 번도 안 돈 아침 수집(자판기 · 네컷 · 주차 / POS 확정 / 네이버)을 시작시킨 뒤 자기를 다시 시작시켜 하루 수집으로 넘어감
+   - 다시 시작할 때마다 새 작업이라 GitHub 열쇠(24시간 한도) · 코드가 새로 받아짐
+   - 예약은 그대로 둠 (PC 를 껐다 켰을 때 등 — 하루 수집이 이미 돌고 있으면 건너뜀)
+   - 09:27 = 예약된 아침 수집(09:10 ~ 09:25)이 제때 돌았으면 건드리지 않도록 그 뒤 · 첫 칸 10:00 전 */
+export const LIVE_MORNING_KICK = "09:27";
+
+/** 하루 수집 프로그램이 지금 할 일 — 끝 시각 뒤 · 아침 시작 전은 밤 대기, 그 사이는 하루 수집 */
+export function liveLoopMode(now: number, end: number): "night" | "day" {
+  return now >= end || now < minutes(LIVE_MORNING_KICK) ? "night" : "day";
+}
+
+/** 아침에 시작시킬 일 (오늘 아직 한 번도 안 돈 것만 — liveLoop.ts) · POS 확정은 어제 날짜를 정해서 (손으로 시작하면 비운 날짜가 오늘이라) */
+export function morningJobs(today: string): { file: string; inputs: Record<string, string> }[] {
+  return [
+    { file: "extra-collect.yml", inputs: {} },
+    { file: "pos-collect.yml", inputs: { date: addDays(today, -1) } },
+    { file: "naver-collect.yml", inputs: {} },
+  ];
 }
