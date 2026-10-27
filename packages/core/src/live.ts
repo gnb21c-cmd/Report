@@ -1,6 +1,6 @@
 /* ============================================================
    오늘 마감 전 영업정보 — live/{날짜} 문서 검사 · 확정 보고와 합치기
-   - POS 메인 PC(GitHub 실행기 nice-pos)의 하루 수집이 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 21:30 · 2026-10-27 전엔 22:45, 2026-10-19 — 예전 15 · 45분, 아래 liveLoopStep)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
+   - POS 메인 PC(GitHub 실행기 nice-pos)의 하루 수집이 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 21:30 · 마지막 21:40 · 21:45 — 2026-10-27 전엔 22:45, 2026-10-19 — 예전 15 · 45분, 아래 liveLoopStep)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
      확정 보고와 같은 계산(buildStorePart)으로 만든 StorePart 를 live/{오늘} 의 cafe · kids 칸에 올림 (apps/collector/src/live.ts)
      → B 의 숫자 · 통계 계산이 확정 날과 같은 길
    - 같은 때 네이버 예약현황(오늘)에서 30분 칸별 이용완료 + 확정(입장예정) 장수 → naver 칸 (liveNaverPart, 입장권 상품만 · 신규는 모름)
@@ -17,8 +17,12 @@ import type { StoreId } from "./types";
 export const LIVE_LABEL = "마감 전 영업정보";
 /** 받는 시간 (한국 시간) — 15분마다 매시 0 · 15 · 30 · 45분 (apps/collector/src/liveLoop.ts · .github/workflows/live-collect.yml) */
 export const LIVE_FROM = "10:00";
-/** 마지막 칸 — 매장 포스(POS 메인 PC)가 밤 9시 40 ~ 50분에 꺼져서 21:30 까지 (2026-10-27 사장님, 그 전엔 22:45) */
-export const LIVE_TO = "21:30";
+/** 15분마다 받는 마지막 칸 — 그 뒤는 마지막 두 번(LIVE_LAST_SLOTS) */
+export const LIVE_GRID_TO = "21:30";
+/** 그날 마지막 집계 두 번 — 매장 포스(POS 메인 PC)가 밤 9시 40 ~ 50분쯤 꺼짐 (일찍 · 늦게 꺼질 수도) (2026-10-27 사장님, 그 전엔 22:45 까지 15분마다) */
+export const LIVE_LAST_SLOTS: readonly string[] = ["21:40", "21:45"];
+/** 마지막 칸 */
+export const LIVE_TO = "21:45";
 /** 이만큼(분) 넘게 새 숫자가 없으면 B 에 '늦음' — 15분마다 받지만 PC 를 다시 켰거나 다른 일에 비켜 주는 동안을 넉넉히 */
 export const LIVE_STALE_MIN = 60;
 
@@ -181,7 +185,7 @@ export function withLiveCafe(reports: DayReport[], doc: LiveDoc | null | undefin
 
 const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 
-/** 새 숫자가 늦는지 — 받는 시간(10:00 ~ 21:30) 안에서 LIVE_STALE_MIN 분 넘게 새 숫자가 없으면 (첫 수집 직후 · 마지막 뒤 밤에는 아님) */
+/** 새 숫자가 늦는지 — 받는 시간(10:00 ~ 21:45) 안에서 LIVE_STALE_MIN 분 넘게 새 숫자가 없으면 (첫 수집 직후 · 마지막 뒤 밤에는 아님) */
 export function liveStale(at: string | null | undefined, now: Date = new Date(), limit = LIVE_STALE_MIN): boolean {
   const t = minutes(new Date(now.getTime() + 9 * 3600e3).toISOString().slice(11, 16));
   if (t < minutes(LIVE_FROM) + limit || t > minutes(LIVE_TO) + limit) return false;
@@ -194,13 +198,14 @@ export function liveStale(at: string | null | undefined, now: Date = new Date(),
    (apps/collector/src/liveLoop.ts · .github/workflows/live-collect.yml — GitHub 예약은 '시작'만 맡김. 예약 실행이 20분 남짓 늦거나 자주 건너뛰어서) */
 /** 받는 간격(분) */
 export const LIVE_EVERY_MIN = 15;
-/** 하루 수집을 끝내는 시각 (마지막 칸 21:30 을 받고 · 매장 포스가 꺼지기 전) */
-export const LIVE_LOOP_END = "21:35";
+/** 그날 집계를 끝내는 시각 — 21:40 · 21:45 집계가 늦어지거나 포스가 꺼져 응답이 없어도 이 뒤에는 새로 집계하지 않음 (다음 날 10:00 첫 집계) */
+export const LIVE_LOOP_END = "21:50";
 
-/** 하루 받을 칸 — 0시부터 분 (10:00 ~ 21:30, 15분마다) */
+/** 하루 받을 칸 — 0시부터 분 (10:00 ~ 21:30 은 15분마다 · 마지막 21:40 · 21:45) */
 export function liveSlots(): number[] {
   const out: number[] = [];
-  for (let t = minutes(LIVE_FROM); t <= minutes(LIVE_TO); t += LIVE_EVERY_MIN) out.push(t);
+  for (let t = minutes(LIVE_FROM); t <= minutes(LIVE_GRID_TO); t += LIVE_EVERY_MIN) out.push(t);
+  for (const hm of LIVE_LAST_SLOTS) out.push(minutes(hm));
   return out;
 }
 
@@ -236,24 +241,24 @@ export function liveLoopStep(now: number, last: number | null, end: number): Liv
 
 /* ---------- 스스로 이어 가기 (2026-10-27) ----------
    GitHub 예약 실행이 몇 시간씩 늦거나 빠짐 (10-26 은 매시 날씨가 하루 5번 · 하루 수집이 14:05 에야 시작, 10-27 은 아침 수집까지 하나도 안 돎)
-   매장 포스(POS 메인 PC)는 밤 9시 40 ~ 50분에 꺼지고 아침 9시 10 ~ 20분쯤 켜짐 (사장님)
-   → 저녁 8시(LIVE_ARM_AT)부터 '다음 차례' 하루 수집을 GitHub 에 맡겨 둠 (같은 줄에서 기다림 — 컴퓨터가 꺼지면 실행기를 기다림, 하루까지)
-     아침에 컴퓨터를 켜면 실행기가 저절로 켜져 기다리던 다음 차례를 바로 받음 → 09:27 까지 밤 대기 →
-     오늘 아직 한 번도 안 돈 아침 수집(자판기 · 네컷 · 주차 / POS 확정 / 네이버)을 시작시키고 끝 → 다음 차례가 하루 수집으로
-   - 하루 수집은 21:35 에 끝나면 컴퓨터가 꺼질 때까지 붙들고 있음 (다음 차례가 그 뒤에 줄을 섬) — 꺼지지 않은 밤이면 05:00 에 놓아 줌
+   매장 포스(POS 메인 PC)는 밤 9시 40 ~ 50분쯤 꺼지고(일찍 · 늦게 꺼질 수도) 아침 9시 10 ~ 20분쯤 켜짐 (사장님)
+   → 하루 수집을 시작할 때 '다음 차례' 하루 수집을 GitHub 에 맡겨 두고 3시간마다 새로 맡김(LIVE_REARM_MIN — 같은 줄에서 가장 새것 하나만 기다림,
+     컴퓨터가 꺼지면 실행기를 기다림, 하루까지 · 오래 기다린 것이 하루 한도에 걸리지 않게 새로). 언제 꺼져도 아침에 켜지면 기다리던 다음 차례를 바로 받음
+     → 09:27 까지 밤 대기 → 오늘 아직 한 번도 안 돈 아침 수집(자판기 · 네컷 · 주차 / POS 확정 / 네이버)을 시작시키고 끝 → 다음 차례가 하루 수집으로
+   - 하루 수집은 21:45 칸을 받고(21:50 에) 끝나면 컴퓨터가 꺼질 때까지 붙들고 있음 (다음 차례가 그 뒤에 줄을 섬) — 꺼지지 않은 밤이면 05:00 에 놓아 줌
    - 다시 시작할 때마다 새 작업이라 GitHub 열쇠(24시간 한도) · 코드가 새로 받아짐
    - 예약은 그대로 둠 (낮에 PC 를 껐다 켰을 때 등 — 하루 수집이 이미 돌고 있거나 줄을 서 있으면 건너뜀)
    - 09:27 = 예약된 아침 수집(09:10 ~ 09:25)이 제때 돌았으면 건드리지 않도록 그 뒤 · 첫 칸 10:00 전 */
 export const LIVE_MORNING_KICK = "09:27";
 
-/** 다음 차례를 맡겨 두기 시작하는 시각 — 매장 포스가 일찍 꺼져도 아침에 이어지게 (꺼지기 1시간 40분쯤 전) */
-export const LIVE_ARM_AT = "20:00";
+/** 다음 차례를 새로 맡기는 간격(분) — 하루 수집을 시작할 때 맡기고 이만큼마다 · 끝날 때 새로 */
+export const LIVE_REARM_MIN = 180;
 /** 끝난 뒤 붙들고 있다가 놓아 주는 시각 — 꺼지지 않은 밤 (GitHub 열쇠 24시간 한도 안에서 새 작업으로) */
 export const LIVE_HOLD_UNTIL = "05:00";
 
-/** 다음 차례를 맡겨 둘 때인지 */
-export const liveArmDue = (now: number): boolean => now >= minutes(LIVE_ARM_AT);
-/** 끝난 뒤 붙들고 있기를 그만둘 때인지 — 자정을 넘어 05:00 ~ 아침 시작(09:27) 전 (21:30 칸을 받고 바로 놓아 주지 않게) */
+/** 다음 차례를 (새로) 맡길 때인지 — armedAt = 마지막으로 맡긴 시각(분, 없으면 null) */
+export const liveArmDue = (now: number, armedAt: number | null): boolean => armedAt === null || now - armedAt >= LIVE_REARM_MIN;
+/** 끝난 뒤 붙들고 있기를 그만둘 때인지 — 자정을 넘어 05:00 ~ 아침 시작(09:27) 전 (21:45 칸을 받고 바로 놓아 주지 않게) */
 export const liveHoldOver = (now: number): boolean => now >= minutes(LIVE_HOLD_UNTIL) && now < minutes(LIVE_MORNING_KICK);
 
 /** 하루 수집 프로그램이 지금 할 일 — 끝 시각 뒤 · 아침 시작 전은 밤 대기, 그 사이는 하루 수집 */
@@ -268,4 +273,19 @@ export function morningJobs(today: string): { file: string; inputs: Record<strin
     { file: "pos-collect.yml", inputs: { date: addDays(today, -1) } },
     { file: "naver-collect.yml", inputs: {} },
   ];
+}
+
+/* ---------- 보고 앱 오늘 화면 (2026-10-27 사장님) ----------
+   첫 집계(10:00) 전인 아침 9시 55분부터 보고 앱이 오늘(마감 전) 화면을 보여 줌 — 그 전(자정 ~ 09:54)은 어제까지 */
+export const LIVE_SHOW_FROM = "09:55";
+
+/** 보고 앱이 오늘 화면을 보여 줄 때인지 (한국 시간) */
+export const liveShowToday = (now: Date = new Date()): boolean => kstMinutes(now) >= minutes(LIVE_SHOW_FROM);
+
+/** 다음 그 시각(한국 시간 HH:MM)까지 남은 밀리초 — 지금이 딱 그 시각이면 내일 */
+export function msUntilKst(hm: string, now: Date = new Date()): number {
+  const day = 24 * 3600_000;
+  const left = (minutes(hm) - kstMinutes(now)) * 60_000;
+  const ms = Math.round(left);
+  return ms > 0 ? ms : ms + day;
 }

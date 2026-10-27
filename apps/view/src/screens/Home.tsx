@@ -77,7 +77,14 @@ export function Home({ d, open, weather, cash, cashFrom, settle, surveys }: { d:
   return (
     <>
       <LiveWarn />
-      {live?.today ? null : nothing ? (
+      {live?.today ? (
+        nothing && (
+          <div className="banner">
+            {/* 아침 9시 55분부터 오늘 화면 — 첫 숫자가 오기 전 */}
+            오늘 마감 전 숫자를 아직 받지 못했습니다. 첫 집계는 아침 10시이고, 그 뒤 15분마다 새로고침합니다.
+          </div>
+        )
+      ) : nothing ? (
         <div className="banner">
           {/* 오늘은 아직 마감 전 — 다음 날 아침 사무실 입력 뒤에 보임 */}
           {d.date === todayKst()

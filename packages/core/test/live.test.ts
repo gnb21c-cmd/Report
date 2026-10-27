@@ -69,13 +69,13 @@ describe("늦음 표시 — 15분마다(0 · 15 · 30 · 45분) 받으니 60분 
     expect(liveStale(at("13:15"), kst("14:10"))).toBe(false);
     expect(liveStale(at("13:15"), kst("14:20"))).toBe(true);
   });
-  it("아침 첫 수집(10:00) 전후 · 마지막(21:30) 뒤 밤에는 늦음 표시 없음 — 매장 포스가 꺼진 뒤 거짓 경고가 뜨지 않게", () => {
+  it("아침 첫 수집(10:00) 전후 · 마지막(21:45) 뒤 밤에는 늦음 표시 없음 — 매장 포스가 꺼진 뒤 거짓 경고가 뜨지 않게", () => {
     expect(LIVE_FROM).toBe("10:00");
     expect(liveStale(null, kst("09:50"))).toBe(false);
     expect(liveStale(null, kst("10:50"))).toBe(false);
     expect(liveStale(null, kst("11:05"))).toBe(true);
-    expect(liveStale(at("21:30"), kst("23:59"))).toBe(false);
-    expect(liveStale(at("21:30"), kst("22:40"))).toBe(false);
+    expect(liveStale(at("21:45"), kst("23:59"))).toBe(false);
+    expect(liveStale(at("21:45"), kst("22:50"))).toBe(false);
     expect(liveStale(at("20:15"), kst("21:20"))).toBe(true);
   });
 });
@@ -176,5 +176,22 @@ describe("목요일 새벽 주간 계획 — 수요일은 밤 마지막 마감 �
     const bad = cafe();
     bad.teams += 2;
     expect(withLiveCafe([], { ...doc, cafe: { p: bad } }, "2026-10-08").reports).toEqual([]);
+  });
+});
+
+describe("보고 앱 오늘 화면 — 아침 9시 55분부터 (첫 집계 10:00 전에 미리, 2026-10-27 사장님)", async () => {
+  const { LIVE_SHOW_FROM, liveShowToday, msUntilKst } = await import("../src");
+  const kst = (d: string, hm: string) => new Date(`${d}T${hm}:00+09:00`);
+  it("09:55 부터 오늘 · 그 전(자정 ~ 09:54)은 어제까지", () => {
+    expect(LIVE_SHOW_FROM).toBe("09:55");
+    expect(liveShowToday(kst("2026-10-28", "09:54"))).toBe(false);
+    expect(liveShowToday(kst("2026-10-28", "09:55"))).toBe(true);
+    expect(liveShowToday(kst("2026-10-28", "23:59"))).toBe(true);
+    expect(liveShowToday(kst("2026-10-28", "00:30"))).toBe(false);
+  });
+  it("다음 09:55 까지 남은 시간 — 그 시각에 화면을 바로 바꾸려고", () => {
+    expect(msUntilKst("09:55", kst("2026-10-28", "09:50"))).toBe(5 * 60_000);
+    expect(msUntilKst("09:55", kst("2026-10-28", "09:55"))).toBe(24 * 3600_000);
+    expect(msUntilKst("09:55", kst("2026-10-28", "22:00"))).toBe((11 * 60 + 55) * 60_000);
   });
 });
