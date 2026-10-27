@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_REVISIT, DESK_STATS, deskEventsFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_REVISIT, DESK_STATS, deskEventsFrom, deskRevisitOkFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import demoDeskLive from "./demoDeskLive.json";
 import demoRevisit from "./demoRevisit.json";
 import type { Source } from "./source";
@@ -185,7 +185,12 @@ export function firebaseSource(cfg: FirebaseConfig, board: string): Source {
         token = res?.nextPageToken || "";
         if (!token) break;
       }
-      return deskEventsFrom(docs);
+      return { counts: deskEventsFrom(docs), revisit: deskRevisitOkFrom(docs) };
+    },
+    // 재방문 성공 지금 (2026-10-27) — 키즈 실시간과 같은 현황 글 하나 · 오늘 것만
+    async deskOkNow() {
+      const { live } = await deskLiveNow();
+      return live && live.revisit && live.day === todayKst() ? { ...live.revisit, asOf: live.at } : null;
     },
     async deskEventDay(date) {
       const res = await fetch(`${base(cfg, board)}/${DESK_STATS}/${DESK_EVENT_PREFIX}${date}?key=${cfg.apiKey}`, { cache: "no-store" });

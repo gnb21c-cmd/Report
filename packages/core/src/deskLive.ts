@@ -8,6 +8,7 @@
    ============================================================ */
 import type { DayReport } from "./part";
 import { kidsPrice } from "./rules";
+import { parseRevisitOk, type DeskRevisitOk } from "./deskEvent";
 
 export const DESK_LIVE = "deskLive";
 /** 이만큼(분) 넘게 새 현황이 없으면 '통합데스크 소식 없음' — 통합데스크는 1분마다 보냄 */
@@ -62,11 +63,14 @@ export interface DeskLive {
   rules: { keys: number; useMinutes: number; pinkUntil: number; overFee: number; overUnitMin: number };
   naver: { done: number; conf: number; left: number; test: number; slots: DeskSlot[]; products: { name: string; done: number }[] };
   people: { naver: number; walk: number; total: number };
-  walk: { tickets: number; extra: number; service: number };
+  /** event = 현장 [이벤트 입장] (결제 없음 · 2026-10-21) — 옛 판은 0 */
+  walk: { tickets: number; extra: number; service: number; event: number };
   over: { paid: number; count: number; due: number };
   keys: { total: number; used: number; free: number; walkable: number; flex: number; map: Record<number, DeskKey>; holders: DeskHolder[] };
   /** 재방문 이벤트 돈까스 예정 (2026-10-22 사장님 · 근무자 화면, docs/WORK.md) — 오늘 아직 안 온 이벤트 대상 예약 수 · 내일 ~ 3일 뒤. 옛 판은 없음(null) */
   revisitDue: { today: number | null; ahead: { date: string; n: number }[] } | null;
+  /** 재방문 성공 (돈까스 쿠폰) 오늘 · 시작일부터 누적 · 날마다 (2026-10-27 사장님) — 옛 판 · 이벤트 없음은 null */
+  revisit: DeskRevisitOk | null;
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -126,10 +130,11 @@ export function parseDeskLive(json: unknown): DeskLive | null {
       products: Array.isArray(x.naver.products) ? x.naver.products.map((p: any) => ({ name: str(p?.name, 60), done: n0(p?.done) })).filter((p: { done: number }) => p.done > 0) : [],
     },
     people: { naver: n0(x.people.naver), walk: n0(x.people.walk), total: n0(x.people.total) },
-    walk: { tickets: n0(x.walk?.tickets), extra: n0(x.walk?.extra), service: n0(x.walk?.service) },
+    walk: { tickets: n0(x.walk?.tickets), extra: n0(x.walk?.extra), service: n0(x.walk?.service), event: n0(x.walk?.event) },
     over: { paid: n0(x.over?.paid), count: n0(x.over?.count), due: n0(x.over?.due) },
     keys: { total, used: Object.keys(map).length, free: total - Object.keys(map).length, walkable: n0(x.keys.walkable), flex: n0(x.keys.flex), map, holders },
     revisitDue: revisitDueOf(x.revisitDue, x.day),
+    revisit: parseRevisitOk(x.revisit),
   };
 }
 

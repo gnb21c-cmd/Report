@@ -1,5 +1,5 @@
 /* 자료를 어디서 받는지 — 클라우드 보관함(Firebase) · 체험판(가짜) */
-import type { DayReport, DayWeather, LiveDoc, ReportSettings, SurveyDoc } from "@report/core";
+import type { DayReport, DayWeather, DeskRevisitOk, LiveDoc, ReportSettings, SurveyDoc } from "@report/core";
 
 /** (예전 C 상태 — 지금은 쓰지 않음) */
 export interface OfficeStatus {
@@ -23,8 +23,10 @@ export interface Source {
   live(date: string): Promise<LiveDoc | null>;
   /** 통합데스크 설문 집계 (설문 보고함 surveyInbox + 예전 settings/surveys, 없으면 null) */
   surveys(): Promise<SurveyDoc | null>;
-  /** 통합데스크 이벤트 입장 수 — 날짜 → 그날 수 (deskStats/event-날짜 · 2026-10-21) */
-  deskEvents(): Promise<Record<string, number>>;
+  /** 통합데스크 이벤트 입장 수 — 날짜 → 그날 수 (deskStats/event-날짜 · 2026-10-21) · 재방문 성공(가장 최근 이벤트 글 · 2026-10-27) */
+  deskEvents(): Promise<{ counts: Record<string, number>; revisit: DeskRevisitOk | null }>;
+  /** 재방문 성공 지금 — 통합데스크 현황 글(deskLive/now)의 오늘 것 (없으면 null · 2026-10-27) */
+  deskOkNow(): Promise<DeskRevisitOk | null>;
   /** 그날 하나만 (오늘 · 5분마다) — 문서가 없으면 null */
   deskEventDay(date: string): Promise<number | null>;
 }

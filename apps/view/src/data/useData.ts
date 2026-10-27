@@ -1,7 +1,7 @@
 /* 자료 받기 상태 — 체험판이면 가짜 자료, 아니면 설치 주소의 열쇠로 클라우드에서
    → 폰 저장소 → 새로 온 것만 받기 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDays, cleanSettings, cleanSurveys, LIVE_FROM, sampleReports, sampleSurveys, sampleUntilYesterday, sum, todayKst, type DayReport, type LiveDoc, type ReportSettings, type StorePart, type SurveyDoc, type WeatherKey, type WeatherMap } from "@report/core";
+import { addDays, cleanSettings, cleanSurveys, LIVE_FROM, newerRevisitOk, sampleReports, sampleSurveys, sampleUntilYesterday, sum, todayKst, type DayReport, type DeskRevisitOk, type LiveDoc, type ReportSettings, type StorePart, type SurveyDoc, type WeatherKey, type WeatherMap } from "@report/core";
 import { boardKey, firebaseConfig, firebaseSource } from "./firebase";
 import type { OfficeStatus, Source } from "./source";
 import demoWeatherRaw from "./demoWeather.json";
@@ -28,6 +28,8 @@ export interface DataState {
   surveys: SurveyDoc | null;
   /** 통합데스크 이벤트 입장 수 — 날짜 → 그날 수 (매일 20:00 · 키즈 '이벤트 무료입장' = max(POS 0원 상품, 이것) · 2026-10-21) */
   deskEvents: Record<string, number>;
+  /** 재방문 성공 (돈까스 쿠폰) 날마다 · 누적 — 통합데스크 이벤트 글(20:00) · 현황 글(오늘)에서 더 늦게 센 것 (2026-10-27 사장님, 지난 날 '입장권 판매 총 수량' 카드) */
+  deskOk: DeskRevisitOk | null;
 }
 
 const SYNCED = "report.syncedAt";
@@ -37,6 +39,14 @@ const WEATHER_CURSOR = "report.weatherCursor";
 const SETTINGS = "report.settings";
 const SURVEYS = "report.surveys";
 const DESK_EVENTS = "report.deskEvents";
+const DESK_OK = "report.deskOk";
+/** 체험판 재방문 성공 — 열흘 전 시작 · 날마다 몇 장 */
+function demoRevisitOk(today: string): DeskRevisitOk {
+  const days: Record<string, number> = {};
+  for (let i = 1; i <= 9; i++) days[addDays(today, -i)] = [5, 4, 6, 3, 5, 4, 7, 4, 3][i - 1];
+  days[today] = 2;
+  return { from: addDays(today, -10), today: 2, total: Object.values(days).reduce((a, n) => a + n, 0), days, asOf: `${today} 13:50` };
+}
 /** 마지막으로 받은 마감 전 영업정보 (오늘 · 어제) — 다시 열 때 바로 보이게 */
 const LIVE = "report.live";
 /** 보고 문서 모양이 바뀌면(새 칸) 폰에 쌓인 자료를 한 번 처음부터 다시 받음 — 예전 화면이 새 칸을 모르고 지나친 문서를 다시 읽으려고 */
@@ -102,6 +112,7 @@ export function useData() {
     })(),
     surveys: __DEMO__ ? sampleSurveys(todayKst()) : cleanSurveys(local.get<SurveyDoc>(SURVEYS)),
     deskEvents: __DEMO__ ? {} : local.get<Record<string, number>>(DESK_EVENTS) || {},
+    deskOk: __DEMO__ ? demoRevisitOk(todayKst()) : local.get<DeskRevisitOk>(DESK_OK) || null,
     // 체험판: 첫 수집 시각(10:15) 뒤에만 오늘 마감 전 숫자
     live: __DEMO__ ? (new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16) >= LIVE_FROM ? { [todayKst()]: demoLive(todayKst()) } : {}) : cachedLive(),
   }));
@@ -116,6 +127,8 @@ export function useData() {
     const got = await Promise.all(days.map((d) => src.live(d).then((x) => ({ ok: true, x }), () => ({ ok: false, x: null }))));
     // 오늘 이벤트 입장 수 (통합데스크가 20:00 · 뒤에 바뀌면 다시 씀) — 문서 하나
     const ev = await src.deskEventDay(today).catch(() => null);
+    // 재방문 성공 지금 (통합데스크 현황 글 · 오늘 것만 · 2026-10-27)
+    const okNow = await src.deskOkNow().catch(() => null);
     set((p) => {
       const live = Object.fromEntries(days.map((d, i) => [d, got[i].ok ? got[i].x : p.live[d] ?? null]));
       local.set(LIVE, live);
@@ -124,7 +137,9 @@ export function useData() {
         deskEvents = { ...deskEvents, [today]: ev };
         local.set(DESK_EVENTS, deskEvents);
       }
-      return { ...p, live, deskEvents };
+      const deskOk = newerRevisitOk(p.deskOk, okNow);
+      if (deskOk !== p.deskOk) local.set(DESK_OK, deskOk);
+      return { ...p, live, deskEvents, deskOk };
     });
   }, [picked]);
 
@@ -147,7 +162,8 @@ export function useData() {
       const got = await src.reports(local.get<string>(CURSOR));
       await saveCached(got.reports);
       if (got.last) local.set(CURSOR, got.last);
-      const [status, wx, settings, surveys, deskEvents] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null), src.surveys().catch(() => null), src.deskEvents().catch(() => null)]);
+      const [status, wx, settings, surveys, desk] = await Promise.all([src.status(), src.weather(local.get<string>(WEATHER_CURSOR)).catch(() => ({ days: [], last: null })), src.settings().catch(() => null), src.surveys().catch(() => null), src.deskEvents().catch(() => null)]);
+      const deskEvents = desk ? desk.counts : null;
       local.set(SETTINGS, settings);
       if (surveys) local.set(SURVEYS, surveys);
       if (deskEvents) local.set(DESK_EVENTS, deskEvents);
@@ -160,7 +176,7 @@ export function useData() {
       }
       const now = new Date().toISOString();
       local.set(SYNCED, now);
-      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings, surveys: surveys && JSON.stringify(surveys) !== JSON.stringify(p.surveys) ? surveys : p.surveys, deskEvents: deskEvents && JSON.stringify(deskEvents) !== JSON.stringify(p.deskEvents) ? deskEvents : p.deskEvents }));
+      set((p) => ({ ...p, reports: got.reports.length ? byDate([...p.reports, ...got.reports]) : p.reports, status, weather, syncedAt: now, syncing: false, settings: JSON.stringify(settings) === JSON.stringify(p.settings) ? p.settings : settings, surveys: surveys && JSON.stringify(surveys) !== JSON.stringify(p.surveys) ? surveys : p.surveys, deskEvents: deskEvents && JSON.stringify(deskEvents) !== JSON.stringify(p.deskEvents) ? deskEvents : p.deskEvents, deskOk: (() => { const o = newerRevisitOk(p.deskOk, desk && desk.revisit); if (o !== p.deskOk) local.set(DESK_OK, o); return o; })() }));
     } catch (e) {
       set((p) => ({ ...p, syncing: false, error: (e as Error).message }));
     }

@@ -16,7 +16,7 @@ import { useRef, useState } from "react";
 import { WeatherPanel } from "../ui/WeatherPanel";
 import { LiveWarn, useLive } from "../ui/Live";
 import { useFit } from "../ui/fit";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyRanked, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind, type SurveyDoc } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, revisitOkLine, type DeskRevisitOk, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyRanked, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind, type SurveyDoc } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -68,11 +68,13 @@ export const BOX_LABEL: Record<BoxKey, string> = { 바리스타: "바리스타",
 
 export type Settle = { total: number; by: Record<SettleKind, number>; days: number };
 
-export function Home({ d, open, weather, cash, cashFrom, settle, surveys }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle; surveys?: SurveyDoc | null }) {
+export function Home({ d, open, weather, cash, cashFrom, settle, surveys, revisitOk }: { d: Dashboard; open: Open; weather?: DayWeather; cash?: CashSummary; cashFrom?: string | null; settle?: Settle; revisitOk?: DeskRevisitOk | null; surveys?: SurveyDoc | null }) {
   const day = d.day;
   const nothing = day.has.cafe + day.has.kids === 0;
   const hol = holidayName(d.date);
   const live = useLive();
+  // 지난 날 '입장권 판매 총 수량' 밑 줄: 재방문 N장 (現누적 NN장) — 재방문 이벤트 돈까스 쿠폰이 나간 수 (2026-10-27 사장님)
+  const ok = revisitOkLine(revisitOk, d.date);
 
   return (
     <>
@@ -123,7 +125,7 @@ export function Home({ d, open, weather, cash, cashFrom, settle, surveys }: { d:
               <br />총 수량
             </div>
             <div className="stat-value">{count(kidsTickets(day), "장")}</div>
-            <span className="note" />
+            <span className="note">{ok ? `재방문 ${count(ok.n, "장")} (現누적 ${count(ok.total, "장")})` : ""}</span>
           </div>
         )}
         <button className="stat tap" onClick={() => open({ name: "naver" })} title={day.newKnown ? "" : day.naverInput ? "지난 자료" : day.has.kids ? "입력 전 · POS 추정" : "입력 전"}>

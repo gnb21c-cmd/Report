@@ -1731,6 +1731,23 @@ button.quad-box {
 .klive-ntot b {
   font-size: 22px;
 }
+/* 키즈 실시간 오늘 입장 네 칸 (2026-10-27 사장님) — 재방문성공 '2(43)' 의 누적은 작게 */
+.klive-split.four {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.klive-split.four div {
+  padding: 8px 8px;
+}
+.klive-split.four span {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.klive-split.four b small {
+  font-size: 14px;
+  font-weight: 700;
+  margin-left: 1px;
+}
 .klive .good {
   color: var(--good);
 }

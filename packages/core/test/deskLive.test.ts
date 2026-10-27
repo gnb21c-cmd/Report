@@ -90,3 +90,16 @@ describe("초과요금 결제 — POS 기준 (2026-10-25 사장님: 10월 지연
     expect(kidsOverPaid(undefined)).toBeNull();
   });
 });
+
+describe("키즈 실시간 네 칸 (2026-10-27 사장님): 네이버 · 현장입장 · 재방문성공 · 이벤트", () => {
+  it("이벤트 입장 수 · 재방문 성공(오늘 · 누적 · 날마다) — 옛 판은 0 · null", () => {
+    const l = parseDeskLive(JSON.stringify({ ...raw(), walk: { tickets: 2, extra: 0, service: 0, event: 3 }, revisit: { from: "2026-10-26", today: 2, total: 43, days: { "2026-10-27": 2 } } }))!;
+    expect(l.walk.event).toBe(3);
+    expect(l.revisit).toEqual({ from: "2026-10-26", today: 2, total: 43, days: { "2026-10-27": 2 } });
+    const old = raw();
+    delete old.revisit;
+    delete old.walk.event;
+    const o = parseDeskLive(JSON.stringify(old))!;
+    expect([o.walk.event, o.revisit]).toEqual([0, null]);
+  });
+});

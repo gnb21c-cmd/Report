@@ -154,21 +154,39 @@ function Body({ live, pos, now, all, onAll, onPick }: { live: DeskLive; pos: { c
           <small>장</small>
           <span className="note">총 판매수 = 네이버 이용완료 + 현장</span>
         </div>
-        <div className="klive-split">
+        {/* 네 칸 (2026-10-27 사장님): 네이버 = 오늘 팔린 네이버 입장권 · 현장입장 = 현장에서 판 입장권 · 재방문성공 = 이벤트 시작일 뒤 다시 와서 돈까스를 받은 수 오늘(누적) · 이벤트 = 입장료 없이 들어온 이벤트 입장 */}
+        <div className="klive-split four">
           <div>
             <span>네이버</span>
             <b className="num">{count(p.naver)}</b>
           </div>
           <div>
-            <span>현장{live.walk.extra ? ` (+1타임 ${live.walk.extra})` : ""}</span>
+            <span>현장입장{live.walk.extra ? ` (+1타임 ${live.walk.extra})` : ""}</span>
             <b className="num">{count(p.walk)}</b>
           </div>
           <div>
-            <span>서비스 키</span>
-            <b className="num">{count(live.walk.service)}</b>
+            <span>재방문성공</span>
+            <b className="num">
+              {live.revisit ? (
+                <>
+                  {count(live.revisit.today)}
+                  <small>({count(live.revisit.total)})</small>
+                </>
+              ) : (
+                "—"
+              )}
+            </b>
+          </div>
+          <div>
+            <span>이벤트</span>
+            <b className="num">{count(live.walk.event)}</b>
           </div>
         </div>
-        <p className="note">서비스 키는 판매가 아니라 총 판매수에 안 들어가요{n.test ? ` · 시험 기록 ${n.test}장 뺌` : ""}</p>
+        <p className="note">
+          {live.revisit ? `(수) = ${Number(live.revisit.from.slice(5, 7))}월 ${Number(live.revisit.from.slice(8))}일 이후 재방문 누적` : "재방문성공은 통합데스크를 새 판으로 올리면 보여요"}
+          {live.walk.service ? ` · 서비스 키 ${live.walk.service}개는 판매가 아니라 총 판매수에 안 들어가요` : ""}
+          {n.test ? ` · 시험 기록 ${n.test}장 뺌` : ""}
+        </p>
       </section>
 
       <section className="card klive-card">

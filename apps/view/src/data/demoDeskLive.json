@@ -175,7 +175,8 @@
  "walk": {
   "tickets": 3,
   "extra": 0,
-  "service": 2
+  "service": 2,
+  "event": 1
  },
  "over": {
   "paid": 0,
@@ -606,5 +607,14 @@
     "staff": false
    }
   ]
+ },
+ "revisit": {
+  "from": "2026-09-26",
+  "today": 2,
+  "total": 43,
+  "days": {
+   "2026-09-30": 5,
+   "2026-10-05": 2
+  }
  }
 }

@@ -107,9 +107,21 @@ describe("보고 앱 — 통합데스크 이벤트 입장 수 (deskStats/event-�
       }),
     );
     const src = firebaseSource({ apiKey: "k", projectId: "p" }, "board");
-    expect(await src.deskEvents()).toEqual({ "2026-10-20": 2, "2026-10-21": 5 });
+    expect(await src.deskEvents()).toEqual({ counts: { "2026-10-20": 2, "2026-10-21": 5 }, revisit: null });
     expect(await src.deskEventDay("2026-10-21")).toBe(6);
     expect(await src.deskEventDay("2026-10-22")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("재방문 성공 (2026-10-27 사장님): 가장 최근 이벤트 글의 revisit 을 같이 — 그때(asOf) 붙임", async () => {
+    const rv = (day: string, today: number, total: number) => JSON.stringify({ type: "astanakiz-event", v: 1, day, sentAt: `${day} 20:00`, count: 1, names: [], revisit: { from: "2026-10-26", today, total, days: { "2026-10-26": total - today, [day]: today } } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => (/deskStats\?/.test(url) ? ({ ok: true, json: async () => ({ documents: [doc("event-2026-10-27", rv("2026-10-27", 2, 43)), doc("event-2026-10-26", rv("2026-10-26", 41, 41))] }) } as any) : ({ ok: false, status: 404, json: async () => ({}) } as any))),
+    );
+    const got = await firebaseSource({ apiKey: "k", projectId: "p" }, "board").deskEvents();
+    expect(got.counts).toEqual({ "2026-10-27": 1, "2026-10-26": 1 });
+    expect(got.revisit).toEqual({ from: "2026-10-26", today: 2, total: 43, days: { "2026-10-26": 41, "2026-10-27": 2 }, asOf: "2026-10-27 20:00" });
     vi.unstubAllGlobals();
   });
 });
