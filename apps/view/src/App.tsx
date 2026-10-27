@@ -1,7 +1,7 @@
 /* 매출 보고 앱 (B) — 설치한 폰 누구나 봄 (로그인 없음)
    첫 화면: 달력 띠 + 대시보드 → 상자를 누르면 상세 → 뒤로(폰의 뒤로 버튼도 됨) */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, liveReport, liveStale, mergeLive, settlements, todayKst, withDeskEvents, type CashPart, type DayReport, type LiveKind } from "@report/core";
+import { addDays, applySettings, Board, cashBook, cashOnDay, closedDay, dashboard, dayStage, LIVE_SHOW_FROM, liveReport, liveShowToday, liveStale, mergeLive, msUntilKst, settlements, todayKst, withDeskEvents, type CashPart, type DayReport, type LiveKind } from "@report/core";
 import { LiveCtx, LiveNote, type LiveState } from "./ui/Live";
 import { useData } from "./data/useData";
 import { CalendarStrip } from "./ui/CalendarStrip";
@@ -65,6 +65,11 @@ export function App() {
     const t = setInterval(() => setNow(Date.now()), 5 * 60_000);
     return () => clearInterval(t);
   }, []);
+  // 아침 9시 55분 — 오늘(마감 전) 화면으로 바로 넘어가게 (5분마다 보는 것과 따로 그 시각에 맞춤)
+  useEffect(() => {
+    const t = setTimeout(() => setNow(Date.now()), msUntilKst(LIVE_SHOW_FROM, new Date(now)) + 1000);
+    return () => clearTimeout(t);
+  }, [now]);
   const closed = closedDay(new Date(now));
   const boardLatest = useMemo(() => board.latest(), [board]);
   const latest = boardLatest && boardLatest > closed ? closed : boardLatest;
@@ -72,7 +77,8 @@ export function App() {
   const cashParts = useMemo(() => d.reports.map((r) => r.cash).filter((c): c is CashPart => !!c), [d.reports]);
   const book = useMemo(() => cashBook(cashParts), [cashParts]);
   const today = todayKst(new Date(now));
-  const liveTop = [today, addDays(today, -1)].find((k) => k > closed && (lives.get(k)?.report || (k < today && board.report(k))));
+  // 오늘은 아침 9시 55분부터 (첫 집계 10:00 전에 미리, 2026-10-27 사장님) — 숫자가 아직 없어도 오늘 화면
+  const liveTop = [today, addDays(today, -1)].find((k) => k > closed && (k === today ? liveShowToday(new Date(now)) || !!lives.get(k)?.report : !!lives.get(k)?.report || !!board.report(k)));
   const top = liveTop || latest;
   const [date, setDate] = useState<string>(top || closed);
   const [view, setView] = useState<View>({ name: "home" });

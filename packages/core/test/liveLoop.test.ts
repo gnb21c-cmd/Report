@@ -4,15 +4,15 @@ import { kstMinutes, LIVE_EVERY_MIN, LIVE_LOOP_END, liveLoopStep, liveSlotBy, li
 const m = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 const END = m(LIVE_LOOP_END);
 
-describe("하루 실시간 수집 시간표 — 10:00 ~ 22:45, 15분마다 매시 0 · 15 · 30 · 45분 (2026-10-19 사장님)", () => {
-  it("받을 칸 52개 · 첫 칸 10:00 · 마지막 22:45 · 끝 22:50", () => {
+describe("하루 실시간 수집 시간표 — 10:00 ~ 21:30 은 15분마다(매시 0 · 15 · 30 · 45분), 마지막은 21:40 · 21:45 두 번 (2026-10-19 · 마지막은 2026-10-27 사장님)", () => {
+  it("받을 칸 49개 · 첫 칸 10:00 · 21:30 다음 21:40 · 21:45 · 21:50 에 그날 끝", () => {
     const s = liveSlots();
     expect(LIVE_EVERY_MIN).toBe(15);
-    expect(s.length).toBe(52);
+    expect(s.length).toBe(49);
     expect(s[0]).toBe(m("10:00"));
-    expect(s[s.length - 1]).toBe(m("22:45"));
-    expect(s.every((x) => x % 15 === 0)).toBe(true);
-    expect(LIVE_LOOP_END).toBe("22:50");
+    expect(s.slice(-4)).toEqual([m("21:15"), m("21:30"), m("21:40"), m("21:45")]);
+    expect(s.slice(0, -2).every((x) => x % 15 === 0)).toBe(true);
+    expect(LIVE_LOOP_END).toBe("21:50");
   });
 
   it("아침에 일찍 켜지면 10:00 까지 기다렸다가 10:00 에 바로 받음", () => {
@@ -35,11 +35,21 @@ describe("하루 실시간 수집 시간표 — 10:00 ~ 22:45, 15분마다 매�
     expect(liveLoopStep(m("18:50"), m("18:00"), END)).toEqual({ act: "run", slot: m("18:45") });
   });
 
-  it("마지막 22:45 칸을 받으면 끝 · 22:50 이 지나면 끝", () => {
-    expect(liveLoopStep(m("22:46"), m("22:30"), END)).toEqual({ act: "run", slot: m("22:45") });
-    expect(liveLoopStep(m("22:47"), m("22:45"), END)).toEqual({ act: "end" });
-    expect(liveLoopStep(m("22:50"), m("22:30"), END)).toEqual({ act: "end" });
-    expect(liveLoopStep(m("23:30"), null, END)).toEqual({ act: "end" });
+  it("21:30 다음은 21:40 · 21:45 — 마지막 21:45 를 받으면 그날 끝", () => {
+    expect(liveLoopStep(m("21:31"), m("21:30"), END)).toEqual({ act: "wait", slot: m("21:40") });
+    expect(liveLoopStep(m("21:40"), m("21:30"), END)).toEqual({ act: "run", slot: m("21:40") });
+    expect(liveLoopStep(m("21:41"), m("21:40"), END)).toEqual({ act: "wait", slot: m("21:45") });
+    expect(liveLoopStep(m("21:45"), m("21:40"), END)).toEqual({ act: "run", slot: m("21:45") });
+    expect(liveLoopStep(m("21:47"), m("21:45"), END)).toEqual({ act: "end" });
+  });
+
+  it("21:40 · 21:45 집계가 늦어져도 21:50 이 지나면 그날 끝 (포스가 꺼져 응답이 없어도 · 깃허브가 늦게 시작시켜도)", () => {
+    // 21:30 칸이 늦게 끝나 21:46 이면 가장 최근 21:45 하나만
+    expect(liveLoopStep(m("21:46"), m("21:30"), END)).toEqual({ act: "run", slot: m("21:45") });
+    expect(liveLoopStep(m("21:49"), m("21:40"), END)).toEqual({ act: "run", slot: m("21:45") });
+    expect(liveLoopStep(m("21:50"), m("21:40"), END)).toEqual({ act: "end" });
+    expect(liveLoopStep(m("21:55"), m("21:30"), END)).toEqual({ act: "end" });
+    expect(liveLoopStep(m("22:30"), null, END)).toEqual({ act: "end" });
   });
 
   it("끝 시각을 앞당기면(시험) 그 전 칸까지만", () => {
@@ -56,6 +66,7 @@ describe("이미 받은 칸 — 클라우드 live 문서의 받은 시각(at)으
     expect(liveSlotBy("2026-10-19T01:01:30.000Z", "2026-10-19")).toBe(m("10:00"));
     expect(liveSlotBy("2026-10-19T09:47:10.000Z", "2026-10-19")).toBe(m("18:45"));
     expect(liveSlotBy("2026-10-19T01:23:00.000Z", "2026-10-19")).toBe(m("10:15"));
+    expect(liveSlotBy("2026-10-19T12:42:00.000Z", "2026-10-19")).toBe(m("21:40"));
   });
   it("다른 날 · 10:00 전 · 없음 → 받은 칸 없음", () => {
     expect(liveSlotBy("2026-10-18T13:47:00.000Z", "2026-10-19")).toBe(null);
@@ -87,17 +98,37 @@ describe("A [신규 다시 확인] — 아직 맡지 않은 요청인지 (실시
   });
 });
 
-describe("스스로 이어 가기 (2026-10-27) — GitHub 예약이 몇 시간씩 늦거나 빠져도 POS 메인 PC 가 다음 날 아침 수집 · 하루 수집을 시작", async () => {
-  const { LIVE_MORNING_KICK, liveLoopMode, morningJobs } = await import("../src");
-  it("끝 시각 뒤 · 아침 09:27 전은 밤 대기, 그 사이는 하루 수집", () => {
+describe("스스로 이어 가기 (2026-10-27) — 깃허브 예약이 몇 시간씩 늦거나 빠져도, 매장 포스가 일찍 · 늦게 꺼졌다 아침에 켜져도 이어서", async () => {
+  const { LIVE_HOLD_UNTIL, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, morningJobs } = await import("../src");
+  it("21:50 뒤 · 아침 09:27 전은 밤 대기, 그 사이는 하루 수집", () => {
     expect(LIVE_MORNING_KICK).toBe("09:27");
-    expect(liveLoopMode(m("22:50"), END)).toBe("night");
+    expect(liveLoopMode(m("21:50"), END)).toBe("night");
     expect(liveLoopMode(m("23:59"), END)).toBe("night");
     expect(liveLoopMode(m("00:00"), END)).toBe("night");
+    expect(liveLoopMode(m("09:15"), END)).toBe("night"); // 아침에 켜자마자
     expect(liveLoopMode(m("09:26"), END)).toBe("night");
     expect(liveLoopMode(m("09:27"), END)).toBe("day");
     expect(liveLoopMode(m("14:05"), END)).toBe("day");
-    expect(liveLoopMode(m("22:49"), END)).toBe("day");
+    expect(liveLoopMode(m("21:49"), END)).toBe("day");
+  });
+
+  it("다음 차례는 하루 수집을 시작할 때 맡기고 3시간마다 새로 — 포스가 언제 꺼져도 아침에 켜지면 바로 이어서", () => {
+    expect(LIVE_REARM_MIN).toBe(180);
+    expect(liveArmDue(m("10:00"), null)).toBe(true);
+    expect(liveArmDue(m("12:59"), m("10:00"))).toBe(false);
+    expect(liveArmDue(m("13:00"), m("10:00"))).toBe(true);
+    expect(liveArmDue(m("21:45"), m("19:00"))).toBe(false);
+  });
+
+  it("끝난 뒤 붙들고 있기 — 꺼지지 않은 밤이면 새벽 5시에 놓아 줌 (새 작업으로, 깃허브 열쇠 24시간 한도)", () => {
+    expect(LIVE_HOLD_UNTIL).toBe("05:00");
+    // 21:45 칸을 받고 바로 놓아 주면 안 됨 — 컴퓨터가 꺼질 때까지 붙들고 있어야 다음 차례가 아침까지 기다림
+    expect(liveHoldOver(m("21:46"))).toBe(false);
+    expect(liveHoldOver(m("21:51"))).toBe(false);
+    expect(liveHoldOver(m("23:59"))).toBe(false);
+    expect(liveHoldOver(m("04:59"))).toBe(false);
+    expect(liveHoldOver(m("05:00"))).toBe(true);
+    expect(liveHoldOver(m("09:26"))).toBe(true);
   });
 
   it("아침에 시작시킬 일 — 오늘 아직 한 번도 안 돈 것만 (자판기 · 네컷 · 주차 / POS 확정은 어제 날짜 / 네이버)", () => {

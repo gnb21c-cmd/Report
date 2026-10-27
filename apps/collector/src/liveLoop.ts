@@ -1,15 +1,19 @@
 /* ============================================================
-   하루 실시간 수집 (2026-10-19 사장님) — POS 메인 PC(바리스타 POS, 실행기 nice-pos)가 아침에 한 번 시작해 22:50 까지 켜져 있으면서
-   자기 시계로 매시 0 · 15 · 30 · 45분(10:00 ~ 22:45)에 바로 마감 전 영업정보를 받음 (그때마다 live.ts · survey.ts 를 새로 실행)
+   하루 실시간 수집 (2026-10-19 사장님) — POS 메인 PC(바리스타 POS, 실행기 nice-pos)가 아침에 한 번 시작해 21:50 까지 켜져 있으면서
+   자기 시계로 매시 0 · 15 · 30 · 45분(10:00 ~ 21:30) · 마지막 21:40 · 21:45 에 바로 마감 전 영업정보를 받음 (그때마다 live.ts · survey.ts 를 새로 실행)
    - GitHub 예약 실행은 20분 남짓 늦거나 자주 건너뛰어(2026-10-19 — 15분마다로 바꾼 뒤 3시간에 3번) 예약은 '시작'만 맡김
      (live-collect.yml — 09:30 · 09:45 · 10:00 부터 30분마다, 이미 돌고 있으면 건너뜀)
    - 시작했을 때 지난 칸(15분 안)을 아직 못 받았으면 바로 받음 (PC 를 다시 켰거나 비켜 줬다 돌아왔을 때 · 칸 시각 규칙 packages/core/src/live.ts liveLoopStep)
    - 칸 사이 1분마다 A [신규 다시 확인] 요청(config/naverAsk)을 보고 새 요청이면 여기서 바로 네이버 수집(naver.ts) — 실행기가 하나라 따로 시작시키면 밤까지 기다림
    - 칸 사이 1분마다 이 PC 실행기를 기다리는 다른 일(아침 네이버 다시 하기 · 손으로 시작한 수집 등)이 있는지 보고, 있으면 자기를 다시 시작시켜 두고 비켜 줌
-   - 스스로 이어 가기(2026-10-27 — GitHub 예약이 몇 시간씩 늦거나 빠져 10-26 은 14:05 에야 시작, 10-27 은 아침 수집까지 안 돎, core live.ts LIVE_MORNING_KICK):
-     22:50 에 끝나면 자기를 다시 시작시켜 '밤 대기'로 켜 둠 → 아침 09:27 에 오늘 아직 한 번도 안 돈 아침 수집(자판기 · 네컷 · 주차 / POS 확정 / 네이버)을
-     시작시키고 자기를 다시 시작시켜 하루 수집으로 넘어감. 하루 수집으로 시작했을 때도 안 돈 아침 수집이 있으면 시작시킴 (PC 를 껐다 켰을 때 등)
-     밤 대기 중에도 이 PC 를 기다리는 다른 일이 있으면 비켜 줌. 시험(LOOP_END · 확인만)일 때는 이어 가지 않음
+   - 스스로 이어 가기(2026-10-27 — GitHub 예약이 몇 시간씩 늦거나 빠져 10-26 은 14:05 에야 시작, 10-27 은 아침 수집까지 안 돎, core live.ts):
+     매장 포스는 밤 9시 40 ~ 50분쯤 꺼지고(일찍 · 늦게 꺼질 수도) 아침 9시 10 ~ 20분쯤 켜짐 (사장님) → 마지막 집계 21:40 · 21:45, 21:50 에 그날 끝
+     (늦게 시작됐거나 포스가 꺼져 응답이 없어도 21:50 뒤에는 새로 집계하지 않음 · 다음 날 10:00 첫 집계)
+     하루 수집을 시작할 때 '다음 차례' 하루 수집을 맡겨 두고 3시간마다 · 끝날 때 새로 맡김(arm — 같은 줄에서 가장 새것 하나만 기다림)
+     끝나면 컴퓨터가 꺼질 때까지 붙들고 있음(hold)
+     컴퓨터가 꺼지면 다음 차례가 실행기를 기다리다가 아침에 켜지면 바로 돎 → 09:27 까지 밤 대기 → 오늘 아직 안 돈 아침 수집
+     (자판기 · 네컷 · 주차 / POS 확정 / 네이버)을 시작시키고 끝 → 그다음 차례가 하루 수집으로. 하루 수집으로 시작했을 때도 안 돈 아침 수집이 있으면 시작시킴
+     밤 대기 · 붙들고 있는 동안에도 이 PC 를 기다리는 다른 일이 있으면 비켜 줌. 시험(LOOP_END · 확인만)일 때는 이어 가지 않음
    - 근무자 화면(2026-10-22): 칸마다 키친 숫자(work.ts) · 1분마다 통합데스크의 재방문 이벤트 예정 수 → floor/{태블릿 키}/work/event (숫자만)
      이벤트 예정 수는 칸을 받는 동안(몇 분)에도 따로 1분마다 — 손님이 매시 정각 · 30분에 오므로 20 · 50분(칸 받는 중일 수 있음)에도 새 숫자
    환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작) · LOOP_END(끝 시각 HH:MM, 시험용)
@@ -20,7 +24,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOOP_END, LIVE_MORNING_KICK, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
+import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOOP_END, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
 import { fbLogin, readConfigJson, readDeskLive, readFloorKey, readLive, writeConfigJson, writeWork, type Fb } from "./firebase";
 import { mask, say } from "./okpos";
 
@@ -140,9 +144,25 @@ async function kickMorning(): Promise<number> {
   return n;
 }
 
-/** 밤 대기 — 아침 09:27 까지 1분마다 이 PC 를 기다리는 다른 일이 있는지 보고(있으면 비켜 줌), 아침이 되면 아침 수집 · 하루 수집을 시작시키고 끝 */
+/** 다음 차례 하루 수집을 맡겨 둠 — 이 작업이 끝나거나 컴퓨터가 꺼지면 같은 줄에서 기다렸다가 돎 (꺼졌으면 켜질 때까지)
+ *  새로 맡기면 줄에서 기다리던 앞의 것은 GitHub 이 취소함 (가장 새것 하나만) — 오래 기다린 것이 하루 한도에 걸리지 않게 3시간마다 새로 */
+let armedAt: number | null = null;
+async function arm(): Promise<void> {
+  const first = armedAt === null;
+  await retry(startAgain);
+  armedAt = now();
+  if (first) say(`${hm(now())} 다음 차례 하루 수집을 맡겨 둠 (이 작업이 끝나거나, 컴퓨터가 꺼졌다 켜지면 이어서 · ${LIVE_REARM_MIN / 60}시간마다 새로)`);
+}
+
+/** 밤 대기 — 다음 차례를 맡겨 두고, 아침 09:27 까지 1분마다 이 PC 를 기다리는 다른 일이 있는지 보고(있으면 비켜 줌),
+ *  아침이 되면 오늘 안 돈 아침 수집을 시작시키고 끝 → 맡겨 둔 다음 차례가 하루 수집으로 */
 async function nightWait(end: number): Promise<void> {
   say(`${today()} 밤 대기 시작 ${hm(now())} — 아침 ${LIVE_MORNING_KICK} 에 아침 수집 · 하루 수집 시작 (GitHub 예약이 늦거나 빠져도)`);
+  try {
+    await arm();
+  } catch (e) {
+    say(`다음 차례 맡기기: ${mask((e as Error).message)}`);
+  }
   for (;;) {
     if (liveLoopMode(now(), end) === "day") {
       try {
@@ -151,15 +171,37 @@ async function nightWait(end: number): Promise<void> {
       } catch (e) {
         say(`아침 수집 시작: ${mask((e as Error).message)}`);
       }
-      await retry(startAgain);
-      say(`${hm(now())} 하루 수집으로 넘어감 (다시 시작시켜 둠)`);
+      if (armedAt === null) await retry(startAgain);
+      say(`${hm(now())} 하루 수집으로 넘어감`);
       return;
     }
     try {
       const n = await othersWaiting();
       if (n) {
-        await retry(startAgain);
-        say(`${hm(now())} 이 PC 실행기를 기다리는 다른 일 ${n}개 — 비켜 줌 (다시 시작시켜 둠, 그 일이 끝나면 이어서 밤 대기)`);
+        if (armedAt === null) await retry(startAgain);
+        say(`${hm(now())} 이 PC 실행기를 기다리는 다른 일 ${n}개 — 비켜 줌 (그 일이 끝나면 다음 차례가 이어서 밤 대기)`);
+        return;
+      }
+    } catch (e) {
+      once(`기다리는 다른 일 보기: ${mask((e as Error).message)}`);
+    }
+    await sleep(60e3);
+  }
+}
+
+/** 끝난 뒤 붙들고 있기 — 다음 차례가 이 뒤에 줄을 서 있으니 컴퓨터가 꺼질 때까지 그대로 (꺼지면 다음 차례가 아침까지 기다림)
+ *  꺼지지 않은 밤이면 05:00 에, 이 PC 를 기다리는 다른 일이 있으면 바로 놓아 줌 → 다음 차례가 밤 대기로 */
+async function hold(): Promise<void> {
+  say(`${hm(now())} 컴퓨터가 꺼질 때까지 붙들고 있음 (다음 차례가 뒤에 줄을 서 있음)`);
+  for (;;) {
+    if (liveHoldOver(now())) {
+      say(`${hm(now())} 컴퓨터가 꺼지지 않아 놓아 줌 — 다음 차례가 밤 대기로 이어서`);
+      return;
+    }
+    try {
+      const n = await othersWaiting();
+      if (n) {
+        say(`${hm(now())} 이 PC 실행기를 기다리는 다른 일 ${n}개 — 놓아 줌 (그 일이 끝나면 다음 차례가 이어서)`);
         return;
       }
     } catch (e) {
@@ -270,6 +312,14 @@ async function main() {
   let yielded = false;
   for (;;) {
     if (today() !== date) break;
+    // 다음 차례를 맡겨 둠 (시작할 때 · 3시간마다) — 매장 포스가 언제 꺼져도 아침에 켜지면 바로 이어서
+    if (chain && liveArmDue(now(), armedAt)) {
+      try {
+        await arm();
+      } catch (e) {
+        once(`다음 차례 맡기기: ${mask((e as Error).message)}`);
+      }
+    }
     const step = liveLoopStep(now(), last, end);
     if (step.act === "end") break;
     if (step.act === "run") {
@@ -304,15 +354,16 @@ async function main() {
   }
   clearInterval(eventTimer);
   say(`${yielded ? "비켜 줌" : "끝"} ${hm(now())} — 받은 칸 ${runs}개${fails.length ? ` · 실패 ${fails.length}번 (${fails.join(", ")})` : " · 실패 없음"}`);
-  // 끝났으면 밤 대기로 다시 시작시켜 둠 — 내일 아침을 GitHub 예약에 맡기지 않게
+  // 끝났으면 다음 차례를 새로 맡기고 컴퓨터가 꺼질 때까지 붙들고 있음 — 내일 아침을 GitHub 예약에 맡기지 않게
   if (chain && !yielded) {
     try {
-      await retry(startAgain);
-      say("밤 대기로 다시 시작시켜 둠 (내일 아침 수집 · 하루 수집)");
+      await arm();
+      say(`${hm(now())} 다음 차례를 새로 맡김 (내일 아침 컴퓨터를 켜면 이어서)`);
     } catch (e) {
-      say(`밤 대기 시작 실패 — 내일 아침은 GitHub 예약으로: ${mask((e as Error).message)}`);
-      fails.push("밤 대기 시작");
+      say(`다음 차례 새로 맡기기 실패: ${mask((e as Error).message)}`);
+      if (armedAt === null) fails.push("다음 차례 맡기기");
     }
+    if (armedAt !== null) await hold();
   }
   if (fails.length) process.exit(1);
 }

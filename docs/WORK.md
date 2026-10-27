@@ -33,7 +33,7 @@
 - **키친 숫자** → `floor/{키}/work/now` — 바리스타 POS 하루 수집(`apps/collector/src/liveLoop.ts`)이 15분 칸마다 마감 전 수집 뒤에 `apps/collector/src/work.ts` 를 실행 (이번 달 1일(또는 28일 전) ~ 오늘 보고 + 오늘 마감 전 카페 숫자)
 - **이벤트 예정 수** → `floor/{키}/work/event` — 하루 수집이 1분마다 통합데스크 키즈 실시간 현황(`boards/{열쇠}/deskLive/now`)의 `revisitDue` 를 숫자만 옮김 (바뀌었을 때 · 10분마다는 다시)
 - **베이커리** → 예전 현장 태블릿과 같은 `floor/{키}/plans` · `orders`
-- 하루 수집이 도는 09:30 ~ 22:50 에만 키친 · 이벤트 숫자가 새로 바뀜
+- 하루 수집이 도는 09:27 ~ 21:50 에만 키친 · 이벤트 숫자가 새로 바뀜 (매장 포스가 밤 9시 40 ~ 50분쯤 꺼짐 — 2026-10-27, 그 전엔 22:50)
 - 보안 규칙(`firebase/firestore.rules` → `floor/{fk}/work/{doc}`): 읽기 = 키가 살아 있을 때만 · 쓰기 = 그 매장 입력 계정만, 문서 `now` · `event` · 칸 `date` · `at` · `json` 만 — **Firebase 콘솔 규칙 탭에 붙여 넣기 필요** (Deploy 는 화면만)
 
 ## 통합데스크가 할 일 (gnb21c-cmd/astanakiz — 키즈 POS)
