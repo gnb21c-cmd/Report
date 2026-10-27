@@ -636,6 +636,14 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
     .sort((a, b) => (b.made ?? b.sold) - (a.made ?? a.sold) || a.name.localeCompare(b.name, "ko"));
 }
 
+/** 마지막 빵 판매 시각 "HH:MM" — 빵별 마지막 판매(bakeryLastBy) 중 가장 늦은 것 (없으면 null)
+    오늘 마감 전 빵 숫자가 POS 영수증 어디까지 들어왔는지 (2026-10-27 사장님: 19:45 ~ 48 에 판 빵이 20:00 숫자에 없었음) */
+export function lastBreadSale(by: Record<string, string> | null | undefined): string | null {
+  let last = "";
+  for (const t of Object.values(by || {})) if (/^\d{2}:\d{2}/.test(t) && t > last) last = t;
+  return last ? last.slice(0, 5) : null;
+}
+
 /** 그날 빵 하나의 생산(보고 앱 표시) = 판매 + 폐기 — 현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신 (2026-10-13 사장님 지시)
     폐기 = 지시(확정 · 자동) − 판매(모자라면 0, 일과 중 바뀐 양은 모름) · 작업지시에 없는 상품은 폐기를 몰라 판매만 */
 export function producedOf(r: BreadResult): number {

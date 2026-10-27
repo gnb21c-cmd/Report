@@ -752,3 +752,13 @@ describe("같은 요일 결과로 ±1 (2026-10-12 사장님 규칙)", () => {
     expect(nextSteps(b, "2026-10-13", null)).toEqual({});
   });
 });
+
+describe("마감 전 빵 숫자가 어디까지 들어왔나 — 마지막 빵 판매 시각 (2026-10-27 사장님: 19:45 ~ 48 에 팔린 빵 2개가 20:00 숫자에 없었음)", () => {
+  it("빵별 마지막 판매 시각 중 가장 늦은 것 HH:MM · 없으면 null", async () => {
+    const { lastBreadSale } = await import("../src");
+    expect(lastBreadSale({ 크루아상: "19:44:10", 소금빵: "19:47:59", 바게트: "12:00:00" })).toBe("19:47");
+    expect(lastBreadSale({})).toBeNull();
+    expect(lastBreadSale(undefined)).toBeNull();
+    expect(lastBreadSale({ 이상한: "늦게" })).toBeNull();
+  });
+});
