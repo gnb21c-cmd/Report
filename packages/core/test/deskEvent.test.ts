@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deskEventsFrom, deskRevisitOkFrom, newerRevisitOk, parseDeskEvent, parseRevisitOk, revisitOkLine, withDeskEvents, type DayReport } from "../src";
+import demoRevisit from "../../../apps/view/src/data/demoRevisit.json";
 
 /** 통합데스크가 매일 20:00 보내는 그날 이벤트 입장 수 (astanakiz 2.1~ · docs/OPERATION.md '현장 [이벤트 입장]') */
 const msg = (o: Record<string, unknown> = {}) => JSON.stringify({ type: "astanakiz-event", v: 1, day: "2026-10-21", sentAt: "2026-10-21 20:00", count: 3, names: [{ name: "한가위", n: 3 }], ...o });
@@ -68,5 +69,21 @@ describe("재방문 성공 수 — 통합데스크 이벤트 글 · 현황 글�
     expect(revisitOkLine(b, "2026-10-25")).toBeNull();
     expect(revisitOkLine({ ...b, days: {} }, "2026-10-27")).toEqual({ n: 0, total: 44 });
     expect(revisitOkLine(null, "2026-10-27")).toBeNull();
+  });
+  it("통합데스크가 재방문 성공을 아직 안 보냈어도 (2.10 전) — 재방문 간격 글의 이벤트 시작일(10/26)부터 마감된 날은 '재방문 0장 (現누적 0장)' (2026-10-27 사장님)", () => {
+    const gap = (event: unknown) => ({ id: "revisit", json: JSON.stringify({ ...JSON.parse(JSON.stringify(demoRevisit)), event }) });
+    const ev = { from: "2026-10-26", to: "2026-10-27", end: "2027-02-28", started: true, revisits: 0, people: 0, top: [] };
+    const zero = deskRevisitOkFrom([gap(ev), { id: "event-2026-10-26", json: msg({ day: "2026-10-26" }) }])!;
+    expect(zero).toEqual({ from: "2026-10-26", today: 0, total: 0, days: {}, asOf: "" });
+    expect(revisitOkLine(zero, "2026-10-26")).toEqual({ n: 0, total: 0 });
+    expect(revisitOkLine(zero, "2026-10-25")).toBeNull();
+    // 진짜 숫자가 오면 그것 (글이 있으면 그 글 · 나중에 와도 이김 · 진짜를 0으로 덮지 않음)
+    const real = { ...rv, asOf: "2026-10-27 19:05:00" };
+    expect(deskRevisitOkFrom([gap(ev), { id: "event-2026-10-27", json: msg({ day: "2026-10-27", sentAt: "2026-10-27 20:00", revisit: rv }) }])).toEqual({ ...rv, asOf: "2026-10-27 20:00" });
+    expect(newerRevisitOk(zero, real)).toBe(real);
+    expect(newerRevisitOk(real, zero)).toBe(real);
+    // 이벤트를 안 정했거나 재방문 간격 글이 이상하면 없음
+    expect(deskRevisitOkFrom([gap(null)])).toBeNull();
+    expect(deskRevisitOkFrom([{ id: "revisit", json: JSON.stringify({ type: "astanakiz-revisit" }) }])).toBeNull();
   });
 });

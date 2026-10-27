@@ -6,6 +6,7 @@
        (astanakiz-event · 그날 수 · 이벤트 이름별 · 손님 정보 없음 · 20:00 뒤 숫자가 바뀌면 다시). 통합데스크 쪽은 astanakiz docs/OPERATION.md
    - 그날 이벤트 무료입장 = max(POS 0원 상품, 통합데스크) — 옮겨 가는 동안 같은 손님을 POS 에도 찍었을 수 있어 더하지 않음
    ============================================================ */
+import { DESK_REVISIT, parseDeskRevisit } from "./deskRevisit";
 import type { DayReport } from "./part";
 
 export const DESK_EVENT_PREFIX = "event-";
@@ -84,7 +85,12 @@ export function deskRevisitOkFrom(docs: { id: string; json?: unknown }[]): DeskR
     if (!e || d.id !== DESK_EVENT_PREFIX + e.day || !e.revisit) continue;
     if (!best || e.day > best.day || (e.day === best.day && e.sentAt > best.sentAt)) best = e;
   }
-  return best && best.revisit ? { ...best.revisit, asOf: best.sentAt || best.day } : null;
+  if (best && best.revisit) return { ...best.revisit, asOf: best.sentAt || best.day };
+  // 통합데스크가 아직 안 보냈으면(2.10 전) 재방문 간격 글(revisit)의 이벤트 시작일부터 0 — 마감된 날 '재방문 0장 (現누적 0장)' (2026-10-27 사장님)
+  // asOf "" → 진짜 숫자가 오면 언제든 그것이 이김
+  const gap = docs.find((d) => d.id === DESK_REVISIT);
+  const ev = gap ? parseDeskRevisit(gap.json)?.event : null;
+  return ev ? { from: ev.from, today: 0, total: 0, days: {}, asOf: "" } : null;
 }
 
 /** 둘 중 더 늦게 센 것 (asOf 견줌 · 없는 쪽은 짐) */

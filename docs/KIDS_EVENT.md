@@ -26,6 +26,7 @@
   `from` 이벤트 시작일 · `today` 그날 · `total` 시작일부터 누적 · `days` 날마다(0인 날 빠짐) — 검사 `packages/core/src/deskEvent.ts parseRevisitOk`
 - 지금 수는 키즈 실시간 현황 글(`deskLive/now`)에도 같은 모양으로 들어 있음 → B 가 열려 있는 동안 5분마다 오늘 것을 읽음(`deskOkNow`) · 받을 때는 가장 최근 `event-날짜` 글의 것(`deskRevisitOkFrom`) — 둘 중 늦게 만든 것(`newerRevisitOk`), 폰에 저장(`report.deskOk`)
 - 첫 화면 키즈 '입장권 판매 총 수량' 칸(지난 날 · 마감된 실적) 숫자 밑 줄: **"재방문 N장 (現누적 NN장)"** — N = 그날 성공 수(`days[날짜]`, 없으면 0) · NN = 지금 누적 (`revisitOkLine` · 이벤트 시작일 전 날은 안 보임)
+  - 통합데스크가 재방문 성공을 아직 안 보냈으면(2.10 전) 재방문 간격 글(`deskStats/revisit`)의 이벤트 시작일(10/26)부터 마감된 날에 **"재방문 0장 (現누적 0장)"** — 진짜 숫자가 오면 바로 그것 (`deskRevisitOkFrom` · asOf "" 는 언제나 짐, 2026-10-27 사장님)
 - 키즈 실시간 '오늘 입장' 재방문성공 칸 = 오늘(누적) — `docs/KIDS_LIVE.md`
 - 보안 규칙은 그대로 (`json` 글 안에 칸이 하나 늘 뿐)
 
