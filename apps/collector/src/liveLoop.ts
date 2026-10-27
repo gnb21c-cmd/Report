@@ -6,6 +6,10 @@
    - 시작했을 때 지난 칸(15분 안)을 아직 못 받았으면 바로 받음 (PC 를 다시 켰거나 비켜 줬다 돌아왔을 때 · 칸 시각 규칙 packages/core/src/live.ts liveLoopStep)
    - 칸 사이 1분마다 A [신규 다시 확인] 요청(config/naverAsk)을 보고 새 요청이면 여기서 바로 네이버 수집(naver.ts) — 실행기가 하나라 따로 시작시키면 밤까지 기다림
    - 칸 사이 1분마다 이 PC 실행기를 기다리는 다른 일(아침 네이버 다시 하기 · 손으로 시작한 수집 등)이 있는지 보고, 있으면 자기를 다시 시작시켜 두고 비켜 줌
+   - 스스로 이어 가기(2026-10-27 — GitHub 예약이 몇 시간씩 늦거나 빠져 10-26 은 14:05 에야 시작, 10-27 은 아침 수집까지 안 돎, core live.ts LIVE_MORNING_KICK):
+     22:50 에 끝나면 자기를 다시 시작시켜 '밤 대기'로 켜 둠 → 아침 09:27 에 오늘 아직 한 번도 안 돈 아침 수집(자판기 · 네컷 · 주차 / POS 확정 / 네이버)을
+     시작시키고 자기를 다시 시작시켜 하루 수집으로 넘어감. 하루 수집으로 시작했을 때도 안 돈 아침 수집이 있으면 시작시킴 (PC 를 껐다 켰을 때 등)
+     밤 대기 중에도 이 PC 를 기다리는 다른 일이 있으면 비켜 줌. 시험(LOOP_END · 확인만)일 때는 이어 가지 않음
    - 근무자 화면(2026-10-22): 칸마다 키친 숫자(work.ts) · 1분마다 통합데스크의 재방문 이벤트 예정 수 → floor/{태블릿 키}/work/event (숫자만)
      이벤트 예정 수는 칸을 받는 동안(몇 분)에도 따로 1분마다 — 손님이 매시 정각 · 30분에 오므로 20 · 50분(칸 받는 중일 수 있음)에도 새 숫자
    환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작) · LOOP_END(끝 시각 HH:MM, 시험용)
@@ -16,7 +20,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOOP_END, liveLoopStep, liveSlotBy, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
+import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOOP_END, LIVE_MORNING_KICK, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
 import { fbLogin, readConfigJson, readDeskLive, readFloorKey, readLive, writeConfigJson, writeWork, type Fb } from "./firebase";
 import { mask, say } from "./okpos";
 
@@ -24,6 +28,8 @@ const env = (k: string) => process.env[k] || "";
 const here = dirname(fileURLToPath(import.meta.url));
 const tsx = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 const dry = env("COLLECT_DRY") === "1";
+/** 스스로 이어 가기 — 보통 하루 수집일 때만 (시험: 끝 시각을 정했거나 확인만이면 안 함) */
+const chain = !dry && !env("LOOP_END");
 const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const now = () => kstMinutes();
 const hm = (t: number) => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -109,6 +115,60 @@ async function startAgain(): Promise<void> {
   await gh(`/actions/workflows/live-collect.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: env("GITHUB_REF_NAME") || "main", inputs }) });
 }
 
+/** 실패하면 30초 뒤 다시 (3번까지) — 이어 가기가 끊기면 다음 날 아침을 GitHub 예약에 맡기게 되므로 */
+async function retry<T>(f: () => Promise<T>): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await f();
+    } catch (e) {
+      if (i >= 3) throw e;
+      await sleep(30e3);
+    }
+  }
+}
+
+/** 아침 수집 중 오늘 아직 한 번도 안 돈 것을 시작시킴 (core morningJobs) — 시작시킨 개수 */
+async function kickMorning(): Promise<number> {
+  let n = 0;
+  const since = encodeURIComponent(`>=${today()}T00:00:00+09:00`);
+  for (const j of morningJobs(today())) {
+    const r = await gh(`/actions/workflows/${j.file}/runs?created=${since}&per_page=1`);
+    if ((r?.total_count || 0) > 0) continue;
+    await gh(`/actions/workflows/${j.file}/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main", inputs: j.inputs }) });
+    n++;
+  }
+  return n;
+}
+
+/** 밤 대기 — 아침 09:27 까지 1분마다 이 PC 를 기다리는 다른 일이 있는지 보고(있으면 비켜 줌), 아침이 되면 아침 수집 · 하루 수집을 시작시키고 끝 */
+async function nightWait(end: number): Promise<void> {
+  say(`${today()} 밤 대기 시작 ${hm(now())} — 아침 ${LIVE_MORNING_KICK} 에 아침 수집 · 하루 수집 시작 (GitHub 예약이 늦거나 빠져도)`);
+  for (;;) {
+    if (liveLoopMode(now(), end) === "day") {
+      try {
+        const n = await retry(kickMorning);
+        say(`${hm(now())} 아침 수집 ${n ? `${n}개 시작시킴` : "모두 이미 돎"}`);
+      } catch (e) {
+        say(`아침 수집 시작: ${mask((e as Error).message)}`);
+      }
+      await retry(startAgain);
+      say(`${hm(now())} 하루 수집으로 넘어감 (다시 시작시켜 둠)`);
+      return;
+    }
+    try {
+      const n = await othersWaiting();
+      if (n) {
+        await retry(startAgain);
+        say(`${hm(now())} 이 PC 실행기를 기다리는 다른 일 ${n}개 — 비켜 줌 (다시 시작시켜 둠, 그 일이 끝나면 이어서 밤 대기)`);
+        return;
+      }
+    } catch (e) {
+      once(`기다리는 다른 일 보기: ${mask((e as Error).message)}`);
+    }
+    await sleep(60e3);
+  }
+}
+
 /** A [신규 다시 확인] — 새 요청이면 네이버 수집(naver.ts)을 바로. 했으면 true */
 async function askCheck(): Promise<boolean> {
   if (dry) return false; // 확인만일 때는 맡지 않음 (naver-ask.yml 이 맡음)
@@ -181,8 +241,19 @@ async function main() {
   }
   const end = minutesOf(env("LOOP_END") || LIVE_LOOP_END);
   if (!Number.isFinite(end)) throw new Error("끝 시각 모양이 이상함 (HH:MM)");
+  // 끝 시각 뒤 · 아침 시작 전에 시작했으면 밤 대기 (스스로 이어 가기)
+  if (chain && liveLoopMode(now(), end) === "night") return nightWait(end);
   const date = today();
   say(`${date} 하루 실시간 수집 시작 ${hm(now())} — ${LIVE_FROM} 부터 15분마다(매시 0 · 15 · 30 · 45분), ${hm(end)} 에 끝${dry ? " · 확인만 (올리지 않음)" : ""}`);
+  // 오늘 아침 수집이 아직 하나도 안 돈 것이 있으면 시작시킴 (밤 대기가 끊겼을 때 — PC 를 껐다 켰거나 · 예약이 늦게 시작시켰을 때)
+  if (chain) {
+    try {
+      const n = await kickMorning();
+      if (n) say(`아침 수집 ${n}개가 오늘 아직 안 돌아 시작시킴`);
+    } catch (e) {
+      say(`아침 수집 보기: ${mask((e as Error).message)}`);
+    }
+  }
 
   // 이미 받은 칸 — 다시 켜졌을 때 그 칸은 건너뜀
   let last: number | null = null;
@@ -233,6 +304,16 @@ async function main() {
   }
   clearInterval(eventTimer);
   say(`${yielded ? "비켜 줌" : "끝"} ${hm(now())} — 받은 칸 ${runs}개${fails.length ? ` · 실패 ${fails.length}번 (${fails.join(", ")})` : " · 실패 없음"}`);
+  // 끝났으면 밤 대기로 다시 시작시켜 둠 — 내일 아침을 GitHub 예약에 맡기지 않게
+  if (chain && !yielded) {
+    try {
+      await retry(startAgain);
+      say("밤 대기로 다시 시작시켜 둠 (내일 아침 수집 · 하루 수집)");
+    } catch (e) {
+      say(`밤 대기 시작 실패 — 내일 아침은 GitHub 예약으로: ${mask((e as Error).message)}`);
+      fails.push("밤 대기 시작");
+    }
+  }
   if (fails.length) process.exit(1);
 }
 

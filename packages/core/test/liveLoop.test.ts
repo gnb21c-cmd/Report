@@ -86,3 +86,26 @@ describe("A [신규 다시 확인] — 아직 맡지 않은 요청인지 (실시
     expect(naverAskTodo({ at: "2026-10-18T21:01:00.000Z", by: "매니저" }, null, now)).toBe(true);
   });
 });
+
+describe("스스로 이어 가기 (2026-10-27) — GitHub 예약이 몇 시간씩 늦거나 빠져도 POS 메인 PC 가 다음 날 아침 수집 · 하루 수집을 시작", async () => {
+  const { LIVE_MORNING_KICK, liveLoopMode, morningJobs } = await import("../src");
+  it("끝 시각 뒤 · 아침 09:27 전은 밤 대기, 그 사이는 하루 수집", () => {
+    expect(LIVE_MORNING_KICK).toBe("09:27");
+    expect(liveLoopMode(m("22:50"), END)).toBe("night");
+    expect(liveLoopMode(m("23:59"), END)).toBe("night");
+    expect(liveLoopMode(m("00:00"), END)).toBe("night");
+    expect(liveLoopMode(m("09:26"), END)).toBe("night");
+    expect(liveLoopMode(m("09:27"), END)).toBe("day");
+    expect(liveLoopMode(m("14:05"), END)).toBe("day");
+    expect(liveLoopMode(m("22:49"), END)).toBe("day");
+  });
+
+  it("아침에 시작시킬 일 — 오늘 아직 한 번도 안 돈 것만 (자판기 · 네컷 · 주차 / POS 확정은 어제 날짜 / 네이버)", () => {
+    expect(morningJobs("2026-10-27")).toEqual([
+      { file: "extra-collect.yml", inputs: {} },
+      { file: "pos-collect.yml", inputs: { date: "2026-10-26" } },
+      { file: "naver-collect.yml", inputs: {} },
+    ]);
+    expect(morningJobs("2026-11-01")[1].inputs).toEqual({ date: "2026-10-31" });
+  });
+});
