@@ -69,12 +69,14 @@ describe("늦음 표시 — 15분마다(0 · 15 · 30 · 45분) 받으니 60분 
     expect(liveStale(at("13:15"), kst("14:10"))).toBe(false);
     expect(liveStale(at("13:15"), kst("14:20"))).toBe(true);
   });
-  it("아침 첫 수집(10:00) 전후 · 마지막(22:45) 뒤 밤에는 늦음 표시 없음", () => {
+  it("아침 첫 수집(10:00) 전후 · 마지막(21:30) 뒤 밤에는 늦음 표시 없음 — 매장 포스가 꺼진 뒤 거짓 경고가 뜨지 않게", () => {
     expect(LIVE_FROM).toBe("10:00");
     expect(liveStale(null, kst("09:50"))).toBe(false);
     expect(liveStale(null, kst("10:50"))).toBe(false);
     expect(liveStale(null, kst("11:05"))).toBe(true);
-    expect(liveStale(at("22:45"), kst("23:59"))).toBe(false);
+    expect(liveStale(at("21:30"), kst("23:59"))).toBe(false);
+    expect(liveStale(at("21:30"), kst("22:40"))).toBe(false);
+    expect(liveStale(at("20:15"), kst("21:20"))).toBe(true);
   });
 });
 

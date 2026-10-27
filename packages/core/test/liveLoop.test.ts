@@ -4,15 +4,15 @@ import { kstMinutes, LIVE_EVERY_MIN, LIVE_LOOP_END, liveLoopStep, liveSlotBy, li
 const m = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 const END = m(LIVE_LOOP_END);
 
-describe("하루 실시간 수집 시간표 — 10:00 ~ 22:45, 15분마다 매시 0 · 15 · 30 · 45분 (2026-10-19 사장님)", () => {
-  it("받을 칸 52개 · 첫 칸 10:00 · 마지막 22:45 · 끝 22:50", () => {
+describe("하루 실시간 수집 시간표 — 10:00 ~ 21:30, 15분마다 매시 0 · 15 · 30 · 45분 (2026-10-19 사장님 · 21:30 까지는 2026-10-27 — 매장 포스가 밤 9시 40 ~ 50분에 꺼짐)", () => {
+  it("받을 칸 47개 · 첫 칸 10:00 · 마지막 21:30 · 끝 21:35", () => {
     const s = liveSlots();
     expect(LIVE_EVERY_MIN).toBe(15);
-    expect(s.length).toBe(52);
+    expect(s.length).toBe(47);
     expect(s[0]).toBe(m("10:00"));
-    expect(s[s.length - 1]).toBe(m("22:45"));
+    expect(s[s.length - 1]).toBe(m("21:30"));
     expect(s.every((x) => x % 15 === 0)).toBe(true);
-    expect(LIVE_LOOP_END).toBe("22:50");
+    expect(LIVE_LOOP_END).toBe("21:35");
   });
 
   it("아침에 일찍 켜지면 10:00 까지 기다렸다가 10:00 에 바로 받음", () => {
@@ -35,11 +35,11 @@ describe("하루 실시간 수집 시간표 — 10:00 ~ 22:45, 15분마다 매�
     expect(liveLoopStep(m("18:50"), m("18:00"), END)).toEqual({ act: "run", slot: m("18:45") });
   });
 
-  it("마지막 22:45 칸을 받으면 끝 · 22:50 이 지나면 끝", () => {
-    expect(liveLoopStep(m("22:46"), m("22:30"), END)).toEqual({ act: "run", slot: m("22:45") });
-    expect(liveLoopStep(m("22:47"), m("22:45"), END)).toEqual({ act: "end" });
-    expect(liveLoopStep(m("22:50"), m("22:30"), END)).toEqual({ act: "end" });
-    expect(liveLoopStep(m("23:30"), null, END)).toEqual({ act: "end" });
+  it("마지막 21:30 칸을 받으면 끝 · 21:35 가 지나면 끝", () => {
+    expect(liveLoopStep(m("21:31"), m("21:15"), END)).toEqual({ act: "run", slot: m("21:30") });
+    expect(liveLoopStep(m("21:32"), m("21:30"), END)).toEqual({ act: "end" });
+    expect(liveLoopStep(m("21:35"), m("21:15"), END)).toEqual({ act: "end" });
+    expect(liveLoopStep(m("22:30"), null, END)).toEqual({ act: "end" });
   });
 
   it("끝 시각을 앞당기면(시험) 그 전 칸까지만", () => {
@@ -87,17 +87,36 @@ describe("A [신규 다시 확인] — 아직 맡지 않은 요청인지 (실시
   });
 });
 
-describe("스스로 이어 가기 (2026-10-27) — GitHub 예약이 몇 시간씩 늦거나 빠져도 POS 메인 PC 가 다음 날 아침 수집 · 하루 수집을 시작", async () => {
-  const { LIVE_MORNING_KICK, liveLoopMode, morningJobs } = await import("../src");
-  it("끝 시각 뒤 · 아침 09:27 전은 밤 대기, 그 사이는 하루 수집", () => {
+describe("스스로 이어 가기 (2026-10-27) — 깃허브 예약이 몇 시간씩 늦거나 빠져도, 매장 포스가 밤에 꺼졌다 아침에 켜져도 이어서", async () => {
+  const { LIVE_ARM_AT, LIVE_HOLD_UNTIL, LIVE_MORNING_KICK, liveArmDue, liveHoldOver, liveLoopMode, morningJobs } = await import("../src");
+  it("21:35 뒤 · 아침 09:27 전은 밤 대기, 그 사이는 하루 수집", () => {
     expect(LIVE_MORNING_KICK).toBe("09:27");
-    expect(liveLoopMode(m("22:50"), END)).toBe("night");
+    expect(liveLoopMode(m("21:35"), END)).toBe("night");
     expect(liveLoopMode(m("23:59"), END)).toBe("night");
     expect(liveLoopMode(m("00:00"), END)).toBe("night");
+    expect(liveLoopMode(m("09:15"), END)).toBe("night"); // 아침에 켜자마자
     expect(liveLoopMode(m("09:26"), END)).toBe("night");
     expect(liveLoopMode(m("09:27"), END)).toBe("day");
     expect(liveLoopMode(m("14:05"), END)).toBe("day");
-    expect(liveLoopMode(m("22:49"), END)).toBe("day");
+    expect(liveLoopMode(m("21:34"), END)).toBe("day");
+  });
+
+  it("저녁 8시부터 다음 차례를 맡겨 둠 — 매장 포스가 일찍 꺼져도 아침에 켜지면 바로 이어서", () => {
+    expect(LIVE_ARM_AT).toBe("20:00");
+    expect(liveArmDue(m("19:59"))).toBe(false);
+    expect(liveArmDue(m("20:00"))).toBe(true);
+    expect(liveArmDue(m("21:34"))).toBe(true);
+  });
+
+  it("끝난 뒤 붙들고 있기 — 꺼지지 않은 밤이면 새벽 5시에 놓아 줌 (새 작업으로, 깃허브 열쇠 24시간 한도)", () => {
+    expect(LIVE_HOLD_UNTIL).toBe("05:00");
+    // 21:30 칸을 받고 바로(21:31 · 21:35 전) 놓아 주면 안 됨 — 컴퓨터가 꺼질 때까지 붙들고 있어야 다음 차례가 아침까지 기다림
+    expect(liveHoldOver(m("21:31"))).toBe(false);
+    expect(liveHoldOver(m("21:36"))).toBe(false);
+    expect(liveHoldOver(m("23:59"))).toBe(false);
+    expect(liveHoldOver(m("04:59"))).toBe(false);
+    expect(liveHoldOver(m("05:00"))).toBe(true);
+    expect(liveHoldOver(m("09:26"))).toBe(true);
   });
 
   it("아침에 시작시킬 일 — 오늘 아직 한 번도 안 돈 것만 (자판기 · 네컷 · 주차 / POS 확정은 어제 날짜 / 네이버)", () => {
