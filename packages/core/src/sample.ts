@@ -17,6 +17,8 @@ interface Item {
   base: number;
   /** 잔 수 (음료 1, 아니면 0) */
   cup: number;
+  /** 이 날부터 팔기 시작 (새 빵) */
+  from?: string;
 }
 
 const item = (sector: Sector, cup: number) => ([name, price, base]: [string, number, number]): Item => ({ name, sector, price, base, cup });
@@ -43,6 +45,8 @@ const MENU: Item[] = [
     ] as [string, number, number][]
   ).map(item("키친", 0)),
   ...([["아크릴키링", 5900, 1], ["이벤트 초", 3500, 1]] as [string, number, number][]).map(item("기타", 0)),
+  // 새 빵 — 10-24 부터 팔기 시작 (매장과 같게, 판매 4주가 안 돼 매니저 기입 화면용)
+  { ...item("베이커리", 0)(["명란소금빵", 4200, 8]), from: "2026-10-24" },
 ];
 
 /** 분류별 시간대 모양 (10시 ~ 21시) */
@@ -107,6 +111,7 @@ function cafePart(date: string): StorePart {
   const bakeryLastBy: Record<string, string> = {};
   let cups = 0;
   for (const it of MENU) {
+    if (it.from && date < it.from) continue;
     const qty = Math.max(0, Math.round(it.base * f * (0.6 + rand(date + it.name) * 0.8)));
     if (!qty) continue;
     // 빵 마지막 판매 시각 (체험판 — 19:30 ~ 21:00 사이, 매진 목표 20:40 화면용)

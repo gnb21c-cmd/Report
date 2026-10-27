@@ -11,13 +11,15 @@
    공개 저장소라 기록에는 날짜 · 빵 종류 수만 (수량 · 손님 수 없음)
    - 규칙이 바뀌었을 때(2026-10-16 매진 목표 20:40) 이미 센 주간 잠정안에 같은 요일 칸만 다시: PLAN_RESTEP=1 · PLAN_TODAY = 그 주간안을 센 목요일
      예측(base) · 매니저 잠정 확정 · 있던 최종안은 그대로 (최종안은 3일 전에 잠정 확정 ±10% 안에서 새 칸을 씀)
-   - 새 빵(명란소금빵, 2026-10-25 · core bakery.ts NEW_BREAD): 처음 4주는 그날 소보로팥소금빵의 80% (매진 더하기 없음)
+   - 11-02 계획부터(10-29 목 발표 주간안부터, 2026-10-27 사장님 · core breadTrend.ts): 같은 요일 추세 — 지난 4주 같은 요일 실적 ÷ 작년 '오늘' 앞뒤 4주 추세선
+     생산 늘림 · 비 예보 주말 · 같은 요일 칸(매진 20:40) 없음 · 평일 300 ~ 320 은 남김 · 판매 4주가 안 된 새 빵은 매니저 기입(계획 0 개)
+     최종안(3일 전)은 다시 세지 않음 — 매니저 잠정 확정(없으면 주간안) 수량 그대로 + 그날 예보 기온 급변이면 신뢰도 낮음
    - 팥앙금샌드는 10-29 ~ 11-01 최종안만 평일 12 · 휴일 16 으로 정해 둠 (core bakery.ts FIXED_QTY) — 11-02 주간안부터는 판매로 예측
    - 팥앙금샌드 4개 단위를 정한 날(2026-10-25) — 지금 나가 있는 계획 · 확정에 올림만: PLAN_UNIT_FIX=1 (내일 ~ 8일 뒤, 그 빵만 · 다른 빵 · 합계 범위 그대로)
      매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (core roundUnitOrder)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, dayRange, FINAL_LEAD, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, dayRange, FINAL_LEAD, TREND_FROM, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writeOrders, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -49,6 +51,8 @@ async function main() {
     return x;
   };
   const stepsFor = async (date: string, b: Board, a: string): Promise<Record<string, number>> => {
+    // 11-02 계획부터는 같은 요일 칸을 쓰지 않음 (같은 요일 추세, 2026-10-27)
+    if (date >= TREND_FROM) return {};
     for (const p of sameGroupBefore(date, 8)) {
       const x = await docsOf(p);
       if (!x.plan?.final && !x.plan?.week) continue;

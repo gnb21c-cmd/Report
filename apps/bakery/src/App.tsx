@@ -262,7 +262,8 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
         for (const it of p?.week?.items || []) tot.set(it.name, (tot.get(it.name) || 0) + (o?.provisional[it.name]?.qty ?? it.qty));
         for (const [n, l] of Object.entries(o?.provisional || {})) if (!tot.has(n)) tot.set(n, l.qty);
       }
-      const keys = sortBread([...tot.keys()], (n) => n);
+      // 7일 모두 0 개(기입 안 한 새 빵 등)는 그림에서 뺌
+      const keys = sortBread([...tot.keys()].filter((n) => (tot.get(n) || 0) > 0), (n) => n);
       // 그림에는 표기 이름 (11-01 까지 옛 이름 (변경명칭:새 이름)) — 수량은 원래 이름으로 찾음
       const keyOf = new Map(keys.map((n) => [breadLabel(n, dates[0]), n]));
       const names = [...keyOf.keys()];
@@ -336,6 +337,8 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const prov = order?.provisional || {};
   // 사장님 표 순서 (2026-10-22, core BREAD_ORDER)
   const rows = sortBread(step?.items || []);
+  // 수정 칸에 수량을 적었는지
+  const filled = (name: string) => (edit[name] ?? "") !== "";
   // 고친 수량도 만드는 단위로 (몽블랑 5개 · 10-26 부터 시나몬롤 10개 · 우유모닝빵 2개 올림)
   const valueOf = (name: string, q: number) => {
     const v = edit[name];
@@ -369,7 +372,8 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
         const p = visiblePlan(raw, nowKst());
         if (!p?.week) continue;
         const have = o?.provisional || {};
-        const lines = Object.fromEntries(p.week.items.filter((i) => !have[i.name]).map((i) => [i.name, d === date ? valueOf(i.name, i.qty) : i.qty]));
+        // 새 빵(매니저 기입)은 수량을 적은 것만 — 0 개로 잠정 확정되지 않게
+        const lines = Object.fromEntries(p.week.items.filter((i) => !have[i.name] && !(i.manual && !(d === date && filled(i.name)))).map((i) => [i.name, d === date ? valueOf(i.name, i.qty) : i.qty]));
         if (Object.keys(lines).length) {
           const saved = await api.confirm(d, "provisional", lines, who);
           if (d === date) setOrder(saved);
@@ -397,6 +401,8 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
     }
   };
   const confirmedN = rows.filter((r) => done[r.name]).length;
+  // 새 빵(매니저 기입) 중 아직 수량을 안 적은 것
+  const needInput = rows.filter((r) => r.manual && !done[r.name] && !filled(r.name)).length;
   const total = rows.reduce((a, r) => a + valueOf(r.name, r.qty), 0);
   return (
     <section className={kind === "final" ? "content" : ""} style={kind === "final" ? undefined : { display: "grid", gap: 10 }}>
@@ -425,7 +431,15 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
             {step.band && <b className="rain-up"> · 평일 하루 {step.band[0]} ~ {step.band[1]}개 안으로</b>}
           </div>
         )}
-        <button className="primary big" disabled={!rows.length || !!busy || locked} onClick={() => save(Object.fromEntries(rows.map((r) => [r.name, valueOf(r.name, r.qty)])), "all")}>
+        {step?.trust && (
+          <div className={`trust ${step.trust.level === "높음" ? "hi" : step.trust.level === "보통" ? "mid" : "lo"}`}>
+            {/* 11-02 계획부터 — 같은 요일 추세 (지난 4주 실적 · 작년 추세선), 날씨가 급격히 바뀌면 매니저가 보고 조정 */}
+            예측 신뢰도 <b>{step.trust.level}</b> — {step.trust.why}
+            {step.trust.level !== "높음" && " · 수량을 살펴 조정해 주세요"}
+          </div>
+        )}
+        {needInput > 0 && <div className="need-input">새 빵 {needInput}가지 — 판매 실적이 4주가 안 돼 예측하지 않습니다. 매니저 회의에서 정한 수량을 적어 주세요.</div>}
+        <button className="primary big" disabled={!rows.length || !!busy || locked} onClick={() => save(Object.fromEntries(rows.filter((r) => !r.manual || done[r.name] || filled(r.name)).map((r) => [r.name, valueOf(r.name, r.qty)])), "all")}>
           {busy === "all" ? "확정 중…" : kind === "final" ? "이 날 일괄 최종 확정" : "이 날 일괄 잠정 확정"}
         </button>
         {weekDays && (
@@ -460,6 +474,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
               <div key={r.name} className={`row${c ? " done" : ""}${kind === "final" ? " fin" : ""}`}>
                 <span className="name">
                   <BreadName name={r.name} date={date} />
+                  {r.manual && <small className="manual-tag"> 새 빵 — 매니저 기입</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
                   {r.lo != null && (
                     <small className="muted">
@@ -468,18 +483,18 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
                     </small>
                   )}
                 </span>
-                {kind === "final" && <span className="num muted">{prov[r.name]?.qty ?? plan?.week?.items.find((i) => i.name === r.name)?.qty ?? "—"}</span>}
-                <span className="num">{r.qty}</span>
+                {kind === "final" && <span className="num muted">{prov[r.name]?.qty ?? (r.manual ? "—" : plan?.week?.items.find((i) => i.name === r.name)?.qty ?? "—")}</span>}
+                <span className="num">{r.manual && !r.qty ? "기입" : r.qty}</span>
                 <input
                   className="num"
                   inputMode="numeric"
                   disabled={locked}
                   value={v ?? (c && c.qty !== r.qty ? String(c.qty) : "")}
-                  placeholder={String(c?.qty ?? r.qty)}
+                  placeholder={r.manual && !c ? "기입" : String(c?.qty ?? r.qty)}
                   onChange={(e) => setEdit({ ...edit, [r.name]: e.target.value.replace(/[^0-9]/g, "") })}
                   aria-label={`${r.name} 수량 수정`}
                 />
-                <button className={c && v == null ? "ok" : "primary"} disabled={!!busy || locked} onClick={() => save({ [r.name]: valueOf(r.name, r.qty) }, r.name)}>
+                <button className={c && v == null ? "ok" : "primary"} disabled={!!busy || locked || (!!r.manual && !c && !filled(r.name))} onClick={() => save({ [r.name]: valueOf(r.name, r.qty) }, r.name)}>
                   {busy === r.name ? "…" : c && v == null ? `✓ ${c.qty}` : "확정"}
                 </button>
               </div>

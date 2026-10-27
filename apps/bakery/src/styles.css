@@ -721,6 +721,39 @@ small.rename {
   color: #2f6fb3;
 }
 
+/* 예측 신뢰도 (11-02 계획부터 — 같은 요일 추세, 2026-10-27) · 새 빵 매니저 기입 */
+.trust {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin: 4px 0;
+  line-height: 1.4;
+}
+.trust.hi {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+.trust.mid,
+.trust.lo,
+.need-input {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.trust.lo {
+  color: var(--bad);
+}
+.need-input {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.manual-tag {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* ---------- 근무자 화면 (…/w/<키>/, 2026-10-22) ---------- */
 .worker .top {
   display: flex;
