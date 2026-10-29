@@ -55,7 +55,7 @@ describe("오늘 마감 전 영업정보 — 받은 숫자 검사 (틀린 숫자
     expect(m2.provisional).toBeUndefined();
   });
   it("받은 시각 = 카페 · 키즈 영수 숫자를 받은 시각 (네이버만 새로 와도 앞당기지 않음 · 둘이 다르면 늦은 쪽 — 2026-10-27 사장님: '20시 새로고침'인데 빵 숫자가 19:45 그대로)", () => {
-    const kidsP = () => buildStorePart({ store: "kids", date: "2026-10-08", file: "live", sheet, sectorOf: () => "키즈" }).part;
+    const kidsP = () => buildStorePart({ store: "kids", date: "2026-10-08", file: "live", sheet, sectorOf: () => "기타" as any }).part;
     // 20:00 에 카페 · 키즈는 못 올리고 네이버만 올림 → 문서 at 은 20:00, 카페 · 키즈 조각은 19:45
     const doc = { date: "2026-10-08", at: "2026-10-08T11:00:20Z", cafe: { p: cafe(), at: "2026-10-08T10:45:30Z" }, kids: { p: kidsP(), at: "2026-10-08T10:45:30Z" }, naver: { p: { date: "2026-10-08", slots: {} } as any, at: "2026-10-08T11:00:20Z" } };
     expect(liveReport(doc, "2026-10-08").at).toBe("2026-10-08T10:45:30Z");
