@@ -14,7 +14,8 @@
    ============================================================ */
 import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, renameLast, renameSum } from "./breadNames";
 import { addDays, dayRange, weekday, WEEKDAY_KO } from "./dates";
-import { bandRange, breadPlan, dayKind, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
+import { TREND_FROM, trendDay, trendTrust, type Trust } from "./breadTrend";
+import { bandRange, breadPlan, dayKind, forecastVisitors, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
 import { NOT_BREAD } from "./rules";
 import type { DayWeather, WeatherMap } from "./weather";
@@ -106,6 +107,8 @@ export interface PlanItem {
   /** 최종 계산에서: 잠정 수량 ±10% 범위 */
   lo?: number;
   hi?: number;
+  /** 새 빵(판매 4주가 안 됨) — 예측하지 않고 매니저가 기입 (계획 수량 0, 11-09 계획부터 · breadTrend.ts) */
+  manual?: boolean;
 }
 
 /** 한 번 센 계획 (주간 또는 최종) */
@@ -127,6 +130,8 @@ export interface PlanStep {
   boost?: number;
   /** 하루 합계를 맞춘 범위 (평일 300 ~ 320, breadBandOf) — 없으면 맞추지 않음 */
   band?: [number, number];
+  /** 예측 신뢰도 (11-09 계획부터 — 지난 4주가 고른지 · 최종안 때 그날 예보 기온 급변) · 매니저가 보고 조정 */
+  trust?: Trust;
 }
 
 export interface Outlook {
@@ -291,10 +296,12 @@ export function breadBandOf(date: string): [number, number] | null {
 }
 
 /** 하루 합계를 lo ~ hi 안으로 — 넘으면 hi, 모자라면 lo 로 빵마다 같은 비율 (반올림 차이는 1개 단위 빵 중 많은 것부터 한 개씩) · 안이면 그대로
- *  새 빵(명란소금빵 — NEW_BREAD)은 범위 밖에 따로 (그 수량 그대로 · 나머지 빵만 lo ~ hi, 2026-10-25 사장님) */
-export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo: number, hi: number, date?: string): T[] {
-  if (items.some((i) => bandOutside(i.name))) {
-    const fitted = new Map(fitTotal(items.filter((i) => !bandOutside(i.name)), lo, hi, date).map((i) => [i.name, i]));
+ *  새 빵은 범위 밖에 따로 (그 수량 그대로 · 나머지 빵만 lo ~ hi, 2026-10-25 사장님)
+ *  — 11-08 계획까지는 명란소금빵(NEW_BREAD) · 11-09 계획부터는 매니저 기입 빵(manual, breadTrend.ts) */
+export function fitTotal<T extends { name: string; qty: number; manual?: boolean }>(items: T[], lo: number, hi: number, date?: string): T[] {
+  const outside = (i: T) => !!i.manual || bandOutside(i.name, date);
+  if (items.some(outside)) {
+    const fitted = new Map(fitTotal(items.filter((i) => !outside(i)), lo, hi, date).map((i) => [i.name, i]));
     return items.map((i) => fitted.get(i.name) ?? i);
   }
   // 올림 단위 빵(시나몬롤 10 · 우유모닝빵 2 · 팥앙금샌드 4) · 정해 둔 수량(팥앙금샌드 12 · 16)은 그 수량 그대로 두고 범위는 다른 빵으로 맞춤 (2026-10-25)
@@ -332,7 +339,9 @@ export function fitTotal<T extends { name: string; qty: number }>(items: T[], lo
      주간안은 주간안의, 최종안(3일 전)은 최종안의 소보로팥소금빵으로 · 매니저가 잠정 확정 때 명란을 고쳤으면 그 수량 그대로
      같은 요일 ±1 칸 · 매진 더하기는 쓰지 않음 (처음엔 소금빵 1/3 · 매진이면 평일 +3 · 휴일 +6 이었으나 같은 날 사장님이 바꿈)
    - 28일 실적이 쌓이면 다른 빵처럼 판매 추이로 (breadPlan)
-   - 평일 하루 합계 300 ~ 320 범위 밖에 따로 (그 수량 그대로 더함 — fitTotal) */
+   - 평일 하루 합계 300 ~ 320 범위 밖에 따로 (그 수량 그대로 더함 — fitTotal)
+   11-09 계획(11-05 목 발표 주간안)부터는 같은 요일 추세(breadTrend.ts · TREND_FROM) — 판매 4주가 안 된 빵은 모두 매니저 기입(manual)이라 이 규칙은 11-08 까지 계획에만
+   (2026-10-27 사장님이 새 빵 매니저 기입으로 바꿈 · 10-29 매니저가 11-02 주를 이미 확정해 그 주는 이 규칙 그대로 — 사장님) */
 export interface NewBreadRule {
   /** 계획에 넣는 첫 날 */
   from: string;
@@ -346,8 +355,8 @@ export interface NewBreadRule {
 export const NEW_BREAD: Readonly<Record<string, NewBreadRule>> = {
   명란소금빵: { from: "2026-11-02", same: "소보로팥소금빵", ratio: 0.8, learnDays: 28 },
 };
-/** 평일 합계 범위 밖에 따로 두는 빵 */
-const bandOutside = (name: string) => name in NEW_BREAD;
+/** 평일 합계 범위 밖에 따로 두는 빵 (같은 요일 추세 날짜에서는 매니저 기입 빵만 — fitTotal) */
+const bandOutside = (name: string, date?: string) => name in NEW_BREAD && (date == null || date < TREND_FROM);
 
 /** 그 빵이 처음 팔린 날 (asOf 까지 · 없으면 null) */
 export function firstSold(board: Board, name: string, asOf: string): string | null {
@@ -395,7 +404,20 @@ const stepsByNew = (steps: Record<string, number>) => {
   return out;
 };
 
+/** 11-09 계획(11-05 목 발표)부터 — 같은 요일 추세(breadTrend.ts) → 만드는 단위 → 평일 300 ~ 320 (새 빵은 0 개 · 매니저 기입, 범위 밖)
+ *  생산 늘림 · 같은 요일 칸 · 날씨 배수 없음. 예상 손님 · 날씨 칸은 보여 주기만 */
+function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string): PlanStep {
+  const v = forecastVisitors(board, weather, asOf, date, learned);
+  const t = trendDay(board, asOf, madeOn, date);
+  const band = breadBandOf(date);
+  const raw: PlanItem[] = t.items.map((i) => ({ name: i.name, qty: snapUnit(i.name, i.raw, undefined, undefined, date), base: Math.round(i.raw) })).filter((i) => i.qty > 0);
+  const fitted = band ? fitTotal(raw, band[0], band[1], date) : raw;
+  const items: PlanItem[] = [...fitted, ...t.newBreads.map((name) => ({ name, qty: 0, manual: true }))];
+  return { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(band ? { band } : {}), trust: trendTrust(t) };
+}
+
 function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>): PlanStep {
+  if (date >= TREND_FROM) return trendStep(board, weather, learned, madeOn, asOf, date);
   const p = breadPlan(board, weather, asOf, date, learned);
   const boost = breadBoostOf(date);
   const band = breadBandOf(date);
@@ -420,13 +442,28 @@ function boostOutlook(o: Outlook[]): Outlook[] {
   return o.map((w) => ({ ...w, weekday: x(w.weekday, "평일", w.from), holiday: x(w.holiday, "휴일", w.from) }));
 }
 
-/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 */
+/** 1 ~ 4주 전망 (11-09 계획부터) — 같은 요일 추세로 그 주 평일 · 휴일 하루 평균 빵 개수 (월 ~ 목은 평일 300 ~ 320 범위 안으로 · 새 빵 · 단위 전) */
+export function trendOutlook(board: Board, asOf: string, today: string, start: string): Outlook[] {
+  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  return [0, 1, 2, 3].map((w) => {
+    const from = addDays(start, 7 * w);
+    const days = dayRange(from, addDays(from, 6));
+    const tot = (d: string) => {
+      const t = trendDay(board, asOf, today, d).items.reduce((a, i) => a + i.raw, 0);
+      const band = breadBandOf(d);
+      return band ? Math.min(band[1], Math.max(band[0], t)) : t;
+    };
+    return { week: w + 1, from, to: addDays(from, 6), weekday: avg(days.filter((d) => dayKind(d) !== "휴일").map(tot)), holiday: avg(days.filter((d) => dayKind(d) === "휴일").map(tot)) };
+  });
+}
+
+/** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 (11-09 계획부터는 안 씀) */
 export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
   const dates = weekDates(thursday);
   return dates.map((date, i) => ({
     date,
     week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}),
-    ...(i === 0 ? { outlook: boostOutlook(weeklyOutlook(board, asOf, date, learned)) } : {}),
+    ...(i === 0 ? { outlook: date >= TREND_FROM ? trendOutlook(board, asOf, thursday, date) : boostOutlook(weeklyOutlook(board, asOf, date, learned)) } : {}),
   }));
 }
 
@@ -457,6 +494,8 @@ export function rainUpOf(date: string, w: DayWeather | undefined, hold = RAIN_WE
 export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, today: string, asOf: string, plan: PlanDoc | null, order: OrderDoc | null, steps: Record<string, number> = {}): PlanStep | null {
   const date = addDays(today, FINAL_LEAD);
   if (!plan?.week || plan.date !== date) return null;
+  // 11-09 계획부터 — 다시 세지 않음 (2026-10-27 사장님)
+  if (date >= TREND_FROM) return holdFinal(board, weather, learned, today, asOf, date, plan.week, order);
   const now = step(board, weather, learned, today, asOf, date, steps);
   const up = rainUpOf(date, weather[date]);
   const fresh = new Map(now.items.map((i) => [i.name, i]));
@@ -501,6 +540,22 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
     return q > 0 ? { ...i, qty: q, base: q } : i;
   });
   return { ...now, items: fitted, total: fitted.reduce((a, b) => a + b.qty, 0), ...(up ? { rainUp: up } : {}) };
+}
+
+/**
+ * 11-09 계획부터의 최종안 (3일 전 15시) — 다시 세지 않음 (2026-10-27 사장님)
+ * 빵마다 매니저 잠정 확정 수량(없으면 주간안) 그대로 · ±10% · 비 예보 · 범위 다시 맞춤 없음
+ * 새 빵(매니저 기입)은 잠정 확정에 기입한 수량, 안 했으면 0 (최종 확정 때 기입)
+ * 그날 기상청 예보가 나와 있으니 지난 4주 같은 요일보다 급격히 추워지거나 더워지면 신뢰도를 낮춰 보여 줌 → 매니저가 보고 조정
+ */
+function holdFinal(board: Board, weather: WeatherMap, learned: Learned, today: string, asOf: string, date: string, week: PlanStep, order: OrderDoc | null): PlanStep {
+  const v = forecastVisitors(board, weather, asOf, date, learned);
+  const prov = order?.provisional || {};
+  const items: PlanItem[] = week.items
+    .map((it) => ({ name: it.name, qty: prov[it.name]?.qty ?? it.qty, ...(it.base != null ? { base: it.base } : {}), ...(it.manual ? { manual: true } : {}) }))
+    .filter((i) => i.qty > 0 || i.manual);
+  const trust = trendTrust(trendDay(board, asOf, week.madeOn, date), weather);
+  return { madeOn: today, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), trust };
 }
 
 /* ---------- 현장 태블릿 복사본 ---------- */
@@ -567,9 +622,9 @@ export function orderRows(plan: PlanDoc | null | undefined, order: OrderDoc | nu
     if (provPassed && week.has(name)) return { ...base, qty: week.get(name)!, state: "잠정" };
     return { ...base, qty: null, state: "확정 전" };
   });
-  // 최종이 정해졌는데 0 개인 빵은 뺌 (최종안에서 빠진 빵)
+  // 최종이 정해졌는데 0 개인 빵은 뺌 (최종안에서 빠진 빵) · 계획이 0 개인데 아직 수량이 없는 빵도 뺌 (매니저가 아직 기입 안 한 새 빵, 11-09 계획부터)
   return rows
-    .filter((r) => !((r.state === "자동" || r.state === "확정") && !r.qty))
+    .filter((r) => !((r.state === "자동" || r.state === "확정") && !r.qty) && !(r.week === 0 && !r.qty))
     .sort((a, b) => (b.qty ?? b.week ?? 0) - (a.qty ?? a.week ?? 0) || a.name.localeCompare(b.name, "ko"));
 }
 

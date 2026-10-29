@@ -275,16 +275,16 @@ describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보
     }
   });
 
-  it("최종안(3일 전) — 최종안의 소보로팥소금빵의 80% · 매니저가 잠정 확정 때 고친 수량이면 그대로", () => {
-    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-05", "2026-11-04");
-    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, null)!;
+  it("최종안(3일 전) — 최종안의 소보로팥소금빵의 80% · 매니저가 잠정 확정 때 고친 수량이면 그대로 (11-02 ~ 08 주 — 11-09 계획부터는 같은 요일 추세 · 매니저 기입, 2026-10-29 사장님)", () => {
+    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: mon.date, week: mon.week }, null)!;
     expect(qtyOf(f, "명란소금빵")).toBe(of(qtyOf(f, "소보로팥소금빵")!));
     expect(f.total - qtyOf(f, "명란소금빵")!).toBeLessThanOrEqual(320);
     // 소보로팥소금빵만 매니저가 고쳤으면 명란도 그 수량의 80%
     const L = (qty: number) => ({ qty, by: "매니저", at: "" });
-    const s = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 소보로팥소금빵: L(40) }, final: {} })!;
+    const s = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 소보로팥소금빵: L(40) }, final: {} })!;
     expect(qtyOf(s, "명란소금빵")).toBe(of(qtyOf(s, "소보로팥소금빵")!));
-    const p = makeFinal(board, {}, DEFAULT_LEARNED, "2026-11-06", "2026-11-05", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 명란소금빵: L(40) }, final: {} })!;
+    const p = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 명란소금빵: L(40) }, final: {} })!;
     expect(qtyOf(p, "명란소금빵")).toBe(40);
   });
 
