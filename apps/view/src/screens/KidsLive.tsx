@@ -26,6 +26,7 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
   const [pull, setPull] = useState(0);
   const [all, setAll] = useState(false);
   const [pick, setPick] = useState<number | null>(null);
+  const [revisitOpen, setRevisitOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
@@ -129,14 +130,15 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
             <p className="sub">틀린 숫자를 보여 드리지 않으려고 숨겼어요. 키즈 POS 통합데스크를 새 판으로 바꿔 주세요.</p>
           </section>
         )}
-        {live && <Body live={live} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} />}
+        {live && <Body live={live} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} onRevisit={() => setRevisitOpen(true)} />}
       </main>
       {live && pick != null && live.keys.map[pick] && <KeySheet live={live} no={pick} onClose={() => setPick(null)} />}
+      {live?.revisit && revisitOpen && <RevisitSheet live={live} onClose={() => setRevisitOpen(false)} />}
     </>
   );
 }
 
-function Body({ live, pos, now, all, onAll, onPick }: { live: DeskLive; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void }) {
+function Body({ live, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLive; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void; onRevisit: () => void }) {
   const { people: p, naver: n, keys: k } = live;
   const s = deskLiveSales(live, pos);
   const nowHm = live.day === todayKst(now) ? new Date(now.getTime() + 9 * 3600e3).toISOString().slice(11, 16) : live.at.slice(11, 16);
@@ -164,26 +166,28 @@ function Body({ live, pos, now, all, onAll, onPick }: { live: DeskLive; pos: { c
             <span>현장입장{live.walk.extra ? ` (+1타임 ${live.walk.extra})` : ""}</span>
             <b className="num">{count(p.walk)}</b>
           </div>
-          <div>
-            <span>재방문성공</span>
-            <b className="num">
-              {live.revisit ? (
-                <>
-                  {count(live.revisit.today)}
-                  <small>({count(live.revisit.total)})</small>
-                </>
-              ) : (
-                "—"
-              )}
-            </b>
-          </div>
+          {/* 누르면 오늘 재방문 손님 이름 · 며칠 만에 왔는지 (2026-10-29 사장님) */}
+          {live.revisit ? (
+            <button className="tap" onClick={onRevisit} aria-haspopup="dialog" aria-label={`재방문성공 오늘 ${live.revisit.today} — 손님 보기`}>
+              <span>재방문성공</span>
+              <b className="num">
+                {count(live.revisit.today)}
+                <small>({count(live.revisit.total)})</small>
+              </b>
+            </button>
+          ) : (
+            <div>
+              <span>재방문성공</span>
+              <b className="num">—</b>
+            </div>
+          )}
           <div>
             <span>이벤트</span>
             <b className="num">{count(live.walk.event)}</b>
           </div>
         </div>
         <p className="note">
-          {live.revisit ? `(수) = ${Number(live.revisit.from.slice(5, 7))}월 ${Number(live.revisit.from.slice(8))}일 이후 재방문 누적` : "재방문성공은 통합데스크를 새 판으로 올리면 보여요"}
+          {live.revisit ? `(수) = ${Number(live.revisit.from.slice(5, 7))}월 ${Number(live.revisit.from.slice(8))}일 이후 재방문 누적 · 재방문성공을 누르면 오늘 손님` : "재방문성공은 통합데스크를 새 판으로 올리면 보여요"}
           {live.walk.service ? ` · 서비스 키 ${live.walk.service}개는 판매가 아니라 총 판매수에 안 들어가요` : ""}
           {n.test ? ` · 시험 기록 ${n.test}장 뺌` : ""}
         </p>
@@ -316,6 +320,51 @@ function Body({ live, pos, now, all, onAll, onPick }: { live: DeskLive; pos: { c
       </section>
 
     </>
+  );
+}
+
+/** 오늘 재방문 성공 손님 — 이름 · 며칠 만에 · 앞 방문 날 · 시각 (최근 손님이 위, 전화번호는 안 보임) */
+function RevisitSheet({ live, onClose }: { live: DeskLive; onClose: () => void }) {
+  const r = live.revisit!;
+  return (
+    <div className="sheet-bg" onClick={onClose}>
+      <div className="sheet klive-sheet" role="dialog" aria-label="오늘 재방문 성공 손님" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <b>
+            {md(live.day)} 재방문 성공 {count(r.today)}명 <span className="note">({md(r.from)} 이후 누적 {count(r.total)}명)</span>
+          </b>
+          <button className="icon-btn" onClick={onClose} aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        {r.who == null ? (
+          <p className="empty">이름 · 며칠 만에 왔는지는 키즈 POS 통합데스크를 새 판으로 올리면 보여요 (지금 판은 수만 보내요).</p>
+        ) : r.who.length === 0 ? (
+          <p className="empty">오늘 재방문 성공 손님이 아직 없어요.</p>
+        ) : (
+          <table className="klive-who">
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th className="num">며칠 만에</th>
+                <th className="num">앞 방문</th>
+                <th className="num">시각</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.who.map((w, i) => (
+                <tr key={`${w.name}|${w.at}|${i}`}>
+                  <td>{w.name}</td>
+                  <td className="num">{w.gap != null ? `${count(w.gap)}일 만에` : "—"}</td>
+                  <td className="num">{w.prev ? md(w.prev) : "—"}</td>
+                  <td className="num">{w.at ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   );
 }
 
