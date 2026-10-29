@@ -39,6 +39,12 @@ describe("통합데스크 현황 → 마감 전 네이버 칸", () => {
     expect(checkLiveNaver(r.part!, "2026-10-19")).toEqual([]);
   });
 
+  it("19:30 뒤 칸(통합데스크 2.12 ~ 20:00 예약)은 19:30 칸에 더함 — 예전엔 '보고 칸에 없는 시각'으로 통째로 안 씀 (2026-10-29 사장님)", () => {
+    const r = deskNaverPart(desk({ slots: [{ t: "19:00", done: 3, conf: 2, left: 5, cap: 10 }, { t: "20:00", done: 0, conf: 1, left: 0, cap: 1 }] }), "2026-10-19", now);
+    expect(r.why).toBe("");
+    expect(r.part).toEqual(part({ "19:00": 5, "19:30": 1 }));
+  });
+
   it("현황이 없거나 모양이 틀리면 안 씀", () => {
     expect(deskNaverPart(null, "2026-10-19", now).part).toBe(null);
   });
@@ -64,9 +70,10 @@ describe("통합데스크 현황 → 마감 전 네이버 칸", () => {
     expect(deskNaverPart(desk({ products: [] }), "2026-10-19", now).part).not.toBe(null);
   });
 
-  it("보고 칸(10:00 ~ 19:30)에 없는 시각에 장수가 있으면 안 씀 — 없는 시각이 0 이면 됨", () => {
-    expect(deskNaverPart(desk({ slots: [{ t: "09:30", done: 1, conf: 0, left: 0, cap: 10 }] }), "2026-10-19", now).part).toBe(null);
-    expect(deskNaverPart(desk({ slots: [{ t: "09:30", done: 0, conf: 0, left: 10, cap: 10 }, { t: "10:00", done: 2, conf: 0, left: 8, cap: 10 }] }), "2026-10-19", now).part).toEqual(part({ "10:00": 2 }));
+  it("10:00 전 · 19:30 뒤는 끝 칸에 더함 (2026-10-29) — 30분 칸이 아닌 시각(12:15)에 장수가 있으면 안 씀 · 0 이면 됨", () => {
+    expect(deskNaverPart(desk({ slots: [{ t: "09:30", done: 1, conf: 0, left: 0, cap: 10 }] }), "2026-10-19", now).part).toEqual(part({ "10:00": 1 }));
+    expect(deskNaverPart(desk({ slots: [{ t: "12:15", done: 1, conf: 0, left: 0, cap: 10 }] }), "2026-10-19", now).part).toBe(null);
+    expect(deskNaverPart(desk({ slots: [{ t: "12:15", done: 0, conf: 0, left: 10, cap: 10 }, { t: "10:00", done: 2, conf: 0, left: 8, cap: 10 }] }), "2026-10-19", now).part).toEqual(part({ "10:00": 2 }));
   });
 
   it("먼저 받은 네이버(직접 읽은 것)보다 합이 작으면 덮지 않음 — 통합데스크가 아직 다시 안 읽은 옛 숫자일 수 있어서", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNaverTicketProduct, NAVER_AUTO_BY, NAVER_SLOTS, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverRepeaters, naverTime, type NaverVisit } from "../src";
+import { isNaverTicketProduct, NAVER_AUTO_BY, NAVER_SLOTS, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverRepeaters, naverSlotIndex, naverTime, type NaverVisit } from "../src";
 
 const slot = (t: string) => NAVER_SLOTS.indexOf(t);
 
@@ -24,7 +24,7 @@ describe("네이버 예약 자동 수집 — 읽은 칸 → A 네이버 칸", ()
     expect(naverTime("회차")).toBeNull();
   });
 
-  it("이용완료 = 판매입장권, '완료 1' = 신규방문자 — 30분 칸에 넣고 다른 상품 · 19:30 넘는 회차는 뺌", () => {
+  it("이용완료 = 판매입장권, '완료 1' = 신규방문자 — 30분 칸에 넣고 다른 상품은 뺌 · 19:30 넘는 회차는 19:30 칸에 더함 (2026-10-29 사장님 — 이벤트 때 20:00 예약)", () => {
     const r = naverPartFrom("2026-10-04", [
       { product: "평일 무제한 / 휴일 1시간 50분 입장권", time: "오전10:00", done: 5, first: 2 },
       { product: "평일 무제한 / 휴일 1시간 50분 입장권", time: "오전10:30", done: 7, first: 1 },
@@ -37,10 +37,12 @@ describe("네이버 예약 자동 수집 — 읽은 칸 → A 네이버 칸", ()
     expect(r.part.tickets[slot("10:30")]).toBe(7);
     expect(r.part.tickets[slot("18:00")]).toBe(8);
     expect(r.part.tickets[slot("18:30")]).toBe(2);
-    expect(r.part.tickets.reduce((a, b) => a + b, 0)).toBe(22);
+    expect(r.part.tickets[slot("19:30")]).toBe(1);
+    expect(r.part.tickets.reduce((a, b) => a + b, 0)).toBe(23);
     expect(r.part.newVisitors.reduce((a, b) => a + b, 0)).toBe(6);
     expect(r.part.noNew).toBeUndefined();
-    expect(r.skipped).toEqual(["20:00"]);
+    expect(r.skipped).toEqual([]);
+    expect(r.folded).toEqual(["20:00"]);
     expect(r.overlap).toEqual([]);
   });
 
@@ -158,5 +160,12 @@ describe("네이버 예약 자동 수집 — 읽은 칸 → A 네이버 칸", ()
         expect(r.part.newVisitors[slot("10:00")]).toBe(1);
       });
     });
+  });
+});
+
+describe("보고 칸 밖 시각 (2026-10-29 사장님 — 이벤트 때 19:30 넘어 온 손님이 20:00 예약)", () => {
+  it("19:30 뒤는 19:30 칸 · 10:00 전은 10:00 칸 · 시각이 아니면 -1", () => {
+    expect(["10:00", "19:30", "20:00", "21:30", "09:30", "12:00"].map(naverSlotIndex)).toEqual([0, 19, 19, 19, 0, 4]);
+    expect([null, "", "8:00", "25:00"].map((t) => naverSlotIndex(t))).toEqual([-1, -1, -1, -1]);
   });
 });
