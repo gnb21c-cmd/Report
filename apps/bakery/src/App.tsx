@@ -433,7 +433,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
         )}
         {step?.trust && (
           <div className={`trust ${step.trust.level === "높음" ? "hi" : step.trust.level === "보통" ? "mid" : "lo"}`}>
-            {/* 11-02 계획부터 — 같은 요일 추세 (지난 4주 실적 · 작년 추세선), 날씨가 급격히 바뀌면 매니저가 보고 조정 */}
+            {/* 11-09 계획부터 — 같은 요일 추세 (지난 4주 실적 · 작년 추세선), 날씨가 급격히 바뀌면 매니저가 보고 조정 */}
             예측 신뢰도 <b>{step.trust.level}</b> — {step.trust.why}
             {step.trust.level !== "높음" && " · 수량을 살펴 조정해 주세요"}
           </div>

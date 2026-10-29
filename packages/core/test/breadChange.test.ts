@@ -17,8 +17,9 @@ import {
   makeWeek,
   FIXED_QTY,
   fixedQtyOf,
+  NEW_BREAD,
+  newBreadEarly,
   orderText,
-  PLAN_FROM_OF,
   roundUnitOnly,
   roundUnitOrder,
   roundUpUnit,
@@ -116,9 +117,9 @@ describe("빵 이름 바꿈 — 11-02 계획부터 새 이름, 그 전은 옛 �
     for (let i = 0; i < 7; i++) expect(qtyOf(c[i].week, "인절미팥빵")).toBe(qtyOf(e[i].week, "인절미팥빵"));
   });
 
-  it("같은 요일 칸 — 11-02 계획부터는 쓰지 않음 (옛 이름 칸도, 2026-10-27 사장님 — 같은 요일 추세로)", () => {
+  it("같은 요일 칸 — 옛 이름 칸을 새 이름 계획이 이어 받음", () => {
     const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 인절미팥빵: 1 } });
-    expect(mon.week.items.find((i) => i.name === "저당팥빵")?.step).toBeUndefined();
+    expect(mon.week.items.find((i) => i.name === "저당팥빵")?.step).toBe(1);
   });
 
   it("결과 — 10-27 계획(인절미팥빵)과 저당팥빵 판매를 한 줄로 견줌", () => {
@@ -212,15 +213,15 @@ describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10
     }
   });
 
-  it("11-02 주간안(10-29 발표)부터는 10-28 까지 판매로 예측(같은 요일 추세) — 정해 둔 수량 아님 · 4개 단위 올림 · 같은 요일 칸은 안 씀 (2026-10-27)", () => {
+  it("11-02 주간안(10-29 발표)부터는 10-28 까지 판매로 예측 — 정해 둔 수량 아님 · 4개 단위 올림 · 같은 요일 칸도 씀", () => {
     const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
     for (const w of week) {
       const it = w.week.items.find((i) => i.name === "팥앙금샌드")!;
       expect(it.qty % 4).toBe(0);
-      expect(it.qty).toBeGreaterThan(0);
+      expect(it.qty).toBe(snapUnit("팥앙금샌드", it.base!, undefined, undefined, w.date));
     }
     const withStep = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-07": { 고소한옛날맘모스: 2 } });
-    expect(withStep[5].week.items.find((i) => i.name === "팥앙금샌드")?.step).toBeUndefined();
+    expect(withStep[5].week.items.find((i) => i.name === "팥앙금샌드")?.step).toBe(2);
   });
 
   it("10-29 최종안 — 이미 나간 주간안(4개)이어도 12개 · 매니저가 잠정 확정 때 고친 수량이면 그대로 · 10-28 최종안은 그대로 4개 단위", () => {
@@ -245,31 +246,52 @@ describe("팥앙금샌드 정해 둔 수량 — 평일 12개 · 휴일 16개 (10
   });
 });
 
-describe("명란소금빵 — 11-02 계획부터 · 판매 4주가 안 된 새 빵이라 매니저가 기입 (2026-10-27 사장님 — 소보로팥소금빵 80% 대신)", () => {
-  it("계획에 넣는 첫 날", () => {
-    expect(PLAN_FROM_OF).toEqual({ 명란소금빵: "2026-11-02" });
+describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보로팥소금빵의 80% (인기가 없을 수 있어 보수적으로) · 범위 밖 (2026-10-25 사장님)", () => {
+  const rule = NEW_BREAD.명란소금빵;
+  /** 소보로팥소금빵 수량 → 명란 수량 (80% 반올림, 적어도 1개) */
+  const of = (q: number) => Math.max(1, Math.round(q * 0.8));
+  it("정해 둔 값", () => {
+    expect(rule).toEqual({ from: "2026-11-02", same: "소보로팥소금빵", ratio: 0.8, learnDays: 28 });
+    expect([of(7), of(5), of(6), of(11), of(26), of(25), of(1)]).toEqual([6, 4, 5, 9, 21, 20, 1]);
   });
 
   it("11-01 까지 날짜(이미 발표한 주 · 그 최종안)에는 안 넣음", () => {
     for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-22", "2026-10-28")) expect(names(w.week)).not.toContain("명란소금빵");
   });
 
-  it("10-29 발표 주간안 — 0 개 · 매니저 기입 (평일 300 ~ 320 은 다른 빵만)", () => {
-    for (const w of makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28")) {
-      expect(w.week.items.find((i) => i.name === "명란소금빵")).toEqual({ name: "명란소금빵", qty: 0, manual: true });
+  it("10-29 발표 주간안 — 그날 소보로팥소금빵의 80% (매진 더하기 · 같은 요일 칸 없음) · 평일 300 ~ 320 은 다른 빵만 (명란은 그 위에)", () => {
+    const week = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28", { "2026-11-02": { 명란소금빵: 5 }, "2026-11-07": { 명란소금빵: 5 } });
+    for (const w of week) {
+      const m = w.week.items.find((i) => i.name === "명란소금빵")!;
+      expect(m.qty).toBe(of(qtyOf(w.week, "소보로팥소금빵")!));
+      expect(m.qty).toBeLessThan(qtyOf(w.week, "소보로팥소금빵")!);
+      expect(m.qty).toBeGreaterThan(0);
+      expect(m.step).toBeUndefined();
+      expect("add" in m).toBe(false);
       if (breadBandOf(w.date)) {
-        expect(w.week.total).toBeGreaterThanOrEqual(300);
-        expect(w.week.total).toBeLessThanOrEqual(320);
+        expect(w.week.total - m.qty).toBeGreaterThanOrEqual(300);
+        expect(w.week.total - m.qty).toBeLessThanOrEqual(320);
       }
     }
   });
 
-  it("첫 판매(10-24)부터 28일 실적이 쌓이면 다른 빵처럼 같은 요일 추세로", () => {
+  it("최종안(3일 전) — 최종안의 소보로팥소금빵의 80% · 매니저가 잠정 확정 때 고친 수량이면 그대로 (11-02 ~ 08 주 — 11-09 계획부터는 같은 요일 추세 · 매니저 기입, 2026-10-29 사장님)", () => {
+    const [mon] = makeWeek(board, {}, DEFAULT_LEARNED, "2026-10-29", "2026-10-28");
+    const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: mon.date, week: mon.week }, null)!;
+    expect(qtyOf(f, "명란소금빵")).toBe(of(qtyOf(f, "소보로팥소금빵")!));
+    expect(f.total - qtyOf(f, "명란소금빵")!).toBeLessThanOrEqual(320);
+    // 소보로팥소금빵만 매니저가 고쳤으면 명란도 그 수량의 80%
+    const L = (qty: number) => ({ qty, by: "매니저", at: "" });
+    const s = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 소보로팥소금빵: L(40) }, final: {} })!;
+    expect(qtyOf(s, "명란소금빵")).toBe(of(qtyOf(s, "소보로팥소금빵")!));
+    const p = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: mon.date, week: mon.week }, { v: 2, date: mon.date, provisional: { 명란소금빵: L(40) }, final: {} })!;
+    expect(qtyOf(p, "명란소금빵")).toBe(40);
+  });
+
+  it("첫 판매(10-24)부터 28일 실적이 쌓이면 다른 빵처럼 판매 추이로", () => {
+    expect(newBreadEarly(board, "명란소금빵", "2026-11-19")).toBe(true); // 27일
+    expect(newBreadEarly(board, "명란소금빵", "2026-11-20")).toBe(false); // 28일
     const w = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-26", "2026-11-25");
-    for (const x of w) {
-      const m = x.week.items.find((i) => i.name === "명란소금빵")!;
-      expect(m.manual).toBeUndefined();
-      expect(m.qty).toBeGreaterThan(0);
-    }
+    for (const x of w) expect(x.week.items.find((i) => i.name === "명란소금빵")).toBeDefined();
   });
 });
