@@ -137,6 +137,11 @@ describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 + 
     expect(p.noNew).toBe(true);
     expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
   });
+  it("19:30 뒤 예약(20:00 — 2026-10-29 사장님 이벤트 때)은 19:30 칸에 더함 (예전엔 빠짐)", () => {
+    const p = liveNaverPart("2026-10-08", [{ product: "야간자유 입장권", time: "오후7:30", done: 2 }], [{ product: "야간자유 입장권", time: "오후8:00", done: 1 }]);
+    expect(p.tickets[NAVER_SLOTS.indexOf("19:30")]).toBe(3);
+    expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
+  });
   it("검사 — 30분 칸 20개 · 0 이상 정수 · 정해진 칸만 · 날짜", () => {
     expect(checkLiveNaver(nv(), "2026-10-08")).toEqual([]);
     expect(checkLiveNaver({ ...nv(), tickets: [1] }, "2026-10-08").length).toBeGreaterThan(0);

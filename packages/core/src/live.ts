@@ -11,7 +11,7 @@
 import { addDays } from "./dates";
 import { deskLiveAgeMin, type DeskLive } from "./deskLive";
 import { isNaverTicketProduct, naverTime } from "./naverAuto";
-import { NAVER_SLOTS, sum, type DayReport, type NaverPart, type StorePart } from "./part";
+import { NAVER_SLOTS, naverSlotIndex, sum, type DayReport, type NaverPart, type StorePart } from "./part";
 import type { StoreId } from "./types";
 
 export const LIVE_LABEL = "마감 전 영업정보";
@@ -69,8 +69,7 @@ export function liveNaverPart(date: string, done: { product: string; time: strin
   const tickets = NAVER_SLOTS.map(() => 0);
   for (const c of [...done, ...booked]) {
     if (!isNaverTicketProduct(c.product)) continue;
-    const t = naverTime(c.time);
-    const i = t ? NAVER_SLOTS.indexOf(t) : -1;
+    const i = naverSlotIndex(naverTime(c.time)); // 19:30 뒤 예약은 19:30 칸에 (2026-10-29)
     if (i >= 0 && isCount(c.done)) tickets[i] += c.done;
   }
   return { v: 1, date, tickets, newVisitors: NAVER_SLOTS.map(() => 0), noNew: true };
@@ -106,7 +105,7 @@ export function deskNaverPart(desk: DeskLive | null, date: string, now: Date = n
   if (desk.naver.products.some((x) => !isNaverTicketProduct(x.name))) return no("통합데스크 네이버 상품이 보고 기준(입장권 상품)과 다름");
   const tickets = NAVER_SLOTS.map(() => 0);
   for (const s of desk.naver.slots) {
-    const i = NAVER_SLOTS.indexOf(s.t.padStart(5, "0"));
+    const i = naverSlotIndex(s.t.padStart(5, "0")); // 통합데스크 20:00 칸(2.12 ~)은 19:30 칸에 (2026-10-29)
     if (i < 0) {
       if (s.done + s.conf > 0) return no(`보고 칸에 없는 시각 ${s.t}`);
       continue;

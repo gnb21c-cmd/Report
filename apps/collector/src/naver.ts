@@ -14,7 +14,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addDays, dayRange, isNaverTicketProduct, NAVER_SLOTS, naverTime, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverRepeaters, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
+import { addDays, dayRange, isNaverTicketProduct, NAVER_SLOTS, naverSlotIndex, naverTime, NAVER_AUTO_BY, naverAutoWritable, naverDiff, naverNewVisitors, naverPartFrom, naverRepeaters, type NaverCellRead, type NaverPart, type NaverVisit } from "@report/core";
 import { fbLogin, readPiece, writeConfigJson, writePiecesOf } from "./firebase";
 import { NaverBook } from "./naverBook";
 import { mask, say } from "./okpos";
@@ -156,7 +156,7 @@ async function main() {
         }
         const ticketCells = reads.filter((x) => x.done > 0 && isNaverTicketProduct(x.product)).length;
         say(
-          `${md(date)}: 회차 ${rows}줄 · 상품 열 ${headers.length}개 · 이용완료 칸 ${cells.length}개(판매입장권 ${ticketCells}칸)${date === yesterday ? ` · 완료자 목록 ${listOk}칸 읽음${listFail ? ` · 못 읽음 ${listFail}칸` : ""}${nv ? (nv.unknown ? ` · 손님을 못 알아본 줄 ${nv.unknown}개('완료 1' 로만 셈)` : " · 손님 모두 알아봄") : ""}` : ""}${r.skipped.length ? ` · 19:30 넘는 회차 ${r.skipped.length}개 뺌` : ""}${r.overlap.length ? ` · 겹침 ${r.overlap.join(",")}` : ""}${r.part.noNew ? " · 신규방문자 모름" : ""}`,
+          `${md(date)}: 회차 ${rows}줄 · 상품 열 ${headers.length}개 · 이용완료 칸 ${cells.length}개(판매입장권 ${ticketCells}칸)${date === yesterday ? ` · 완료자 목록 ${listOk}칸 읽음${listFail ? ` · 못 읽음 ${listFail}칸` : ""}${nv ? (nv.unknown ? ` · 손님을 못 알아본 줄 ${nv.unknown}개('완료 1' 로만 셈)` : " · 손님 모두 알아봄") : ""}` : ""}${r.skipped.length ? ` · 시각을 못 읽은 회차 ${r.skipped.length}개 뺌` : ""}${r.folded.length ? ` · 19:30 넘는 회차 ${r.folded.length}개는 19:30 칸에 더함` : ""}${r.overlap.length ? ` · 겹침 ${r.overlap.join(",")}` : ""}${r.part.noNew ? " · 신규방문자 모름" : ""}`,
         );
         const old = fb ? await readPiece(fb, date, "naver") : null;
         if (old?.p && old.by !== NAVER_AUTO_BY) {
@@ -175,7 +175,7 @@ async function main() {
           if (old?.p && old.by !== NAVER_AUTO_BY && !(old.p as NaverPart).noNew) {
             const oldWay = naverPartFrom(date, reads.map((c) => ({ ...c, first: 0 })), undefined).part;
             for (const v of visits) {
-              const i = isNaverTicketProduct(v.product) && v.n === 1 ? NAVER_SLOTS.indexOf(naverTime(v.time) || "") : -1;
+              const i = isNaverTicketProduct(v.product) && v.n === 1 ? naverSlotIndex(naverTime(v.time)) : -1;
               if (i >= 0) oldWay.newVisitors[i]++;
             }
             const d = naverDiff(oldWay, old.p as NaverPart);
