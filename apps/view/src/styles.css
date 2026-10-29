@@ -1738,9 +1738,46 @@ button.quad-box {
 }
 .klive-split.four div {
   padding: 8px 8px;
+  grid-template-columns: minmax(0, 1fr);
 }
 .klive-split.four span {
   font-size: 12.5px;
+  white-space: nowrap;
+}
+/* 재방문성공 칸은 누르는 단추 (2026-10-29 사장님 — 오늘 재방문 손님 이름 · 며칠 만에) */
+.klive-split.four button {
+  background: var(--page);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 6.5px 6.5px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.klive-who {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 4px;
+}
+.klive-who th,
+.klive-who td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 15px;
+}
+.klive-who th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 13px;
+}
+.klive-who .num {
+  text-align: right;
   white-space: nowrap;
 }
 .klive-split.four b small {

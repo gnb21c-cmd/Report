@@ -247,7 +247,10 @@ export async function deskLiveNow(): Promise<{ live: DeskLive | null; bad?: bool
   if (__DEMO__) {
     // 체험판: 통합데스크 체험판(10/5 13:50) 글을 오늘 · 지금 받은 것처럼
     const k = new Date(Date.now() + 9 * 3600e3).toISOString();
-    return { live: parseDeskLive({ ...demoDeskLive, day: todayKst(), at: `${k.slice(0, 10)} ${k.slice(11, 19)}` }) };
+    const day = todayKst();
+    // 재방문 손님의 앞 방문 날도 오늘에 맞춤 ('며칠 만에'는 그대로)
+    const revisit = { ...demoDeskLive.revisit, who: demoDeskLive.revisit.who.map((w) => ({ ...w, prev: addDays(day, -w.gap) })) };
+    return { live: parseDeskLive({ ...demoDeskLive, day, at: `${k.slice(0, 10)} ${k.slice(11, 19)}`, revisit }) };
   }
   const cfg = firebaseConfig();
   const board = boardKey();

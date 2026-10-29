@@ -134,7 +134,7 @@ export function parseDeskLive(json: unknown): DeskLive | null {
     over: { paid: n0(x.over?.paid), count: n0(x.over?.count), due: n0(x.over?.due) },
     keys: { total, used: Object.keys(map).length, free: total - Object.keys(map).length, walkable: n0(x.keys.walkable), flex: n0(x.keys.flex), map, holders },
     revisitDue: revisitDueOf(x.revisitDue, x.day),
-    revisit: parseRevisitOk(x.revisit),
+    revisit: parseRevisitOk(x.revisit, x.day),
   };
 }
 

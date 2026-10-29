@@ -103,3 +103,33 @@ describe("키즈 실시간 네 칸 (2026-10-27 사장님): 네이버 · 현장�
     expect([o.walk.event, o.revisit]).toEqual([0, null]);
   });
 });
+
+describe("재방문성공을 누르면 — 오늘 재방문 손님 이름 · 며칠 만에 왔는지 (2026-10-29 사장님)", () => {
+  const withWho = (who: unknown) => parseDeskLive(JSON.stringify({ ...raw(), revisit: { from: "2026-10-26", today: 2, total: 2, days: {}, who } }))!;
+  it("이름 · 앞 방문 날 · 며칠 만에 · 시각 — 최근 손님이 위", () => {
+    const day = raw().day as string;
+    const l = withWho([
+      { name: "김하늘", prev: "2026-09-20", gap: 15, at: "11:05" },
+      { name: "박바다", prev: "2026-09-28", at: "14:30" },
+    ]);
+    expect(l.revisit!.who).toEqual([
+      // 며칠 만에가 없으면 앞 방문 날로 셈 (현황 글의 날 − 앞 방문 날)
+      { name: "박바다", prev: "2026-09-28", gap: Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse("2026-09-28T00:00:00Z")) / 864e5), at: "14:30" },
+      { name: "김하늘", prev: "2026-09-20", gap: 15, at: "11:05" },
+    ]);
+  });
+  it("이상한 줄은 뺌 — 이름이 없거나 전화번호처럼 숫자가 많음 · 날 · 며칠 · 시각이 이상하면 그 칸만 비움", () => {
+    const l = withWho([
+      { name: "", gap: 3 },
+      { name: "010-1234-5678", gap: 3 },
+      { name: "이구름", prev: "어제", gap: -2, at: "25:99" },
+      "아무거나",
+    ]);
+    expect(l.revisit!.who).toEqual([{ name: "이구름", prev: null, gap: null, at: null }]);
+  });
+  it("통합데스크가 아직 안 보내면(옛 판) 없음 · 너무 많으면 100명까지", () => {
+    expect(parseDeskLive(JSON.stringify({ ...raw(), revisit: { from: "2026-10-26", today: 0, total: 0, days: {} } }))!.revisit!.who).toBeUndefined();
+    const many = Array.from({ length: 150 }, (_, i) => ({ name: `손님${String.fromCharCode(44032 + i)}`, gap: 10 }));
+    expect(withWho(many).revisit!.who).toHaveLength(100);
+  });
+});

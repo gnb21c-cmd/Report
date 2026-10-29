@@ -30,15 +30,54 @@ export interface DeskRevisitOk {
   total: number;
   days: Record<string, number>;
   asOf?: string;
+  /** 오늘 재방문 성공 손님 — 키즈 실시간에서 재방문성공을 누르면 (2026-10-29 사장님, 통합데스크 새 판부터 · 없으면 옛 판) */
+  who?: RevisitWho[];
 }
+/** 재방문 성공 손님 한 명 — 이름 · 앞 방문 날 · 며칠 만에 · 쿠폰이 나간 시각 (전화번호는 안 씀) */
+export interface RevisitWho {
+  name: string;
+  /** 앞 방문 날 (모르면 null) */
+  prev: string | null;
+  /** 며칠 만에 다시 왔는지 (모르면 null) */
+  gap: number | null;
+  /** 시각 HH:MM (모르면 null) */
+  at: string | null;
+}
+/** 재방문 손님 목록 — 이만큼까지만 */
+export const REVISIT_WHO_MAX = 100;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const nat = (x: unknown, max: number): number | null => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= max ? x : null);
 /** 이벤트 이름: 짧은 글만 (전화번호처럼 숫자가 많은 글은 버림) */
 const nameOk = (x: unknown): string | null => (typeof x === "string" && x.length <= 20 && !/\d{3,}/.test(x) ? x.trim() || "이벤트" : null);
 
-/** revisit 칸 검사 — 모양이 틀리면 null · 이상한 날 · 수 · 시작일 앞 날은 버림 (이벤트 글 · 현황 글 같이 씀) */
-export function parseRevisitOk(x: unknown): DeskRevisitOk | null {
+const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** 손님 이름: 1 ~ 20자 · 전화번호처럼 숫자가 셋 넘게 이어지면 버림 */
+const personOk = (x: unknown): string | null => (typeof x === "string" && x.trim().length > 0 && x.trim().length <= 20 && !/\d{3,}/.test(x) ? x.trim() : null);
+
+/** 오늘 재방문 손님 목록 검사 — 이상한 줄(이름이 없음 · 전화번호 같음)은 빼고, 이상한 칸은 null · 며칠 만에가 없으면 앞 방문 날로 셈 · 최근 시각이 위 */
+function whoOf(x: unknown, day?: string): RevisitWho[] | undefined {
+  if (!Array.isArray(x)) return undefined;
+  const out: RevisitWho[] = [];
+  for (const w of x.slice(0, REVISIT_WHO_MAX * 2)) {
+    if (!w || typeof w !== "object") continue;
+    const o = w as Record<string, unknown>;
+    const name = personOk(o.name);
+    if (!name) continue;
+    const prev = typeof o.prev === "string" && DAY.test(o.prev) && (!day || o.prev < day) ? o.prev : null;
+    let gap = nat(o.gap, 730);
+    if (gap === 0) gap = null;
+    if (gap == null && prev && day) gap = Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${prev}T00:00:00Z`)) / 864e5);
+    const at = typeof o.at === "string" && HM.test(o.at) ? o.at : null;
+    out.push({ name, prev, gap, at });
+    if (out.length >= REVISIT_WHO_MAX) break;
+  }
+  return out.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
+}
+
+/** revisit 칸 검사 — 모양이 틀리면 null · 이상한 날 · 수 · 시작일 앞 날은 버림 (이벤트 글 · 현황 글 같이 씀)
+ *  day = 그 글의 날 (현황 글 — 재방문 손님의 '며칠 만에'를 앞 방문 날로 셀 때) */
+export function parseRevisitOk(x: unknown, day?: string): DeskRevisitOk | null {
   if (!x || typeof x !== "object") return null;
   const o = x as Record<string, unknown>;
   const from = String(o.from || "");
@@ -51,7 +90,8 @@ export function parseRevisitOk(x: unknown): DeskRevisitOk | null {
       if (DAY.test(d) && d >= from && n != null && n > 0) days[d] = n;
     }
   }
-  return { from, today, total, days };
+  const who = whoOf(o.who, day);
+  return { from, today, total, days, ...(who ? { who } : {}) };
 }
 
 /** 통합데스크 글(astanakiz-event) → 검사한 값. 모양이 틀리면 null */
