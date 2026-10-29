@@ -11,7 +11,7 @@
 import { addDays } from "./dates";
 import { deskLiveAgeMin, type DeskLive } from "./deskLive";
 import { isNaverTicketProduct, naverTime } from "./naverAuto";
-import { NAVER_SLOTS, sum, type DayReport, type NaverPart, type StorePart } from "./part";
+import { NAVER_SLOTS, naverSlotIndex, sum, type DayReport, type NaverPart, type StorePart } from "./part";
 import type { StoreId } from "./types";
 
 export const LIVE_LABEL = "마감 전 영업정보";
@@ -69,8 +69,7 @@ export function liveNaverPart(date: string, done: { product: string; time: strin
   const tickets = NAVER_SLOTS.map(() => 0);
   for (const c of [...done, ...booked]) {
     if (!isNaverTicketProduct(c.product)) continue;
-    const t = naverTime(c.time);
-    const i = t ? NAVER_SLOTS.indexOf(t) : -1;
+    const i = naverSlotIndex(naverTime(c.time)); // 19:30 뒤 예약은 19:30 칸에 (2026-10-29)
     if (i >= 0 && isCount(c.done)) tickets[i] += c.done;
   }
   return { v: 1, date, tickets, newVisitors: NAVER_SLOTS.map(() => 0), noNew: true };
@@ -106,7 +105,7 @@ export function deskNaverPart(desk: DeskLive | null, date: string, now: Date = n
   if (desk.naver.products.some((x) => !isNaverTicketProduct(x.name))) return no("통합데스크 네이버 상품이 보고 기준(입장권 상품)과 다름");
   const tickets = NAVER_SLOTS.map(() => 0);
   for (const s of desk.naver.slots) {
-    const i = NAVER_SLOTS.indexOf(s.t.padStart(5, "0"));
+    const i = naverSlotIndex(s.t.padStart(5, "0")); // 통합데스크 20:00 칸(2.12 ~)은 19:30 칸에 (2026-10-29)
     if (i < 0) {
       if (s.done + s.conf > 0) return no(`보고 칸에 없는 시각 ${s.t}`);
       continue;
@@ -129,10 +128,13 @@ export interface LiveDoc {
   naver?: Piece<NaverPart>;
 }
 
-/** live 문서 → 그날 보고 (검사를 통과한 조각만) · 문제 목록 · 받은 시각 */
+/** live 문서 → 그날 보고 (검사를 통과한 조각만) · 문제 목록 · 받은 시각
+    받은 시각 = 카페 · 키즈 영수 숫자를 받은 시각(둘이 다르면 오래된 쪽) — 문서 시각(at)은 네이버만 새로 올려도 바뀌어서,
+    카페를 못 받은 차례에도 '20시 새로고침'으로 보이고 빵 숫자는 19:45 그대로였음 (2026-10-27 사장님). 영수 조각이 없으면 문서 시각 */
 export function liveReport(doc: LiveDoc, date: string): { report: DayReport | null; problems: string[]; at: string | null } {
   const problems: string[] = [];
   const r: DayReport = { date, meta: {} };
+  const posAt: string[] = [];
   for (const k of ["cafe", "kids"] as const) {
     const x = doc[k];
     if (!x) continue;
@@ -141,6 +143,7 @@ export function liveReport(doc: LiveDoc, date: string): { report: DayReport | nu
     else {
       r[k] = x.p;
       r.meta![k] = { by: x.by || LIVE_LABEL, at: x.at || doc.at || "" };
+      if (x.at && !Number.isNaN(Date.parse(x.at))) posAt.push(x.at);
     }
   }
   if (doc.naver) {
@@ -151,7 +154,8 @@ export function liveReport(doc: LiveDoc, date: string): { report: DayReport | nu
       r.meta!.naver = { by: doc.naver.by || LIVE_LABEL, at: doc.naver.at || doc.at || "" };
     }
   }
-  return { report: r.cafe || r.kids || r.naver ? r : null, problems, at: doc.at || null };
+  const oldest = posAt.sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  return { report: r.cafe || r.kids || r.naver ? r : null, problems, at: oldest || doc.at || null };
 }
 
 /** 확정 보고와 마감 전 보고 합치기 — 칸마다 확정이 있으면 확정, 없으면 마감 전 (provisional 에 그 칸) */

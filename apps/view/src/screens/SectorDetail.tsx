@@ -38,13 +38,14 @@ import {
   type ExtraKind,
   type Metrics,
   type WeatherMap,
+  lastBreadSale,
 } from "@report/core";
 import { useBakeryDoc, type BakeryDoc } from "../data/bakery";
 import { BarChart } from "../charts/BarChart";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
 import { HeroBox } from "../ui/WeatherPanel";
-import { useLive } from "../ui/Live";
+import { hourMin, useLive } from "../ui/Live";
 import { BOX_LABEL, Delta } from "./Home";
 import { DetailHeader, md, Seg, type Nav } from "./parts";
 
@@ -457,6 +458,8 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
   const open = !!useLive()?.today;
   const [sheet, setSheet] = useState<"all" | "waste" | null>(null);
   const wasteLabel = open ? "남음 (마감 전)" : "폐기";
+  const cafeAt = board.report(date)?.meta?.cafe?.at || "";
+  const lastSale = lastBreadSale(board.report(date)?.cafe?.bakeryLastBy);
   const cells: [string, number | null, "all" | "waste" | null][] = [
     ["총 생산", sales ? t.made : null, "all"],
     ["정가판매", sales ? t.full : null, null],
@@ -482,6 +485,12 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
           ),
         )}
       </div>
+      {open && sales && (
+        // 마감 전 빵 숫자가 POS 영수증 어디까지인지 (2026-10-27 사장님: 19:45 ~ 48 에 판 빵이 20:00 숫자에 없었음)
+        <p className="note muted">
+          POS 영수 {cafeAt ? hourMin(cafeAt) : "—"} 받음 · 마지막 빵 판매 {lastSale || "—"} · 남음 = 작업지시 − POS 판매 (빵마다 0 밑으로 안 내려감 · 작업지시에 없는 빵 · 시식 · 현장에서 바꾼 수량은 모름)
+        </p>
+      )}
       {sheet && <BreadSheet date={date} rows={rows} kind={sheet} wasteLabel={wasteLabel} onClose={() => setSheet(null)} />}
     </>
   );

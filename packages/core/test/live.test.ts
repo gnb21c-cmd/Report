@@ -54,6 +54,21 @@ describe("오늘 마감 전 영업정보 — 받은 숫자 검사 (틀린 숫자
     expect(m2.cafe).toBe(confirmed.cafe);
     expect(m2.provisional).toBeUndefined();
   });
+  it("받은 시각 = 카페 · 키즈 영수 숫자를 받은 시각 (네이버만 새로 와도 앞당기지 않음 · 둘이 다르면 늦은 쪽 — 2026-10-27 사장님: '20시 새로고침'인데 빵 숫자가 19:45 그대로)", () => {
+    const kidsP = () => buildStorePart({ store: "kids", date: "2026-10-08", file: "live", sheet, sectorOf: () => "키즈" }).part;
+    // 20:00 에 카페 · 키즈는 못 올리고 네이버만 올림 → 문서 at 은 20:00, 카페 · 키즈 조각은 19:45
+    const doc = { date: "2026-10-08", at: "2026-10-08T11:00:20Z", cafe: { p: cafe(), at: "2026-10-08T10:45:30Z" }, kids: { p: kidsP(), at: "2026-10-08T10:45:30Z" }, naver: { p: { date: "2026-10-08", slots: {} } as any, at: "2026-10-08T11:00:20Z" } };
+    expect(liveReport(doc, "2026-10-08").at).toBe("2026-10-08T10:45:30Z");
+    // 키즈만 늦으면 늦은 쪽(더 오래된 것) — 영수 숫자가 그때까지만 맞음
+    expect(liveReport({ ...doc, cafe: { ...doc.cafe, at: "2026-10-08T11:00:10Z" } }, "2026-10-08").at).toBe("2026-10-08T10:45:30Z");
+    // 둘 다 새로 받았으면 그 시각
+    expect(liveReport({ ...doc, cafe: { ...doc.cafe, at: "2026-10-08T11:00:10Z" }, kids: { ...doc.kids, at: "2026-10-08T11:00:12Z" } }, "2026-10-08").at).toBe("2026-10-08T11:00:10Z");
+    // 검사에 걸린 조각은 셈하지 않음 · 영수 조각이 없으면 문서 시각
+    const bad = cafe();
+    bad.teams += 3;
+    expect(liveReport({ ...doc, cafe: { p: bad, at: "2026-10-08T09:00:00Z" } }, "2026-10-08").at).toBe("2026-10-08T10:45:30Z");
+    expect(liveReport({ date: "2026-10-08", at: "2026-10-08T11:00:20Z", naver: doc.naver }, "2026-10-08").at).toBe("2026-10-08T11:00:20Z");
+  });
   it("날짜 단계 — 어제까지 확정 · 오늘 마감 전 · 앞날", () => {
     expect(dayStage("2026-10-07", "2026-10-08")).toBe("closed");
     expect(dayStage("2026-10-08", "2026-10-08")).toBe("live");
@@ -120,6 +135,11 @@ describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 + 
     expect(p.tickets[NAVER_SLOTS.indexOf("18:00")]).toBe(4);
     expect(p.tickets.reduce((a, b) => a + b, 0)).toBe(8);
     expect(p.noNew).toBe(true);
+    expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
+  });
+  it("19:30 뒤 예약(20:00 — 2026-10-29 사장님 이벤트 때)은 19:30 칸에 더함 (예전엔 빠짐)", () => {
+    const p = liveNaverPart("2026-10-08", [{ product: "야간자유 입장권", time: "오후7:30", done: 2 }], [{ product: "야간자유 입장권", time: "오후8:00", done: 1 }]);
+    expect(p.tickets[NAVER_SLOTS.indexOf("19:30")]).toBe(3);
     expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
   });
   it("검사 — 30분 칸 20개 · 0 이상 정수 · 정해진 칸만 · 날짜", () => {

@@ -25,6 +25,15 @@ export function hourIndex(time: string): number | null {
 
 /** 네이버 예약 시간대 (30분) — 10:00 ~ 19:30 */
 export const NAVER_SLOTS = Array.from({ length: 20 }, (_, i) => `${String(10 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+/** 시각 "HH:MM" → NAVER_SLOTS 칸 번호 — 19:30 뒤는 19:30 칸 · 10:00 전은 10:00 칸에 더함 (2026-10-29 사장님 — 이벤트 때 19:30 넘어 온 손님이 20:00 예약,
+    예전엔 빠짐) · 시각이 아니거나 영업시간 안의 30분 칸이 아니면 -1 */
+export function naverSlotIndex(t: string | null | undefined): number {
+  const m = /^(\d{2}):(\d{2})$/.exec(t || "");
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return -1;
+  const i = NAVER_SLOTS.indexOf(m[0]);
+  if (i >= 0) return i;
+  return m[0] < NAVER_SLOTS[0] ? 0 : m[0] > NAVER_SLOTS[NAVER_SLOTS.length - 1] ? NAVER_SLOTS.length - 1 : -1;
+}
 
 const zeros = (n = HOURS.length) => Array.from({ length: n }, () => 0);
 const bySector = <T,>(f: () => T): Record<Sector, T> => ({ 바리스타: f(), 베이커리: f(), 키친: f(), 기타: f() });

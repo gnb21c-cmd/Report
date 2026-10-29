@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { firebaseSource } from "../src/data/firebase";
+import demoRevisit from "../src/data/demoRevisit.json";
 
 /** Firestore runQuery 흉내 — at 순 (같으면 문서 이름 순), where at > x, startAt (at, 이름) 다음, limit */
 function fakeFirestore(docs: { name: string; at: string; date: string }[]) {
@@ -122,6 +123,17 @@ describe("보고 앱 — 통합데스크 이벤트 입장 수 (deskStats/event-�
     const got = await firebaseSource({ apiKey: "k", projectId: "p" }, "board").deskEvents();
     expect(got.counts).toEqual({ "2026-10-27": 1, "2026-10-26": 1 });
     expect(got.revisit).toEqual({ from: "2026-10-26", today: 2, total: 43, days: { "2026-10-26": 41, "2026-10-27": 2 }, asOf: "2026-10-27 20:00" });
+    vi.unstubAllGlobals();
+  });
+
+  it("재방문 성공을 아직 안 보냈으면 재방문 간격 글의 이벤트 시작일부터 0 (2026-10-27 사장님 — 마감된 날 '재방문 0장 (現누적 0장)')", async () => {
+    const gap = JSON.stringify({ ...demoRevisit, event: { from: "2026-10-26", to: "2026-10-27", end: "2027-02-28", started: true, revisits: 0, people: 0, top: [] } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => (/deskStats\?/.test(url) ? ({ ok: true, json: async () => ({ documents: [doc("revisit", gap), doc("event-2026-10-26", ev("2026-10-26", 0))] }) } as any) : ({ ok: false, status: 404, json: async () => ({}) } as any))),
+    );
+    const got = await firebaseSource({ apiKey: "k", projectId: "p" }, "board").deskEvents();
+    expect(got.revisit).toEqual({ from: "2026-10-26", today: 0, total: 0, days: {}, asOf: "" });
     vi.unstubAllGlobals();
   });
 });

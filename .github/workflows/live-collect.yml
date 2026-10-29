@@ -14,6 +14,9 @@
 #   (늦게 시작됐거나 포스가 꺼져 응답이 없어도 21:50 뒤에는 새로 집계하지 않음 · 다음 날 10:00 첫 집계)
 #   하루 수집을 시작할 때 '다음 차례' 하루 수집을 맡겨 두고 3시간마다 · 끝날 때 새로 맡김(같은 줄 live-loop 에서 가장 새것 하나만 기다림)
 #   끝나면 컴퓨터가 꺼질 때까지 붙들고 있음
+#   하루 수집 기록 (2026-10-29 사장님): 붙들고 있다 컴퓨터가 꺼지면 이 작업 기록이 GitHub 에 통째로 안 남음(10-27 · 10-28)
+#   → POS 메인 PC 기록 파일(도구 폴더 live-log\날짜.log · 31일)에도 남기고, 붙들기 전 · 비켜 줄 때 · 다음 작업을 시작할 때(지난 날 것)
+#     저장소 live-log 가지의 log/날짜.log 로 올림 (main 과 따로 · 글은 이 작업 기록과 같음)
 #   꺼지면 다음 차례가 실행기를 기다리다(하루까지) 아침에 켜지면 바로 돎 → 09:27 에 오늘 안 돈 아침 수집(자판기 · 네컷 · 주차 / POS 확정 / 네이버)을
 #   시작시키고 하루 수집으로 (liveLoop.ts arm · hold · nightWait · kickMorning)
 #   예약은 그대로 둠 — 낮에 PC 를 껐다 켰을 때 (돌고 있거나 줄을 서 있으면 건너뜀)
@@ -92,7 +95,8 @@ jobs:
     # 09:27 에 시작해 21:50 에 끝난 뒤 컴퓨터가 꺼질 때까지 붙들고 있음 — 꺼지지 않은 밤이면 05:00 에 놓아 줌 (1173분 + 준비)
     timeout-minutes: 1260
     permissions:
-      contents: read
+      # 하루 수집 기록을 live-log 가지에 올림 (2026-10-29)
+      contents: write
       # 기다리는 다른 일 보기 · 비켜 주기 전에 자기를 다시 시작
       actions: write
     # 하루 수집은 하나만 — 겹치면 앞의 것이 끝난 뒤에 (기다리는 것은 가장 새것 하나만)
@@ -134,6 +138,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           # 네이버 예약현황 (오늘) · A [신규 다시 확인] — 로그인 상태는 아침 네이버 수집과 같은 곳 (POS 메인 PC 도구 폴더)
           NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
+          # 하루 수집 기록 파일 (POS 메인 PC 도구 폴더 · 31일) → live-log 가지
+          LIVE_LOG_DIR: ${{ runner.tool_cache }}\live-log
           NAVER_BIZ_ID: ${{ secrets.NAVER_BIZ_ID }}
           OKPOS_ID: ${{ secrets.OKPOS_ID }}
           OKPOS_PW: ${{ secrets.OKPOS_PW }}

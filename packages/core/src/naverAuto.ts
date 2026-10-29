@@ -9,7 +9,7 @@
    - 사람이 A 에서 넣은 네이버 칸은 덮지 않음 (자동 수집이 넣은 칸만 다시 씀)
    같은 손님인지는 이름 · 전화번호 뒷자리로 맞춰 보되, 수집기가 읽자마자 알아볼 수 없는 표시(who)로 바꿔 메모리에서만 씀 — 저장 · 기록 · 클라우드에 남기지 않음
    ============================================================ */
-import { NAVER_SLOTS, type NaverPart } from "./part";
+import { NAVER_SLOTS, naverSlotIndex, type NaverPart } from "./part";
 
 export const NAVER_AUTO_BY = "자동 수집 (네이버)";
 
@@ -98,7 +98,7 @@ export function naverNewVisitors(visits: NaverVisit[], later: NaverVisit[] = [])
     if (k.startsWith("i:") ? n !== 1 : g.length + (after.get(k.slice(2)) || 0) !== n) continue;
     const slots = g
       .filter((v) => isNaverTicketProduct(v.product))
-      .map((v) => NAVER_SLOTS.indexOf(naverTime(v.time) || ""))
+      .map((v) => naverSlotIndex(naverTime(v.time)))
       .filter((i) => i >= 0)
       .sort((a, b) => a - b);
     if (!slots.length) continue;
@@ -123,21 +123,24 @@ export function naverRepeaters(visits: NaverVisit[], later: NaverVisit[]): { yes
 }
 
 /** 읽은 칸들 → 네이버 칸 (30분마다 판매입장권 · 신규방문자) */
-export function naverPartFrom(date: string, cells: NaverCellRead[], visits?: NaverVisit[], later: NaverVisit[] = []): { part: NaverPart; used: number; skipped: string[]; overlap: string[] } {
+export function naverPartFrom(date: string, cells: NaverCellRead[], visits?: NaverVisit[], later: NaverVisit[] = []): { part: NaverPart; used: number; skipped: string[]; folded: string[]; overlap: string[] } {
   const tickets = NAVER_SLOTS.map(() => 0);
   const newVisitors = NAVER_SLOTS.map(() => 0);
   const by = NAVER_SLOTS.map(() => new Set<string>());
   const skipped: string[] = [];
+  /** 19:30 뒤(10:00 전) 회차 — 19:30(10:00) 칸에 더한 시각 */
+  const folded: string[] = [];
   let used = 0;
   let unknownFirst = false;
   for (const c of cells) {
     if (!isNaverTicketProduct(c.product)) continue;
     const t = naverTime(c.time);
-    const i = t ? NAVER_SLOTS.indexOf(t) : -1;
+    const i = naverSlotIndex(t);
     if (i < 0) {
       if (c.done > 0) skipped.push(t || c.time);
       continue;
     }
+    if (t !== NAVER_SLOTS[i] && c.done > 0 && t) folded.push(t);
     tickets[i] += c.done;
     if (c.first == null) unknownFirst = unknownFirst || c.done > 0;
     else newVisitors[i] += c.first;
@@ -147,7 +150,7 @@ export function naverPartFrom(date: string, cells: NaverCellRead[], visits?: Nav
   const overlap = NAVER_SLOTS.filter((_, i) => by[i].size > 1);
   if (visits && !unknownFirst) naverNewVisitors(visits, later).bySlot.forEach((n, i) => (newVisitors[i] = n));
   const part: NaverPart = { v: 1, date, tickets, newVisitors, ...(unknownFirst ? { noNew: true } : {}) };
-  return { part, used, skipped, overlap };
+  return { part, used, skipped, folded, overlap };
 }
 
 /** 자동 수집이 이 날 네이버 칸을 써도 되나 — 비었거나 자동 수집이 넣은 칸만 */

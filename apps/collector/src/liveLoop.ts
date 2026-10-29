@@ -14,17 +14,22 @@
      컴퓨터가 꺼지면 다음 차례가 실행기를 기다리다가 아침에 켜지면 바로 돎 → 09:27 까지 밤 대기 → 오늘 아직 안 돈 아침 수집
      (자판기 · 네컷 · 주차 / POS 확정 / 네이버)을 시작시키고 끝 → 그다음 차례가 하루 수집으로. 하루 수집으로 시작했을 때도 안 돈 아침 수집이 있으면 시작시킴
      밤 대기 · 붙들고 있는 동안에도 이 PC 를 기다리는 다른 일이 있으면 비켜 줌. 시험(LOOP_END · 확인만)일 때는 이어 가지 않음
+   - 하루 수집 기록(2026-10-29 사장님 — 붙들고 있다 컴퓨터가 꺼지면 GitHub 작업 기록이 통째로 안 남음, core liveLog.ts):
+     이 PC 기록 파일(LIVE_LOG_DIR/날짜.log, 줄마다 시각 · 31일)에도 남기고 붙들기 전 · 비켜 줄 때 · 작업을 시작할 때(지난 날 것)
+     저장소 live-log 가지 log/날짜.log 로 올림 (글은 원래 작업 기록과 같음)
    - 근무자 화면(2026-10-22): 칸마다 키친 숫자(work.ts) · 1분마다 통합데스크의 재방문 이벤트 예정 수 → floor/{태블릿 키}/work/event (숫자만)
      이벤트 예정 수는 칸을 받는 동안(몇 분)에도 따로 1분마다 — 손님이 매시 정각 · 30분에 오므로 20 · 50분(칸 받는 중일 수 있음)에도 새 숫자
-   환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작) · LOOP_END(끝 시각 HH:MM, 시험용)
+   환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작 · 기록 올리기) · LOOP_END(끝 시각 HH:MM, 시험용)
+         LIVE_LOG_DIR(이 PC 의 하루 수집 기록 폴더 — 없으면 기록 파일 · 올리기 안 함)
          LOOP_ONCE=1(한 번만 받고 끝 — 날짜를 정한 시험) · COLLECT_DRY=1(올리지 않음, 신규 다시 확인 요청은 맡지 않음)
    공개 저장소라 기록에는 시각 · 성공/실패 · 개수만
    ============================================================ */
 import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOOP_END, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
+import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOG_BRANCH, LIVE_LOOP_END, liveLogPath, logLines, logPrune, logPushDue, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
 import { fbLogin, readConfigJson, readDeskLive, readFloorKey, readLive, writeConfigJson, writeWork, type Fb } from "./firebase";
 import { mask, say } from "./okpos";
 
@@ -41,6 +46,35 @@ const minutesOf = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, Math.max(0, ms)));
 const fails: string[] = [];
 
+/* ---------- 하루 수집 기록 (2026-10-29 사장님 · core liveLog.ts) ----------
+   이 작업은 21:50 에 끝난 뒤 컴퓨터가 꺼질 때까지 붙들고 있어(hold), 꺼지는 순간 GitHub 작업 기록이 통째로 안 남음 (10-27 · 10-28)
+   → 화면에 쓰는 글(수집 프로그램 글 포함)을 이 PC 기록 파일에도 줄마다 시각과 함께 남기고, 저장소 live-log 가지로 올림 */
+const logDir = env("LIVE_LOG_DIR");
+/** 기록 파일 · 올리기 — 보통 하루 수집일 때만 (확인만 · 한 번만 시험은 안 함) */
+const keepLog = !!logDir && !dry && env("LOOP_ONCE") !== "1";
+const clock = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 19);
+let logRest = "";
+if (keepLog) {
+  try {
+    mkdirSync(logDir, { recursive: true });
+    for (const w of [process.stdout, process.stderr]) {
+      const orig = w.write.bind(w) as (...a: unknown[]) => boolean;
+      w.write = ((chunk: unknown, ...rest: unknown[]) => {
+        try {
+          const r = logLines(logRest, String(chunk), clock());
+          logRest = r.rest;
+          if (r.text) appendFileSync(join(logDir, `${today()}.log`), r.text);
+        } catch {
+          // 기록 파일이 안 돼도 수집은 그대로
+        }
+        return orig(chunk, ...rest);
+      }) as typeof w.write;
+    }
+  } catch {
+    // 폴더를 못 만들면 기록 파일 없이
+  }
+}
+
 /** 같은 문제는 한 번만 적음 (1분마다 보니까) */
 const told = new Set<string>();
 const once = (m: string) => {
@@ -52,7 +86,12 @@ const once = (m: string) => {
 /** 수집 프로그램 하나를 새로 실행 — 끝나면 브라우저까지 다 닫힘. 끝 번호 0 = 성공 */
 function run(script: string, extra: Record<string, string>, limitMin: number): Promise<number> {
   return new Promise((done) => {
-    const p = spawn(process.execPath, ["--import", tsx, join(here, script)], { cwd: join(here, ".."), env: { ...process.env, ...extra }, stdio: "inherit" });
+    // 글은 이 작업 화면으로 그대로 넘김 (하루 수집 기록 파일에도 남게 — 바로 물려주면 기록을 못 봄)
+    const p = spawn(process.execPath, ["--import", tsx, join(here, script)], { cwd: join(here, ".."), env: { ...process.env, ...extra }, stdio: ["ignore", "pipe", "pipe"] });
+    p.stdout?.setEncoding("utf8");
+    p.stderr?.setEncoding("utf8");
+    p.stdout?.on("data", (d: string) => process.stdout.write(d));
+    p.stderr?.on("data", (d: string) => process.stderr.write(d));
     const t = setTimeout(() => {
       say(`  ${limitMin}분 안에 안 끝나 멈춤`);
       // 브라우저까지 같이 닫히게 (Windows 는 프로그램 묶음째)
@@ -117,6 +156,54 @@ async function startAgain(): Promise<void> {
   if (dry) inputs.dry = "true";
   if (env("LOOP_END")) inputs.end = env("LOOP_END");
   await gh(`/actions/workflows/live-collect.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: env("GITHUB_REF_NAME") || "main", inputs }) });
+}
+
+/* ---------- 하루 수집 기록 올리기 — 저장소 live-log 가지 log/날짜.log (main 과 따로 · 이 작업 열쇠로) ---------- */
+const upMark = (date: string) => join(logDir, `${date}.up`);
+/** 그날 기록 파일을 올림 (있으면 덮어씀) · 올린 크기를 남겨 다음에 또 올릴지 봄 */
+async function pushLog(date: string): Promise<void> {
+  const file = join(logDir, `${date}.log`);
+  if (!keepLog || !existsSync(file)) return;
+  const text = readFileSync(file, "utf8");
+  if (!text) return;
+  // 가지가 없으면 main 에서 새로 (처음 한 번)
+  try {
+    await gh(`/git/ref/heads/${LIVE_LOG_BRANCH}`);
+  } catch {
+    const m = await gh(`/git/ref/heads/main`);
+    await gh(`/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${LIVE_LOG_BRANCH}`, sha: m.object.sha }) });
+  }
+  const path = liveLogPath(date);
+  let sha: string | undefined;
+  try {
+    sha = (await gh(`/contents/${path}?ref=${LIVE_LOG_BRANCH}`))?.sha;
+  } catch {
+    // 그날 처음
+  }
+  await gh(`/contents/${path}`, { method: "PUT", body: JSON.stringify({ message: `하루 수집 기록 ${date}`, branch: LIVE_LOG_BRANCH, content: Buffer.from(text).toString("base64"), ...(sha ? { sha } : {}) }) });
+  writeFileSync(upMark(date), String(Buffer.byteLength(text)));
+}
+async function pushLogSafe(date: string): Promise<void> {
+  if (!keepLog) return;
+  try {
+    await pushLog(date);
+    say(`${hm(now())} 하루 수집 기록 올림 (${LIVE_LOG_BRANCH} 가지 ${liveLogPath(date)})`);
+  } catch (e) {
+    say(`하루 수집 기록 올리기: ${mask((e as Error).message)}`);
+  }
+}
+/** 작업을 시작할 때 — 지난 날 중 못 올렸거나(컴퓨터가 일찍 꺼짐) 뒤에 줄이 더 붙은(밤 대기) 기록을 올리고, 31일 지난 파일은 지움 */
+async function pushOld(): Promise<void> {
+  if (!keepLog) return;
+  try {
+    const all = readdirSync(logDir).filter((f) => /^\d{4}-\d{2}-\d{2}\.log$/.test(f)).map((f) => f.slice(0, 10));
+    const old = new Set(logPrune(today(), all));
+    for (const d of old) for (const f of [`${d}.log`, `${d}.up`]) if (existsSync(join(logDir, f))) unlinkSync(join(logDir, f));
+    const files = all.filter((d) => !old.has(d)).map((d) => ({ date: d, size: statSync(join(logDir, `${d}.log`)).size, up: existsSync(upMark(d)) ? Number(readFileSync(upMark(d), "utf8")) : null }));
+    for (const d of logPushDue(today(), files)) await pushLogSafe(d);
+  } catch (e) {
+    say(`지난 하루 수집 기록 보기: ${mask((e as Error).message)}`);
+  }
 }
 
 /** 실패하면 30초 뒤 다시 (3번까지) — 이어 가기가 끊기면 다음 날 아침을 GitHub 예약에 맡기게 되므로 */
@@ -283,6 +370,8 @@ async function main() {
   }
   const end = minutesOf(env("LOOP_END") || LIVE_LOOP_END);
   if (!Number.isFinite(end)) throw new Error("끝 시각 모양이 이상함 (HH:MM)");
+  // 지난 날 하루 수집 기록 중 아직 못 올린 것 (컴퓨터가 일찍 꺼졌거나 밤 대기 줄이 더 붙은 것)
+  await pushOld();
   // 끝 시각 뒤 · 아침 시작 전에 시작했으면 밤 대기 (스스로 이어 가기)
   if (chain && liveLoopMode(now(), end) === "night") return nightWait(end);
   const date = today();
@@ -354,6 +443,8 @@ async function main() {
   }
   clearInterval(eventTimer);
   say(`${yielded ? "비켜 줌" : "끝"} ${hm(now())} — 받은 칸 ${runs}개${fails.length ? ` · 실패 ${fails.length}번 (${fails.join(", ")})` : " · 실패 없음"}`);
+  // 오늘 하루 수집 기록을 저장소에 올림 — 이 뒤 붙들고 있다 컴퓨터가 꺼지면 GitHub 작업 기록은 안 남으니까
+  await pushLogSafe(date);
   // 끝났으면 다음 차례를 새로 맡기고 컴퓨터가 꺼질 때까지 붙들고 있음 — 내일 아침을 GitHub 예약에 맡기지 않게
   if (chain && !yielded) {
     try {
