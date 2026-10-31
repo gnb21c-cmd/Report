@@ -250,7 +250,15 @@ export async function deskLiveNow(): Promise<{ live: DeskLive | null; bad?: bool
     const day = todayKst();
     // 재방문 손님의 앞 방문 날도 오늘에 맞춤 ('며칠 만에'는 그대로)
     const revisit = { ...demoDeskLive.revisit, who: demoDeskLive.revisit.who.map((w) => ({ ...w, prev: addDays(day, -w.gap) })) };
-    return { live: parseDeskLive({ ...demoDeskLive, day, at: `${k.slice(0, 10)} ${k.slice(11, 19)}`, revisit }) };
+    const live = parseDeskLive({ ...demoDeskLive, day, at: `${k.slice(0, 10)} ${k.slice(11, 19)}`, revisit });
+    // 체험판 주소 뒤 ?desk=partial — 통합데스크가 네이버를 덜 읽은 순간 (2026-10-31): 14시 전 칸이 비고 열쇠 가진 손님만 남은 모양
+    if (live && new URLSearchParams(location.search).get("desk") === "partial") {
+      const slots = live.naver.slots.map((x) => (x.t < "14:00" ? { ...x, done: 0, conf: 0, left: x.cap } : x));
+      const done = slots.reduce((a, x) => a + x.done, 0);
+      const conf = slots.reduce((a, x) => a + x.conf, 0);
+      return { live: { ...live, naver: { ...live.naver, slots, done, conf, left: slots.reduce((a, x) => a + x.left, 0) }, people: { ...live.people, naver: done, total: done + live.people.walk } } };
+    }
+    return { live };
   }
   const cfg = firebaseConfig();
   const board = boardKey();

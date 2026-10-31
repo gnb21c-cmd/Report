@@ -7,13 +7,15 @@
      번호를 누르면 손님 이름 · 전화번호 그대로 (열쇠 미반납 때 관리자가 전화 — 사장님 지시)
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, DESK_LIVE_STALE_MIN, kidsOverPaid, todayKst, won, type Board, type DeskHolder, type DeskLive } from "@report/core";
+import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, deskNaverCheck, DESK_LIVE_STALE_MIN, kidsOverPaid, todayKst, won, type Board, type DeskHolder, type DeskLive, type DeskNaverCheck } from "@report/core";
 import { deskLiveNow } from "../data/firebase";
 
 const KIND: Record<DeskHolder["kind"], string> = { n: "네이버", w: "현장", s: "서비스 키" };
 const COLOR = { in: "이용 중", pink: "반납 시간 (10분 안)", red: "반납 시간 넘음" } as const;
 const phoneText = (p: string) => (p.length === 11 ? `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}` : p || "—");
 const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+/** ISO 시각 → 한국 시간 HH:MM */
+const kstHm = (iso: string | null) => (iso && !Number.isNaN(Date.parse(iso)) ? new Date(Date.parse(iso) + 9 * 3600e3).toISOString().slice(11, 16) : "");
 /** 당겨서 새로고침 — 이만큼(px) 넘게 당겼다 놓으면 */
 const PULL = 70;
 
@@ -89,6 +91,8 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
 
   const today = todayKst(now);
   const age = live ? deskLiveAgeMin(live, now) : 0;
+  // 통합데스크가 네이버를 덜 읽은 순간이면 그 숫자를 쓰지 않고 포스 15분 수집으로 (2026-10-31 사장님)
+  const chk = live ? deskNaverCheck(live, board.report(live.day)) : null;
   const pullText = busy ? "통합데스크 현황을 가져오는 중…" : pull > PULL ? "놓으면 새로고침" : "아래로 당기면 새로고침";
 
   return (
@@ -117,6 +121,11 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
         {err && <div className="banner">{err}</div>}
         {live && live.day !== today && <div className="banner">오늘 현황이 아직 없어요 — 마지막 현황은 {md(live.day)} {live.at.slice(11, 16)} (키즈 POS 통합데스크가 켜지면 바로 보여요)</div>}
         {live && live.day === today && age > DESK_LIVE_STALE_MIN && <div className="banner">통합데스크 소식이 {count(age)}분째 없어요 — 키즈 POS 가 꺼졌거나 인터넷이 끊겼을 수 있어요</div>}
+        {chk && !chk.ok && (
+          <div className="banner klive-guard" role="alert">
+            통합데스크가 네이버 예약을 덜 읽은 순간이에요 (통합데스크 {count(chk.desk)}장 · 포스 {kstHm(chk.at)} 수집 {count(chk.pos ?? 0)}장). 네이버 숫자는 포스 수집으로 보여 드리고, 통합데스크가 네이버를 다시 불러오면(30분 안) 저절로 돌아와요.
+          </div>
+        )}
         {state === "loading" && <p className="empty">통합데스크 현황을 받는 중입니다…</p>}
         {state === "none" && (
           <section className="card">
@@ -130,7 +139,7 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
             <p className="sub">틀린 숫자를 보여 드리지 않으려고 숨겼어요. 키즈 POS 통합데스크를 새 판으로 바꿔 주세요.</p>
           </section>
         )}
-        {live && <Body live={live} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} onRevisit={() => setRevisitOpen(true)} />}
+        {live && chk && <Body live={live} chk={chk} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} onRevisit={() => setRevisitOpen(true)} />}
       </main>
       {live && pick != null && live.keys.map[pick] && <KeySheet live={live} no={pick} onClose={() => setPick(null)} />}
       {live?.revisit && revisitOpen && <RevisitSheet live={live} onClose={() => setRevisitOpen(false)} />}
@@ -138,9 +147,11 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
   );
 }
 
-function Body({ live, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLive; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void; onRevisit: () => void }) {
+/** chk.ok = false 면 통합데스크 네이버 숫자(오늘 입장 네이버 · 총 판매수 · 입장료 장수 · 네이버 예약 칸)를 쓰지 않음 — 틀린 숫자 대신 '—' · 포스 수집 */
+function Body({ live, chk, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLive; chk: DeskNaverCheck; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void; onRevisit: () => void }) {
   const { people: p, naver: n, keys: k } = live;
   const s = deskLiveSales(live, pos);
+  const off = !chk.ok;
   const nowHm = live.day === todayKst(now) ? new Date(now.getTime() + 9 * 3600e3).toISOString().slice(11, 16) : live.at.slice(11, 16);
   const cur = deskLiveSlotNow(live, nowHm);
   const busySlots = n.slots.filter((x) => x.done || x.conf || x.t === cur);
@@ -152,15 +163,15 @@ function Body({ live, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLiv
           오늘 입장 <span className="note">{live.dayKind}{live.golden ? ` · 골든벨 ${live.golden}~` : ""}</span>
         </h2>
         <div className="klive-big">
-          <span className="num">{count(p.total)}</span>
+          <span className="num">{off ? "—" : count(p.total)}</span>
           <small>장</small>
-          <span className="note">총 판매수 = 네이버 이용완료 + 현장</span>
+          <span className="note">{off ? "네이버 이용완료를 확인하는 중 — 통합데스크가 네이버를 다시 불러오면 보여요" : "총 판매수 = 네이버 이용완료 + 현장"}</span>
         </div>
         {/* 네 칸 (2026-10-27 사장님): 네이버 = 오늘 팔린 네이버 입장권 · 현장입장 = 현장에서 판 입장권 · 재방문성공 = 이벤트 시작일 뒤 다시 와서 돈까스를 받은 수 오늘(누적) · 이벤트 = 입장료 없이 들어온 이벤트 입장 */}
         <div className="klive-split four">
           <div>
             <span>네이버</span>
-            <b className="num">{count(p.naver)}</b>
+            <b className="num">{off ? "—" : count(p.naver)}</b>
           </div>
           <div>
             <span>현장입장{live.walk.extra ? ` (+1타임 ${live.walk.extra})` : ""}</span>
@@ -256,9 +267,9 @@ function Body({ live, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLiv
         <div className="klive-rows">
           <div>
             <span>
-              입장권 {count(s.tickets)}장 × {won(s.price)}
+              입장권 {off ? "— (네이버 확인 중)" : `${count(s.tickets)}장`} × {won(s.price)}
             </span>
-            <b className="num">{won(s.fee)}</b>
+            <b className="num">{off ? "—" : won(s.fee)}</b>
           </div>
           {/* 초과요금은 POS 로 실제 결제한 '퇴장시간 지연'만 (통합데스크 금액은 안 씀 — 현장에서 안 받거나 안내만 하고 돌려보낼 수도 있어서, 2026-10-25 사장님) */}
           <div>
@@ -267,59 +278,104 @@ function Body({ live, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLiv
           </div>
           <div className="sum">
             <span>합계</span>
-            <b className="num">{won(s.total)}</b>
+            <b className="num">{off ? "—" : won(s.total)}</b>
           </div>
         </div>
         <p className="note">장수 × 단가로 센 지금까지 · 초과요금은 POS 결제 기준(15분마다{s.over == null ? " — 오늘 POS 숫자를 기다리는 중" : ""}) · 할인 · 무료입장은 다음 날 아침 확정 보고에서 맞춰져요</p>
       </section>
 
-      <section className="card klive-card">
-        <h2>
-          네이버 예약 <span className="note">오늘 합</span>
-        </h2>
-        <div className="klive-ntot">
-          <div>
-            <span>완료</span>
-            <b className="num good">{count(n.done)}</b>
+      {off ? (
+        <PosNaver chk={chk} cur={cur} all={all} onAll={onAll} />
+      ) : (
+        <section className="card klive-card">
+          <h2>
+            네이버 예약 <span className="note">오늘 합</span>
+          </h2>
+          <div className="klive-ntot">
+            <div>
+              <span>완료</span>
+              <b className="num good">{count(n.done)}</b>
+            </div>
+            <div>
+              <span>미입장</span>
+              <b className="num bad">{count(n.conf)}</b>
+            </div>
+            <div>
+              <span>잔여</span>
+              <b className="num">{count(n.left)}</b>
+            </div>
           </div>
-          <div>
-            <span>미입장</span>
-            <b className="num bad">{count(n.conf)}</b>
-          </div>
-          <div>
-            <span>잔여</span>
-            <b className="num">{count(n.left)}</b>
-          </div>
-        </div>
-        <table className="klive-slots">
-          <thead>
-            <tr>
-              <th>시간</th>
-              <th className="num">완료</th>
-              <th className="num">미입장</th>
-              <th className="num">잔여</th>
-            </tr>
-          </thead>
-          <tbody>
-            {slots.map((x) => (
-              <tr key={x.t} className={x.t === cur ? "sel" : undefined}>
-                <td className="num">{x.t}</td>
-                <td className={`num${x.done ? "" : " muted"}`}>{x.done}</td>
-                <td className={`num${x.conf ? " bad" : " muted"}`}>{x.conf}</td>
-                <td className={`num${x.left ? "" : " muted"}`}>{x.left}</td>
+          <table className="klive-slots">
+            <thead>
+              <tr>
+                <th>시간</th>
+                <th className="num">완료</th>
+                <th className="num">미입장</th>
+                <th className="num">잔여</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {n.slots.length > busySlots.length && (
-          <button className="ghost small" onClick={onAll}>
-            {all ? "예약 있는 시간만 보기" : `모든 시간 보기 (${n.slots.length}칸)`}
-          </button>
-        )}
-        {n.products.length > 1 && <p className="note">상품별 완료: {n.products.map((x) => `${x.name} ${x.done}`).join(" · ")}</p>}
-      </section>
+            </thead>
+            <tbody>
+              {slots.map((x) => (
+                <tr key={x.t} className={x.t === cur ? "sel" : undefined}>
+                  <td className="num">{x.t}</td>
+                  <td className={`num${x.done ? "" : " muted"}`}>{x.done}</td>
+                  <td className={`num${x.conf ? " bad" : " muted"}`}>{x.conf}</td>
+                  <td className={`num${x.left ? "" : " muted"}`}>{x.left}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {n.slots.length > busySlots.length && (
+            <button className="ghost small" onClick={onAll}>
+              {all ? "예약 있는 시간만 보기" : `모든 시간 보기 (${n.slots.length}칸)`}
+            </button>
+          )}
+          {n.products.length > 1 && <p className="note">상품별 완료: {n.products.map((x) => `${x.name} ${x.done}`).join(" · ")}</p>}
+        </section>
+      )}
 
     </>
+  );
+}
+
+/** 통합데스크가 네이버를 덜 읽은 순간 — 포스 15분 수집의 시간 칸 (이용완료 + 입장예정 한 칸 · 완료 · 미입장으로는 못 나눔) */
+function PosNaver({ chk, cur, all, onAll }: { chk: DeskNaverCheck; cur: string | null; all: boolean; onAll: () => void }) {
+  const busy = chk.slots.filter((x) => x.n || x.t === cur);
+  const rows = all ? chk.slots : busy;
+  return (
+    <section className="card klive-card">
+      <h2>
+        네이버 예약 <span className="note">포스 {kstHm(chk.at)} 수집</span>
+      </h2>
+      <div className="klive-ntot one">
+        <div>
+          <span>예약 (완료 + 미입장)</span>
+          <b className="num">{count(chk.pos ?? 0)}</b>
+        </div>
+      </div>
+      <table className="klive-slots">
+        <thead>
+          <tr>
+            <th>시간</th>
+            <th className="num">예약 (완료 + 미입장)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((x) => (
+            <tr key={x.t} className={x.t === cur ? "sel" : undefined}>
+              <td className="num">{x.t}</td>
+              <td className={`num${x.n ? "" : " muted"}`}>{x.n}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {chk.slots.length > busy.length && (
+        <button className="ghost small" onClick={onAll}>
+          {all ? "예약 있는 시간만 보기" : `모든 시간 보기 (${chk.slots.length}칸)`}
+        </button>
+      )}
+      <p className="note">포스 컴퓨터가 15분마다 네이버 예약현황에서 읽은 숫자예요 (19:30 뒤 예약은 19:30 칸에). 완료 · 미입장 · 잔여는 통합데스크가 다시 불러오면 보여요.</p>
+    </section>
   );
 }
 
