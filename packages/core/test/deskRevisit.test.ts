@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, Board, NAVER_SLOTS, parseDeskRevisit, REVISIT_MONTH_MIN_DAYS, revisitByDays, revisitRows, revisitStats, revisitSummary, type DayReport } from "../src";
+import { addDays, Board, NAVER_SLOTS, parseDeskRevisit, REVISIT_MONTH_MIN_DAYS, REVISIT_SHOW, revisitByDays, revisitRows, revisitShown, revisitStats, revisitSummary, type DayReport } from "../src";
 import sample from "../../../apps/view/src/data/demoRevisit.json";
 
 /** 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md) — 체험판 예시 */
@@ -70,6 +70,20 @@ describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장�
     expect(by.find((t) => t.days === 7)!.rank).toBe(1);
     expect(top[0].days).toBe(7); // 받은 목록은 그대로
     expect(revisitByDays([])).toEqual([]);
+  });
+
+  it("처음에는 많은 순 5개만 · [모두 보기]면 10위까지 — 둘 다 빨리 온 순으로 (2026-10-31 사장님)", () => {
+    const r = parseDeskRevisit(raw())!;
+    const top = r.past!.top;
+    expect(REVISIT_SHOW).toBe(5);
+    const few = revisitShown(top, false);
+    expect(few).toHaveLength(5);
+    expect(few.every((t) => t.rank <= 5)).toBe(true);
+    expect(few.map((t) => t.days)).toEqual([1, 6, 7, 14, 21]); // 많은 순 82 · 61 · 44 · 38 · 30 명 → 빨리 온 순
+    expect(revisitShown(top, true)).toEqual(revisitByDays(top));
+    expect(revisitShown(top, true)).toHaveLength(10);
+    // 통합데스크가 5개 이하만 보내면 그대로
+    expect(revisitShown(top.slice(0, 3), false)).toHaveLength(3);
   });
 });
 

@@ -13,6 +13,8 @@ export const DESK_STATS = "deskStats";
 export const DESK_REVISIT = "revisit";
 /** 순위 몇 개까지 (2026-10-31 사장님 7 → 10 — 통합데스크가 아직 7개만 보내면 7개) */
 export const REVISIT_TOP = 10;
+/** 처음 화면에는 많은 순 이만큼만 · [모두 보기]를 누르면 REVISIT_TOP 까지 (2026-10-31 사장님) */
+export const REVISIT_SHOW = 5;
 
 export interface RevisitTop {
   rank: number;
@@ -111,6 +113,11 @@ export function revisitSummary(r: RevisitRecent): string {
 /** 보여 줄 순서 — 많은 순으로 고른 10개를 빨리 온 순(일수 짧은 순)으로 (2026-10-21 사장님) · rank(많은 순 순위)는 그대로 남김 */
 export function revisitByDays(top: RevisitTop[]): RevisitTop[] {
   return [...top].sort((a, b) => a.days - b.days || b.count - a.count);
+}
+
+/** 화면에 보일 줄 — 접어 두면 많은 순 REVISIT_SHOW 개만, 펼치면 받은 것 모두 (둘 다 빨리 온 순) */
+export function revisitShown(top: RevisitTop[], all: boolean): RevisitTop[] {
+  return revisitByDays(all ? top : top.filter((t) => t.rank <= REVISIT_SHOW));
 }
 
 /** 좌우 줄 — 순위마다 왼쪽(과거) · 오른쪽(이벤트), 짧은 쪽은 null */
