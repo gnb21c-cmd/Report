@@ -17,7 +17,10 @@
       { "days": 1, "count": 38 },
       { "days": 21, "count": 30 },
       { "days": 13, "count": 24 },
-      { "days": 8, "count": 19 }
+      { "days": 8, "count": 19 },
+      { "days": 9, "count": 17 },
+      { "days": 2, "count": 15 },
+      { "days": 28, "count": 12 }
     ]
   },
   "event": {
@@ -33,7 +36,10 @@
       { "days": 13, "count": 9 },
       { "days": 1, "count": 6 },
       { "days": 10, "count": 4 },
-      { "days": 19, "count": 3 }
+      { "days": 19, "count": 3 },
+      { "days": 2, "count": 3 },
+      { "days": 9, "count": 2 },
+      { "days": 21, "count": 2 }
     ]
   }
 }
