@@ -21,7 +21,11 @@
       { "days": 9, "count": 17 },
       { "days": 2, "count": 15 },
       { "days": 28, "count": 12 }
-    ]
+    ],
+    "groups": {
+      "new": { "revisits": 300, "people": 180, "top": [{ "days": 7, "count": 48 }, { "days": 14, "count": 38 }, { "days": 6, "count": 22 }, { "days": 21, "count": 20 }, { "days": 13, "count": 14 }, { "days": 1, "count": 12 }, { "days": 8, "count": 10 }, { "days": 28, "count": 9 }, { "days": 9, "count": 8 }, { "days": 2, "count": 5 }] },
+      "old": { "revisits": 212, "people": 121, "top": [{ "days": 7, "count": 34 }, { "days": 1, "count": 26 }, { "days": 14, "count": 23 }, { "days": 6, "count": 22 }, { "days": 2, "count": 10 }, { "days": 21, "count": 10 }, { "days": 13, "count": 10 }, { "days": 8, "count": 9 }, { "days": 9, "count": 9 }, { "days": 3, "count": 6 }] }
+    }
   },
   "event": {
     "from": "2026-10-26",
@@ -40,6 +44,10 @@
       { "days": 2, "count": 3 },
       { "days": 9, "count": 2 },
       { "days": 21, "count": 2 }
-    ]
+    ],
+    "groups": {
+      "new": { "revisits": 30, "people": 26, "top": [{ "days": 6, "count": 9 }, { "days": 7, "count": 6 }, { "days": 14, "count": 5 }, { "days": 13, "count": 4 }, { "days": 1, "count": 2 }, { "days": 10, "count": 2 }, { "days": 19, "count": 1 }, { "days": 2, "count": 1 }] },
+      "old": { "revisits": 44, "people": 32, "top": [{ "days": 6, "count": 12 }, { "days": 7, "count": 9 }, { "days": 14, "count": 7 }, { "days": 13, "count": 5 }, { "days": 1, "count": 4 }, { "days": 10, "count": 2 }, { "days": 19, "count": 2 }, { "days": 2, "count": 2 }, { "days": 9, "count": 2 }, { "days": 21, "count": 2 }] }
+    }
   }
 }

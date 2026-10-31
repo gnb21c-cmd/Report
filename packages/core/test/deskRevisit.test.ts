@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, Board, NAVER_SLOTS, parseDeskRevisit, REVISIT_MONTH_MIN_DAYS, REVISIT_SHOW, revisitByDays, revisitRows, revisitShown, revisitStats, revisitSummary, type DayReport } from "../src";
+import { addDays, Board, NAVER_SLOTS, parseDeskRevisit, REVISIT_KINDS, REVISIT_MONTH_MIN_DAYS, REVISIT_SHOW, revisitByDays, revisitGroup, revisitHasGroups, revisitRows, revisitShare, revisitShown, revisitStats, revisitSummary, type DayReport } from "../src";
 import sample from "../../../apps/view/src/data/demoRevisit.json";
 
 /** 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md) — 체험판 예시 */
@@ -131,5 +131,54 @@ describe("재방문 간격 아래 칸 — 월 평균 재방문 수 · 재방문�
     expect(revisitStats(r.event!, r.history, naverDays("2026-04-01", "2026-11-20", 0)).rate).toBeNull();
     const s = revisitStats(r.past!, { from: "2026-11-01", to: "2026-11-20", days: 20 }, naverDays("2026-04-01", "2026-11-20"));
     expect([s.days, s.perMonth, s.rate]).toEqual([0, null, null]);
+  });
+});
+
+describe("신규 · 기존 나눠 보기 (2026-10-31 사장님)", () => {
+  /* 4/1 부터 유료 — 신규 = 4/1 이후 처음 온 손님(첫 방문 때 네이버 완료 1) · 기존 = 4/1 전부터 교환권으로 오던 손님(완료 2 이상)
+     이벤트를 모를 때(과거)와 알게 된 뒤(이벤트) 다시 오기까지 걸린 날을 무리마다 견줌 — 통합데스크가 groups 를 보내면 */
+  it("단추 — 전체 · 신규 · 기존", () => {
+    expect(REVISIT_KINDS.map((k) => k.label)).toEqual(["전체", "신규", "기존"]);
+  });
+
+  it("통합데스크가 groups 를 보내면 받음 — 무리마다 재방문 수 · 손님 수 · 많은 순 10개", () => {
+    const r = parseDeskRevisit(raw())!;
+    expect(revisitHasGroups(r)).toBe(true);
+    const pn = revisitGroup(r.past, "new")!;
+    expect([pn.revisits, pn.people, pn.top.length]).toEqual([300, 180, 10]);
+    expect(pn.top[0]).toEqual({ rank: 1, days: 7, count: 48 });
+    expect(revisitGroup(r.event, "new")!.top).toHaveLength(8);
+    expect(revisitGroup(r.event, "old")!.top[0]).toEqual({ rank: 1, days: 6, count: 12 });
+    // 전체 = 그 기간 그대로
+    expect(revisitGroup(r.past, "all")).toEqual({ revisits: 512, people: 301, top: r.past!.top });
+  });
+
+  it("전체 재방문 중 몇 % — 신규 300 ÷ 512 = 58.6% · 기존 41.4%", () => {
+    const r = parseDeskRevisit(raw())!;
+    expect(revisitShare(r.past, "new")).toBe(58.6);
+    expect(revisitShare(r.past, "old")).toBe(41.4);
+    expect(revisitShare(r.past, "all")).toBeNull();
+    expect(revisitShare({ ...r.past!, revisits: 0 }, "new")).toBeNull();
+  });
+
+  it("옛 판(groups 없음)이면 전체만 · 한쪽만 오면 그쪽만 · 이상한 칸은 걸러냄", () => {
+    const x = raw();
+    delete x.past.groups;
+    delete x.event.groups;
+    const old = parseDeskRevisit(x)!;
+    expect(revisitHasGroups(old)).toBe(false);
+    expect(revisitGroup(old.past, "new")).toBeNull();
+    expect(revisitGroup(old.past, "all")!.top).toHaveLength(10);
+    expect(revisitGroup(null, "all")).toBeNull();
+
+    const y = raw();
+    y.past.groups = { new: { revisits: -3, people: "많이", top: [{ days: -1, count: 2 }, ...Array.from({ length: 12 }, (_, i) => ({ days: i + 1, count: 20 - i }))] } };
+    const one = parseDeskRevisit(y)!;
+    const g = revisitGroup(one.past, "new")!;
+    expect([g.revisits, g.people]).toEqual([0, 0]);
+    expect(g.top).toHaveLength(10);
+    expect(g.top[0]).toEqual({ rank: 1, days: 1, count: 20 });
+    expect(revisitGroup(one.past, "old")).toBeNull();
+    expect(JSON.stringify(parseDeskRevisit({ ...raw(), past: { ...raw().past, groups: { new: { revisits: 1, people: 1, top: [], name: "010-1234-5678" } } } }))).not.toContain("010");
   });
 });

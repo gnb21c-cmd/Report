@@ -31,7 +31,28 @@ export interface RevisitPeriod {
   revisits: number;
   people: number;
   top: RevisitTop[];
+  /** 신규 · 기존 나눠 보기 (2026-10-31 사장님 — 통합데스크 새 판부터, 없으면 전체만) · 한쪽만 오면 다른 쪽은 null */
+  groups?: { new: RevisitGroup | null; old: RevisitGroup | null };
 }
+/** 한 무리의 재방문 — 재방문 수 · 손님 수 · 많은 순 10개 */
+export interface RevisitGroup {
+  revisits: number;
+  people: number;
+  top: RevisitTop[];
+}
+
+/* ---------- 신규 · 기존 나눠 보기 (2026-10-31 사장님) ----------
+   4/1 부터 유료 — 신규 = 4/1 이후 처음 온 손님(4/1 이후 첫 방문 때 네이버 완료 1, 처음부터 유료)
+                   기존 = 4/1 전부터 오던 손님(완료 2 이상 — 교환권으로 무료 이용하다 유료로 바뀐 손님)
+   무리마다 이벤트를 모를 때(과거)와 알게 된 뒤(이벤트 — 다시 무료가 된 느낌) 다시 오기까지 걸린 날을 견줌
+   세는 법(통합데스크): 손님마다 기간별로 한 번 — 과거 = 4/1 ~ 10/25 사이 처음 온 날 → 다음 방문(10/26 뒤여도 과거)
+                       이벤트 = 10/26 뒤 처음 온 날(새 손님이든 단골의 N번째든) → 다음 방문(N+1, N+2 는 안 셈) */
+export type RevisitKind = "all" | "new" | "old";
+export const REVISIT_KINDS: readonly { key: RevisitKind; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "new", label: "신규" },
+  { key: "old", label: "기존" },
+];
 export interface RevisitRecent {
   from: string;
   to: string;
@@ -72,9 +93,14 @@ function topOf(x: unknown): RevisitTop[] {
   }
   return out;
 }
+function groupOf(x: any): RevisitGroup | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  return { revisits: n0(x.revisits), people: n0(x.people), top: topOf(x.top) };
+}
 function periodOf(x: any): RevisitPeriod | null {
   if (!x || typeof x !== "object" || !day(x.from)) return null;
-  return { from: x.from, to: day(x.to) || x.from, revisits: n0(x.revisits), people: n0(x.people), top: topOf(x.top) };
+  const g = x.groups && typeof x.groups === "object" ? { new: groupOf(x.groups.new), old: groupOf(x.groups.old) } : null;
+  return { from: x.from, to: day(x.to) || x.from, revisits: n0(x.revisits), people: n0(x.people), top: topOf(x.top), ...(g && (g.new || g.old) ? { groups: g } : {}) };
 }
 
 /** 통합데스크 일수 모음 → 검사한 것 (모양이 틀리면 null — 틀린 숫자를 보여 주지 않음) */
@@ -113,6 +139,25 @@ export function revisitSummary(r: RevisitRecent): string {
 /** 보여 줄 순서 — 많은 순으로 고른 10개를 빨리 온 순(일수 짧은 순)으로 (2026-10-21 사장님) · rank(많은 순 순위)는 그대로 남김 */
 export function revisitByDays(top: RevisitTop[]): RevisitTop[] {
   return [...top].sort((a, b) => a.days - b.days || b.count - a.count);
+}
+
+/** 통합데스크가 신규 · 기존을 보냈나 (과거나 이벤트 한쪽이라도) — 보냈으면 [전체 · 신규 · 기존] 단추 */
+export function revisitHasGroups(r: Pick<DeskRevisit, "past" | "event">): boolean {
+  return !!(r.past?.groups || r.event?.groups);
+}
+
+/** 그 기간에서 고른 무리 — 전체는 기간 그대로 · 신규 · 기존은 통합데스크가 안 보냈으면 null */
+export function revisitGroup(p: RevisitPeriod | null | undefined, kind: RevisitKind): RevisitGroup | null {
+  if (!p) return null;
+  if (kind === "all") return { revisits: p.revisits, people: p.people, top: p.top };
+  return p.groups?.[kind] ?? null;
+}
+
+/** 전체 재방문 중 그 무리가 몇 % (소수 한 자리) — 전체 · 무리가 없음 · 전체 0 이면 null */
+export function revisitShare(p: RevisitPeriod | null | undefined, kind: RevisitKind): number | null {
+  if (kind === "all" || !p || !p.revisits) return null;
+  const g = revisitGroup(p, kind);
+  return g ? Math.round((g.revisits / p.revisits) * 1000) / 10 : null;
 }
 
 /** 화면에 보일 줄 — 접어 두면 많은 순 REVISIT_SHOW 개만, 펼치면 받은 것 모두 (둘 다 빨리 온 순) */
