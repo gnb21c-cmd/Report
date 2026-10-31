@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySettings, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, kidsOverPaid, parseDeskLive, type DayReport, type DeskLive } from "../src";
+import { applySettings, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, deskNaverCheck, kidsOverPaid, NAVER_SLOTS, parseDeskLive, type DayReport, type DeskLive } from "../src";
 import sample from "../../../apps/view/src/data/demoDeskLive.json";
 
 /** 통합데스크 체험판(10/5 13:50)에서 만든 글 — 체험판 화면과 같은 것 */
@@ -131,5 +131,55 @@ describe("재방문성공을 누르면 — 오늘 재방문 손님 이름 · 며
     expect(parseDeskLive(JSON.stringify({ ...raw(), revisit: { from: "2026-10-26", today: 0, total: 0, days: {} } }))!.revisit!.who).toBeUndefined();
     const many = Array.from({ length: 150 }, (_, i) => ({ name: `손님${String.fromCharCode(44032 + i)}`, gap: 10 }));
     expect(withWho(many).revisit!.who).toHaveLength(100);
+  });
+});
+
+describe("통합데스크 네이버 숫자 검사 — 포스 15분 수집보다 확실히 적으면 쓰지 않음 (2026-10-31 사장님)", () => {
+  /* 10-31 오후: 통합데스크가 네이버를 다시 불러올 때 시간 칸이 덜 뜬 화면을 읽어 네이버 숫자를 모두 지우고 열쇠 가진 손님만 남겨 보냄
+     → 보고 앱 키즈 실시간에 아침 칸 0 · 완료 35 · 미입장 3 (같은 때 포스 16:45 수집은 이용완료 + 입장예정 120장) */
+  const day = "2026-10-31";
+  const desk = (slots: [number, number][]) =>
+    parseDeskLive(
+      JSON.stringify({
+        ...raw(),
+        day,
+        at: `${day} 16:40:00`,
+        naver: { done: slots.reduce((a, s) => a + s[0], 0), conf: slots.reduce((a, s) => a + s[1], 0), left: 0, test: 0, slots: slots.map(([done, conf], i) => ({ t: NAVER_SLOTS[i], done, conf, left: 0, cap: 10 })), products: [] },
+      }),
+    )!;
+  const pos = (tickets: number[], date = day): DayReport => ({ date, meta: { naver: { by: "자동 수집 (네이버 예약현황, 마감 전 — 이용완료 + 입장예정)", at: "2026-10-31T07:45:24.468Z" } }, naver: { v: 1, date, tickets, newVisitors: tickets.map(() => 0), noNew: true } });
+  // 10-31 16:45 포스 수집 (이용완료 + 입장예정)
+  const real = [5, 8, 7, 4, 1, 3, 9, 10, 11, 10, 10, 10, 8, 7, 2, 3, 7, 2, 3, 0];
+  // 같은 때 통합데스크가 보낸 숫자 — 아침 0 · 열쇠 가진 손님만
+  const broken: [number, number][] = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [2, 0], [0, 0], [9, 0], [10, 0], [6, 0], [6, 0], [2, 0], [0, 3], [0, 0], [0, 0], [0, 0], [0, 0]];
+  const good: [number, number][] = real.map((n, i) => (i < 13 ? [n, 0] : i === 13 ? [6, 1] : [i === 14 ? 2 : 0, i === 14 ? 0 : n]));
+
+  it("10-31 오후 그대로 — 통합데스크 38장 · 포스 120장 → 쓰지 않고 포스 시간 칸 (19:30 까지 20칸)", () => {
+    const c = deskNaverCheck(desk(broken), pos(real));
+    expect(c.ok).toBe(false);
+    expect([c.desk, c.pos, c.at]).toEqual([38, 120, "2026-10-31T07:45:24.468Z"]);
+    expect(c.slots).toHaveLength(20);
+    expect(c.slots[0]).toEqual({ t: "10:00", n: 5 });
+    expect(c.slots[19]).toEqual({ t: "19:30", n: 0 });
+  });
+
+  it("평소 — 같거나 조금 다르면(새 예약 · 취소) 그대로 씀", () => {
+    expect(deskNaverCheck(desk(good), pos(real)).ok).toBe(true);
+    // 통합데스크가 30분마다 다시 읽어 그 사이 새 예약 7장이 아직 없음
+    expect(deskNaverCheck(desk(good), pos(real.map((n, i) => (i === 16 ? n + 7 : n)))).ok).toBe(true);
+    // 통합데스크 쪽이 더 많아도(포스 수집 뒤 새 예약) 그대로
+    expect(deskNaverCheck(desk(good.map(([d, c], i) => [d, i === 18 ? c + 20 : c])), pos(real)).ok).toBe(true);
+  });
+
+  it("손님이 적은 날 — 포스 21장인데 통합데스크 0장이면 쓰지 않음 · 몇 장 차이는 그대로", () => {
+    const small = [2, 1, 1, 1, 0, 1, 1, 2, 3, 2, 2, 0, 2, 1, 2, 0, 0, 0, 0, 0];
+    expect(deskNaverCheck(desk(small.map(() => [0, 0])), pos(small)).ok).toBe(false);
+    expect(deskNaverCheck(desk(small.map((n, i) => [i < 3 ? 0 : n, 0])), pos(small)).ok).toBe(true); // 21 − 17 = 4장
+  });
+
+  it("포스 수집이 없거나 다른 날이면 견줄 수 없어 그대로", () => {
+    expect(deskNaverCheck(desk(broken), undefined)).toMatchObject({ ok: true, pos: null });
+    expect(deskNaverCheck(desk(broken), pos(real, "2026-10-30")).ok).toBe(true);
+    expect(deskNaverCheck(desk(broken), { date: day, meta: {} }).ok).toBe(true);
   });
 });

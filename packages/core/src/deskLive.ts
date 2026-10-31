@@ -6,7 +6,7 @@
      네이버(완료 · 미입장 · 잔여 + 시간 칸) · 오늘 입장(네이버 + 현장) · 입장료 매출(장수 × 단가 + 초과요금) · 열쇠 45칸(번호 · 색, 누르면 손님 이름 · 전화)
    - 손님 이름 · 전화번호가 들어감 — 사장님 지시(열쇠 미반납 때 관리자가 전화). 문서 하나만 덮어써서 지난 기록은 안 쌓임
    ============================================================ */
-import type { DayReport } from "./part";
+import { NAVER_SLOTS, type DayReport } from "./part";
 import { kidsPrice } from "./rules";
 import { parseRevisitOk, type DeskRevisitOk } from "./deskEvent";
 
@@ -180,6 +180,41 @@ export function kidsOverPaid(report: DayReport | null | undefined): { count: num
     amount += net;
   }
   return { count, amount };
+}
+
+/* ---------- 통합데스크 네이버 숫자 검사 (2026-10-31 사장님) ----------
+   통합데스크가 네이버를 다시 불러올 때 시간 칸이 덜 뜬 화면을 읽으면 '오늘 입장권 칸 0개'로 받아들여 네이버 숫자를 모두 지우고
+   손님 목록도 열쇠 가진 손님만 남겨 보냄 → 다음 불러오기(30분 안)까지 아침 칸 0 · 완료 35 처럼 일부만 보였음
+   (10-31 오후: 통합데스크 완료 35 + 미입장 3 = 38장 ↔ 같은 때 포스 16:45 수집 이용완료 + 입장예정 120장)
+   → 포스 15분 수집보다 확실히 적으면(DESK_NAVER_GAP) 통합데스크 네이버 숫자를 쓰지 않고 포스 시간 칸을 보여 줌
+   통합데스크는 30분마다 다시 읽어 그 사이 새 예약 · 취소로 조금 다를 수 있음 — 그 정도는 그대로 */
+/** 포스 수집보다 이만큼 넘게 적으면 덜 읽은 것 — min 장 이상이면서 포스 합의 ratio 이상 */
+export const DESK_NAVER_GAP = { min: 8, ratio: 0.25 } as const;
+export interface DeskNaverCheck {
+  /** false = 통합데스크 네이버 숫자를 쓰지 않음 */
+  ok: boolean;
+  /** 통합데스크 완료 + 미입장 */
+  desk: number;
+  /** 포스 수집 이용완료 + 입장예정 (없으면 null — 견줄 수 없어 그대로) */
+  pos: number | null;
+  /** 포스 수집 시각 ISO */
+  at: string | null;
+  /** 포스 시간 칸 (19:30 뒤 예약은 19:30 칸에) */
+  slots: { t: string; n: number }[];
+}
+export function deskNaverCheck(live: DeskLive, report: DayReport | null | undefined): DeskNaverCheck {
+  const desk = live.naver.done + live.naver.conf;
+  const p = report?.naver;
+  if (!p || p.date !== live.day || !Array.isArray(p.tickets)) return { ok: true, desk, pos: null, at: null, slots: [] };
+  const pos = p.tickets.reduce((a, b) => a + (Number(b) || 0), 0);
+  const gap = pos - desk;
+  return {
+    ok: !(gap >= DESK_NAVER_GAP.min && gap >= pos * DESK_NAVER_GAP.ratio),
+    desk,
+    pos,
+    at: report?.meta?.naver?.at || null,
+    slots: NAVER_SLOTS.map((t, i) => ({ t, n: Number(p.tickets[i]) || 0 })),
+  };
 }
 
 /** 입장료 매출 (그 시각 기준) — 입장권 장수 × 그날 단가(kidsPrice) + 초과요금 결제(POS — kidsOverPaid, 모르면 null · 합계에 안 넣음). 받을 초과요금은 따로 */

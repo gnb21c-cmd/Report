@@ -1722,6 +1722,15 @@ button.quad-box {
 .klive-ntot div {
   text-align: center;
 }
+/* 통합데스크가 네이버를 덜 읽은 순간 (2026-10-31 사장님) — 빨간 안내 · 포스 수집 한 칸 */
+.banner.klive-guard {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+  font-weight: 600;
+}
+.klive-ntot.one {
+  grid-template-columns: 1fr;
+}
 .klive-split span,
 .klive-ntot span {
   font-size: 13.5px;
