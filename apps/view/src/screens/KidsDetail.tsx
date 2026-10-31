@@ -21,12 +21,18 @@ import {
   shortLabel,
   sum,
   yearMonthly,
+  REVISIT_KINDS,
   REVISIT_SHOW,
+  revisitGroup,
+  revisitHasGroups,
+  revisitShare,
   revisitShown,
   revisitStats,
   type Board,
   type DeskRevisit,
   type Metrics,
+  type RevisitKind,
+  type RevisitPeriod,
   type RevisitStats,
   type RevisitTop,
 } from "@report/core";
@@ -81,12 +87,14 @@ function CompareCard({ rows, unit, title = "작년 같은 기간과 비교" }: {
 
 /** 재방문 간격 (2026-10-19 사장님) — 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md · 손님 정보 없음)
     맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 10개를 빨리 온 순(일수 짧은 순)으로 (2026-10-31 사장님 7 → 10)
-    처음에는 많은 순 5개만 보이고 [모두 보기]를 누르면 10위까지 (2026-10-31 사장님) */
+    처음에는 많은 순 5개만 보이고 [모두 보기]를 누르면 10위까지 (2026-10-31 사장님)
+    [전체 · 신규 · 기존] — 통합데스크가 무리를 보내면 (2026-10-31 사장님, 신규 = 4/1 이후 처음 온 유료 손님 · 기존 = 4/1 전부터 오던 손님) */
 function RevisitCard({ board }: { board: Board }) {
   const [r, setR] = useState<DeskRevisit | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
   const [err, setErr] = useState("");
   const [all, setAll] = useState(false);
+  const [kind, setKind] = useState<RevisitKind>("all");
   useEffect(() => {
     let alive = true;
     deskRevisitNow().then(
@@ -107,9 +115,16 @@ function RevisitCard({ board }: { board: Board }) {
   }, []);
   const ev = r?.event;
   // 아래 칸 숫자 — 통합데스크가 읽은 방문 기록 안에서만 · 비율 분모는 보고 앱 네이버 판매수량 (2026-10-23 사장님)
-  const ps = r?.past ? revisitStats(r.past, r.history, board) : null;
-  const es = r && ev && ev.started ? revisitStats(ev, r.history, board) : null;
-  const most = Math.max(r?.past?.top.length ?? 0, ev?.top.length ?? 0);
+  const split = r ? revisitHasGroups(r) : false;
+  const k: RevisitKind = split ? kind : "all";
+  const pg = revisitGroup(r?.past, k);
+  const eg = revisitGroup(ev, k);
+  // 신규 · 기존은 그 무리 재방문 수로 월 평균 · 비율 대신 '전체 재방문 중 몇 %' (분모 네이버 판매수량은 무리로 못 나눔)
+  const statsOf = (p: RevisitPeriod, g: typeof pg) => (g ? revisitStats(k === "all" ? p : { ...p, revisits: g.revisits, people: g.people }, r!.history, board) : null);
+  const ps = r?.past ? statsOf(r.past, pg) : null;
+  const es = r && ev && ev.started ? statsOf(ev, eg) : null;
+  const most = Math.max(pg?.top.length ?? 0, eg?.top.length ?? 0);
+  const noGroup = "통합데스크 새 판부터 보여요";
   return (
     <section className="card revisit" aria-label="재방문 간격">
       <h2>
@@ -122,24 +137,40 @@ function RevisitCard({ board }: { board: Board }) {
       {r && (
         <>
           {/* 위 한 줄 요약(지난 30일) · 맨 아래 설명은 뺌 (2026-10-23 사장님) — 기간은 숫자가 나온 날짜(방문 기록을 읽은 날부터)로 */}
+          {split && (
+            <>
+              <div className="seg revisit-kinds" role="group" aria-label="손님 나누기">
+                {REVISIT_KINDS.map((x) => (
+                  <button key={x.key} className={k === x.key ? "on" : ""} aria-pressed={k === x.key} onClick={() => setKind(x.key)}>
+                    {x.label}
+                  </button>
+                ))}
+              </div>
+              <p className="note revisit-kind-note">
+                {k === "new" ? "신규 = 4/1 이후 처음 온 손님 (처음부터 유료)" : k === "old" ? "기존 = 4/1 전부터 오던 손님 (교환권 무료 → 유료)" : "신규 = 4/1 이후 처음 온 손님 · 기존 = 4/1 전부터 오던 손님"}
+              </p>
+            </>
+          )}
           <div className="revisit-cols">
             <RevisitCol
               title="과거"
               range={ps && ps.days ? `${md(ps.from)} ~ ${md(ps.to)}` : ""}
-              top={r.past?.top || []}
+              top={pg?.top || []}
               all={all}
               stats={ps && ps.days ? ps : null}
-              empty={r.past ? "아직 재방문 없음" : "기간 없음"}
+              share={k === "all" ? undefined : revisitShare(r.past, k)}
+              empty={!r.past ? "기간 없음" : pg ? "아직 재방문 없음" : noGroup}
             />
             <RevisitCol
               title="이벤트"
               cur
               range={ev ? (es && es.days ? `${md(es.from)} ~ ${md(es.to)}` : `${md(ev.from)}부터`) : ""}
               end={ev && ev.end && ev.to < ev.end ? `${md(ev.end)}까지 진행` : ""}
-              top={ev?.top || []}
+              top={eg?.top || []}
               all={all}
               stats={es && es.days ? es : null}
-              empty={!ev ? "이벤트 기간 없음" : ev.started ? "아직 재방문 없음" : `${md(ev.from)}부터 모아요`}
+              share={k === "all" ? undefined : revisitShare(ev, k)}
+              empty={!ev ? "이벤트 기간 없음" : !ev.started ? `${md(ev.from)}부터 모아요` : eg ? "아직 재방문 없음" : noGroup}
             />
           </div>
           {most > REVISIT_SHOW && (
@@ -153,7 +184,8 @@ function RevisitCard({ board }: { board: Board }) {
   );
 }
 
-function RevisitCol({ title, range, end, top, all, stats, empty, cur }: { title: string; range: string; end?: string; top: RevisitTop[]; all: boolean; stats: RevisitStats | null; empty: string; cur?: boolean }) {
+/** share = 신규 · 기존을 볼 때 '전체 재방문 중 몇 %' (전체를 볼 때는 undefined → 재방문자 비율) */
+function RevisitCol({ title, range, end, top, all, stats, share, empty, cur }: { title: string; range: string; end?: string; top: RevisitTop[]; all: boolean; stats: RevisitStats | null; share?: number | null; empty: string; cur?: boolean }) {
   return (
     <div className={`revisit-col${cur ? " cur" : ""}`}>
       <div className="revisit-head">
@@ -184,10 +216,17 @@ function RevisitCol({ title, range, end, top, all, stats, empty, cur }: { title:
             <dt>{stats.perMonth != null ? "월 평균 재방문" : `재방문 (${count(stats.days)}일)`}</dt>
             <dd className="num">{count(stats.perMonth ?? stats.revisits, "번")}</dd>
           </div>
-          <div>
-            <dt>재방문자 비율</dt>
-            <dd className="num">{stats.rate == null ? "—" : `${stats.rate}%`}</dd>
-          </div>
+          {share === undefined ? (
+            <div>
+              <dt>재방문자 비율</dt>
+              <dd className="num">{stats.rate == null ? "—" : `${stats.rate}%`}</dd>
+            </div>
+          ) : (
+            <div>
+              <dt>전체 재방문 중</dt>
+              <dd className="num">{share == null ? "—" : `${share}%`}</dd>
+            </div>
+          )}
         </dl>
       )}
     </div>

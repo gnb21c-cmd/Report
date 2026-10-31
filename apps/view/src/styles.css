@@ -1997,6 +1997,13 @@ button.quad-box {
   gap: 10px;
   margin-top: 10px;
 }
+/* 재방문 간격 [전체 · 신규 · 기존] (2026-10-31 사장님) */
+.revisit-kinds {
+  margin-top: 10px;
+}
+.revisit-kind-note {
+  margin: 6px 0 0;
+}
 /* 처음에는 많은 순 5개 · [모두 보기]면 10위까지 (2026-10-31 사장님) */
 .revisit-more {
   display: block;
