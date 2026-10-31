@@ -1,20 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { addDays, Board, NAVER_SLOTS, parseDeskRevisit, REVISIT_MONTH_MIN_DAYS, revisitByDays, revisitRows, revisitStats, revisitSummary, type DayReport } from "../src";
+import { addDays, Board, NAVER_SLOTS, parseDeskRevisit, REVISIT_MONTH_MIN_DAYS, REVISIT_SHOW, revisitByDays, revisitRows, revisitShown, revisitStats, revisitSummary, type DayReport } from "../src";
 import sample from "../../../apps/view/src/data/demoRevisit.json";
 
 /** 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md) — 체험판 예시 */
 const raw = () => JSON.parse(JSON.stringify(sample));
 
 describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장님)", () => {
-  it("모양이 맞으면 받음 — 지난 30일 요약 · 과거 · 이벤트 많은 순 7개", () => {
+  it("모양이 맞으면 받음 — 지난 30일 요약 · 과거 · 이벤트 많은 순 10개 (2026-10-31 사장님 — 7개에서 늘림)", () => {
     const r = parseDeskRevisit(JSON.stringify(raw()))!;
     expect(r).not.toBeNull();
     expect([r.day, r.sentAt]).toEqual(["2026-11-20", "2026-11-20 20:00"]);
     expect(r.history).toEqual({ from: "2026-04-01", to: "2026-11-20", days: 220 });
     expect(r.recent.mode).toEqual({ days: 7, count: 23 });
     expect([r.recent.avg, r.recent.median, r.recent.revisits]).toEqual([11.3, 8, 96]);
-    expect(r.past!.top).toHaveLength(7);
+    expect(r.past!.top).toHaveLength(10);
+    expect(r.event!.top).toHaveLength(10);
     expect(r.past!.top[0]).toEqual({ rank: 1, days: 7, count: 82 });
+    expect(r.past!.top[9]).toEqual({ rank: 10, days: 28, count: 12 });
     expect(r.event!.top[0]).toEqual({ rank: 1, days: 6, count: 21 });
     expect([r.event!.from, r.event!.end, r.event!.started]).toEqual(["2026-10-26", "2027-02-28", true]);
   });
@@ -27,13 +29,14 @@ describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장�
     expect(parseDeskRevisit(JSON.stringify({ ...raw(), recent: null }))).toBeNull();
   });
 
-  it("이상한 칸은 걸러냄 — 7개까지 · 음수 · 0명 · 소수 일수 · 손님 같은 글 없음", () => {
+  it("이상한 칸은 걸러냄 — 10개까지 · 음수 · 0명 · 소수 일수 · 손님 같은 글 없음", () => {
     const x = raw();
     x.past.top = [...x.past.top, { days: 40, count: 1 }, { days: 50, count: 1 }];
     x.event.top = [{ days: -3, count: 5 }, { days: 2.5, count: 4 }, { days: 9, count: 0 }, { days: 6, count: 21 }, { days: 1, count: "많이" }];
     x.event.name = "010-1234-5678";
     const r = parseDeskRevisit(x)!;
-    expect(r.past!.top).toHaveLength(7);
+    expect(r.past!.top).toHaveLength(10);
+    expect(r.past!.top.map((t) => t.days)).not.toContain(40);
     expect(r.event!.top).toEqual([{ rank: 1, days: 6, count: 21 }]);
     expect(JSON.stringify(r)).not.toContain("010");
   });
@@ -51,13 +54,13 @@ describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장�
     expect(revisitSummary(r.recent)).toBe("가장 많은 7일 (23명) · 평균 11.3일 · 가운데 8일 · 재방문 96명");
     expect(revisitSummary({ ...r.recent, mode: null, avg: null, median: null, revisits: 0 })).toBe("아직 재방문 없음");
     const rows = revisitRows({ ...r, event: { ...r.event!, top: r.event!.top.slice(0, 3) } });
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(10);
     expect(rows[0].left).toEqual({ rank: 1, days: 7, count: 82 });
     expect(rows[2].right).toEqual({ rank: 3, days: 14, count: 12 });
     expect(rows[3].right).toBeNull();
   });
 
-  it("보여 줄 때는 빨리 온 순(일수 짧은 순) — 많은 7개는 그대로 고르고 순서만 (2026-10-21 사장님) · 가장 많은 것(1위) 표시는 남김", () => {
+  it("보여 줄 때는 빨리 온 순(일수 짧은 순) — 많은 10개는 그대로 고르고 순서만 (2026-10-21 사장님) · 가장 많은 것(1위) 표시는 남김", () => {
     const top = [
       { rank: 1, days: 7, count: 18 }, { rank: 2, days: 14, count: 14 }, { rank: 3, days: 6, count: 13 }, { rank: 4, days: 12, count: 12 },
       { rank: 5, days: 1, count: 9 }, { rank: 6, days: 9, count: 9 }, { rank: 7, days: 2, count: 8 },
@@ -67,6 +70,20 @@ describe("재방문 간격 — 통합데스크 일수 모음 (2026-10-19 사장�
     expect(by.find((t) => t.days === 7)!.rank).toBe(1);
     expect(top[0].days).toBe(7); // 받은 목록은 그대로
     expect(revisitByDays([])).toEqual([]);
+  });
+
+  it("처음에는 많은 순 5개만 · [모두 보기]면 10위까지 — 둘 다 빨리 온 순으로 (2026-10-31 사장님)", () => {
+    const r = parseDeskRevisit(raw())!;
+    const top = r.past!.top;
+    expect(REVISIT_SHOW).toBe(5);
+    const few = revisitShown(top, false);
+    expect(few).toHaveLength(5);
+    expect(few.every((t) => t.rank <= 5)).toBe(true);
+    expect(few.map((t) => t.days)).toEqual([1, 6, 7, 14, 21]); // 많은 순 82 · 61 · 44 · 38 · 30 명 → 빨리 온 순
+    expect(revisitShown(top, true)).toEqual(revisitByDays(top));
+    expect(revisitShown(top, true)).toHaveLength(10);
+    // 통합데스크가 5개 이하만 보내면 그대로
+    expect(revisitShown(top.slice(0, 3), false)).toHaveLength(3);
   });
 });
 

@@ -5,7 +5,7 @@
      날마다(이달) · 달마다(올해) · 올해 쌓은 판매수 선 — 작년 전체 = 회색, 올해 마감일까지 = 빨강
      작년 같은 기간 대비 증감 수 · 증감률 (분석 글 · 고치기 칸 없음 — 네이버는 A 에서 넣음)
    현장 판매 수 · 이벤트 무료입장: 1일 ~ 말일 막대 (작년 = 회색, 올해 = 빨강)
-   네이버 판매 수 맨 위 재방문 간격 (2026-10-19 사장님): 통합데스크 일수 모음 — 지난 30일 한 줄 + 과거 · 이벤트 반반 많은 순 7개
+   네이버 판매 수 맨 위 재방문 간격 (2026-10-19 사장님): 통합데스크 일수 모음 — 지난 30일 한 줄 + 과거 · 이벤트 반반 많은 순 10개
    ============================================================ */
 import { useEffect, useState } from "react";
 import {
@@ -21,7 +21,8 @@ import {
   shortLabel,
   sum,
   yearMonthly,
-  revisitByDays,
+  REVISIT_SHOW,
+  revisitShown,
   revisitStats,
   type Board,
   type DeskRevisit,
@@ -79,11 +80,13 @@ function CompareCard({ rows, unit, title = "작년 같은 기간과 비교" }: {
 }
 
 /** 재방문 간격 (2026-10-19 사장님) — 통합데스크가 매일 20:00 보내는 일수 모음 (astanakiz docs/REVISIT.md · 손님 정보 없음)
-    맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 7개를 빨리 온 순(일수 짧은 순)으로 */
+    맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 10개를 빨리 온 순(일수 짧은 순)으로 (2026-10-31 사장님 7 → 10)
+    처음에는 많은 순 5개만 보이고 [모두 보기]를 누르면 10위까지 (2026-10-31 사장님) */
 function RevisitCard({ board }: { board: Board }) {
   const [r, setR] = useState<DeskRevisit | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
   const [err, setErr] = useState("");
+  const [all, setAll] = useState(false);
   useEffect(() => {
     let alive = true;
     deskRevisitNow().then(
@@ -106,6 +109,7 @@ function RevisitCard({ board }: { board: Board }) {
   // 아래 칸 숫자 — 통합데스크가 읽은 방문 기록 안에서만 · 비율 분모는 보고 앱 네이버 판매수량 (2026-10-23 사장님)
   const ps = r?.past ? revisitStats(r.past, r.history, board) : null;
   const es = r && ev && ev.started ? revisitStats(ev, r.history, board) : null;
+  const most = Math.max(r?.past?.top.length ?? 0, ev?.top.length ?? 0);
   return (
     <section className="card revisit" aria-label="재방문 간격">
       <h2>
@@ -123,6 +127,7 @@ function RevisitCard({ board }: { board: Board }) {
               title="과거"
               range={ps && ps.days ? `${md(ps.from)} ~ ${md(ps.to)}` : ""}
               top={r.past?.top || []}
+              all={all}
               stats={ps && ps.days ? ps : null}
               empty={r.past ? "아직 재방문 없음" : "기간 없음"}
             />
@@ -132,17 +137,23 @@ function RevisitCard({ board }: { board: Board }) {
               range={ev ? (es && es.days ? `${md(es.from)} ~ ${md(es.to)}` : `${md(ev.from)}부터`) : ""}
               end={ev && ev.end && ev.to < ev.end ? `${md(ev.end)}까지 진행` : ""}
               top={ev?.top || []}
+              all={all}
               stats={es && es.days ? es : null}
               empty={!ev ? "이벤트 기간 없음" : ev.started ? "아직 재방문 없음" : `${md(ev.from)}부터 모아요`}
             />
           </div>
+          {most > REVISIT_SHOW && (
+            <button className="ghost small revisit-more" onClick={() => setAll(!all)} aria-expanded={all}>
+              {all ? `${REVISIT_SHOW}위까지만 보기` : `모두 보기 (${most}위까지)`}
+            </button>
+          )}
         </>
       )}
     </section>
   );
 }
 
-function RevisitCol({ title, range, end, top, stats, empty, cur }: { title: string; range: string; end?: string; top: RevisitTop[]; stats: RevisitStats | null; empty: string; cur?: boolean }) {
+function RevisitCol({ title, range, end, top, all, stats, empty, cur }: { title: string; range: string; end?: string; top: RevisitTop[]; all: boolean; stats: RevisitStats | null; empty: string; cur?: boolean }) {
   return (
     <div className={`revisit-col${cur ? " cur" : ""}`}>
       <div className="revisit-head">
@@ -151,8 +162,8 @@ function RevisitCol({ title, range, end, top, stats, empty, cur }: { title: stri
       </div>
       {top.length ? (
         <ol>
-          {/* 빨리 온 순(일수 짧은 순) — 가장 많은 것에 '최다' (2026-10-21 사장님) */}
-          {revisitByDays(top).map((t) => (
+          {/* 빨리 온 순(일수 짧은 순) — 가장 많은 것에 '최다' (2026-10-21 사장님) · 접어 두면 많은 순 5개만 */}
+          {revisitShown(top, all).map((t) => (
             <li key={t.days}>
               <b className="num">{t.days}일</b>
               <span className="num">
