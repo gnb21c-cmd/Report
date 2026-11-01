@@ -307,3 +307,35 @@ describe("대관 (어린이집 · 유치원 등) — 키즈입장 매출", async
     expect([s.by.rental, s.by.card, s.total]).toEqual([230000, 1000, 231000]);
   });
 });
+
+describe("마감 보고 현장 판매 금액 = 키즈 포스 실제 결제액 (2026-11-01 사장님)", () => {
+  /* 실시간(키즈 실시간)은 통합데스크 숫자 그대로 — 마감 전이라 조금 틀려도 됨
+     다음 날 아침 확정 보고는 키즈 포스 영수증 기준: 현장 판매 수량 = 포스 현장결제 장수, 금액 = 포스 실제 결제액 (예전: 장수 × 정가)
+     통합데스크 서비스 키 · 이벤트 키를 근무자가 잘못 써도 마감 보고의 현장 판매는 포스대로 */
+  it("10-03 — 숏타임 1장을 0원(무료)으로 줌: 장수 × 정가 165,000 이 아니라 포스 154,000", () => {
+    const date = "2026-10-03"; // 토요일
+    const kids = kidsDay(date, [
+      line({ receipt: "0001", name: "[휴일] 1시간 50분 입장권", qty: 11, gross: 154000, net: 154000 }),
+      line({ receipt: "0002", name: "[휴일] 숏타임 입장료", qty: 1, gross: 11000, discount: 11000, net: 0 }),
+    ]);
+    const m = new Board([{ date, kids }]).day(date);
+    expect(m.walkIn).toBe(12);
+    expect(m.fee.walkIn).toBe(154000);
+  });
+  it("10-28 — 평일에 휴일 입장권 1장: 장수 × 정가 48,000 이 아니라 포스 50,000", () => {
+    const date = "2026-10-28"; // 수요일
+    const kids = kidsDay(date, [
+      line({ receipt: "0001", name: "[평일] 1시간 50분 입장권", qty: 3, gross: 36000, net: 36000 }),
+      line({ receipt: "0002", name: "[휴일] 1시간 50분 입장권", qty: 1, gross: 14000, net: 14000 }),
+    ]);
+    const m = new Board([{ date, kids }]).day(date);
+    expect([m.walkIn, m.fee.walkIn]).toEqual([4, 50000]);
+    expect(m.box.키즈입장료).toBe(m.fee.naver + 50000);
+  });
+  it("할인한 현장 입장권은 할인한 금액 (장수는 그대로 1장)", () => {
+    const date = "2026-10-31";
+    const kids = kidsDay(date, [line({ name: "키즈 [휴일]", qty: 1, gross: 14000, discount: 1000, net: 13000 })]);
+    const m = new Board([{ date, kids }]).day(date);
+    expect([m.walkIn, m.fee.walkIn]).toEqual([1, 13000]);
+  });
+});
