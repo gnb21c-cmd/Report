@@ -209,7 +209,8 @@ export async function bakeryDay(date: string): Promise<{ plan: PlanDoc | null; o
   if (__DEMO__ || !cfg || !board) return null;
   const one = async <T,>(coll: string): Promise<T | null> => {
     try {
-      const res = await fetch(`${base(cfg, board)}/${coll}/${date}?key=${cfg.apiKey}`);
+      // 늘 새로 — 매니저가 지난 날 · 당일 수량을 고치면 보고 앱 과거 생산 · 폐기도 바로 그 수량으로 (2026-11-01 사장님)
+      const res = await fetch(`${base(cfg, board)}/${coll}/${date}?key=${cfg.apiKey}`, { cache: "no-store" });
       if (!res.ok) return null;
       const j = fieldsOf(await res.json()).json;
       return j ? (JSON.parse(j) as T) : null;
