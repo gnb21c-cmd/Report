@@ -322,8 +322,10 @@ export class Board {
     // 4월부터 숏타임은 숏타임 입장료 (네이버 숏타임 = 숏타임 발행 − 숏타임 현장)
     const sp = shortPrice(date);
     const nShort = Math.min(m.naver, Math.max(0, sIssued - sWalk));
-    const wShort = Math.min(m.walkIn, sWalk);
-    m.fee = kidsSales(date) ? { naver: (m.naver - nShort) * price + nShort * sp, walkIn: (m.walkIn - wShort) * price + wShort * sp } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
+    // 현장 판매 금액 = 키즈 POS 실제 결제액 (2026-11-01 사장님 — 마감 보고는 POS 기준, 예전 4월부터는 장수 × 정가였음:
+    //   10-03 숏타임 1장 0원 · 10-28 평일에 휴일 입장권처럼 정가와 다르게 받은 날이 틀렸음). 장수는 POS 현장결제 장수 그대로
+    //   통합데스크 숫자(서비스 키 · 이벤트 키 — 근무자가 잘못 쓸 수 있음)는 실시간 화면에만
+    m.fee = kidsSales(date) ? { naver: (m.naver - nShort) * price + nShort * sp, walkIn: m.walkInPosNet } : { naver: n20 * 20000 + (oldNaver - n20) * OLD_VOUCHER_PRICE, walkIn: m.walkInPosNet };
     // 카페에서 쓴 키즈 교환권 · 사은권은 키즈 매출에서 뺌 (교환권을 더 준 실수면 − 그대로)
     // 통장으로 받은 대관료 (어린이집 · 유치원)
     m.rental += rentalIn(r?.cash);
