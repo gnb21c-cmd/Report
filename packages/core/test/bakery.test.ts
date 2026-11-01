@@ -539,6 +539,32 @@ describe("현장 태블릿 복사본 — 수량 · 상태만", () => {
   });
 });
 
+describe("지난 날 · 당일에도 수량 바꾸기 (2026-11-01 사장님 — 최종 당일 갑자기 줄일 수 있어서)", async () => {
+  const { dayChangeAt, floorLabel, floorFinal } = await import("../src");
+  const at = (iso: string) => ({ qty: 10, by: "매니저", at: iso });
+  it("그날 아침 6시(현장 시작) 뒤에 바꾼 줄이면 바꾼 시각 — 그 전에 확정한 것은 null", () => {
+    expect(dayChangeAt(at("2026-10-12T20:59:00Z"), "2026-10-13")).toBeNull(); // 한국 10-13 05:59
+    expect(dayChangeAt(at("2026-10-12T21:00:00Z"), "2026-10-13")).toBe("06:00");
+    expect(dayChangeAt(at("2026-10-13T05:30:00Z"), "2026-10-13")).toBe("14:30");
+    expect(dayChangeAt(at("2026-10-14T01:00:00Z"), "2026-10-13")).toBe("10/14 10:00"); // 다음 날 고친 지난 날
+    expect(dayChangeAt(at("2026-10-10T06:00:00Z"), "2026-10-13")).toBeNull(); // 사흘 전 최종 확정
+    expect(dayChangeAt(undefined, "2026-10-13")).toBeNull();
+    expect(dayChangeAt(at(""), "2026-10-13")).toBeNull();
+  });
+  it("현장 복사본에 바꾼 시각은 남기고 누가 바꿨는지는 뺌", () => {
+    const order: OrderDoc = { v: 2, date: "2026-10-13", provisional: {}, final: { 소금빵: at("2026-10-13T05:30:00Z") } };
+    const f = floorCopy(null, order);
+    expect(f.order!.final.소금빵).toEqual({ qty: 10, by: "", at: "2026-10-13T05:30:00Z" });
+    expect(JSON.stringify(f)).not.toContain("매니저");
+    expect(dayChangeAt(f.order!.final.소금빵, "2026-10-13")).toBe("14:30");
+  });
+  it("현장 표 칸 이름 — 오늘 생산 · 내일 생산준비 · N일 뒤(오늘을 1일째로) · 지난 날은 '생산' / 오늘 · 내일 · 지난 날은 최종, 그 뒤는 잠정", () => {
+    const today = "2026-11-01";
+    expect(["2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-05"].map((d) => floorLabel(d, today))).toEqual(["생산", "오늘 생산", "내일 생산준비", "3일 뒤", "5일 뒤"]);
+    expect(["2026-10-20", "2026-11-01", "2026-11-02", "2026-11-03"].map((d) => floorFinal(d, today))).toEqual([true, true, true, false]);
+  });
+});
+
 describe("태블릿 키 번호", () => {
   it("숫자 4 ~ 12자리만", () => {
     expect(validFloorKey("910278")).toBe(true);

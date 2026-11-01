@@ -2,8 +2,9 @@
    D  — 베이커리 매니저 작업지시 (…/d/, 매니저 폰)
         [주간 잠정] 목요일 아침 6시에 나온 다음 주 월 ~ 일 계획을 요일별로 잠정 확정 (목 18시 마감)
         [최종 확정] 매일 15시에 나온 3일 뒤 최종안을 18시 전에 확정 (금 → 월 … 목 → 일)
+                    날짜를 골라 지난 날 · 오늘 수량도 보고 고침 — 생산날 아침 6시 뒤에 바꾸면 한 번 더 묻고 그 수량이 그날 생산 기록 (2026-11-01 사장님)
         [명령서] 오늘 생산 · 내일 준비 (카톡 보내기) · [결과] 날짜별 생산 · 판매 · 50% · 폐기 · [1~4주] 전망
-   D-1 — 현장 태블릿 (…/d1/<열쇠>/, 로그인 없음): 아침 6시부터 오늘 생산 + 내일 준비 두 칸
+   D-1 — 현장 태블릿 (…/d1/<열쇠>/, 로그인 없음): 아침 6시부터 오늘 생산 + 내일 준비 두 칸 · 날짜를 넘겨 지난 날 · 앞날도 봄 (읽기만, 2026-11-01)
    매출 금액은 어디에도 보이지 않음 (수량 · 예상 손님 수만). 규칙은 packages/core/src/bakery.ts
    ============================================================ */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -15,10 +16,13 @@ import {
   breadNewName,
   CONFIRM_DEADLINE,
   count,
+  dayChangeAt,
   dayResult,
   validFloorKey,
   displayDays,
   FINAL_LEAD,
+  floorFinal,
+  floorLabel,
   nowKst,
   orderRows,
   orderText,
@@ -156,7 +160,7 @@ function Login({ onDone }: { onDone: () => void }) {
 type Tab = "week" | "final" | "order" | "result" | "outlook" | "tablet";
 /** 큰 화면 둘 — 3일 뒤 최종 확정(매일, 처음 열면 이 화면) · 다음 주 잠정 확정(목요일) */
 const TABS: [Tab, string][] = [
-  ["final", "3일 뒤 최종 확정"],
+  ["final", "최종 확정 · 날짜별"],
   ["week", "다음 주 잠정 확정"],
 ];
 /** 그 밖 (작게) */
@@ -230,7 +234,7 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
         ))}
       </nav>
       {tab === "week" && <WeekView api={api} today={today} who={who} />}
-      {tab === "final" && <Confirm api={api} date={addDays(today, FINAL_LEAD)} kind="final" who={who} />}
+      {tab === "final" && <FinalView api={api} today={today} who={who} />}
       {tab === "order" && <OrderView api={api} />}
       {tab === "result" && <Result api={api} today={today} />}
       {tab === "outlook" && <OutlookView api={api} monday={comingMonday(today)} />}
@@ -240,6 +244,40 @@ function Manager({ api, who, board, onLogout }: { api: Api; who: string; board: 
 }
 
 const dayChip = (d: string) => `${WEEKDAY_KO[weekday(d)]} ${Number(d.slice(8, 10))}`;
+
+/** 최종 확정 — 처음엔 3일 뒤, 날짜를 골라 지난 날 · 오늘 · 내일 수량도 보고 고침 (2026-11-01 사장님 — 최종 당일 갑자기 줄일 수 있어서) */
+function FinalView({ api, today, who }: { api: Api; today: string; who: string }) {
+  const last = addDays(today, FINAL_LEAD);
+  const [date, setDate] = useState(last);
+  const go = (d: string) => setDate(d > last ? last : d);
+  const quick: [string, string][] = [
+    [addDays(today, -1), "어제"],
+    [today, "오늘"],
+    [addDays(today, 1), "내일"],
+    [last, "3일 뒤"],
+  ];
+  return (
+    <main className="content">
+      <div className="week-nav">
+        <button className="ghost small" onClick={() => go(addDays(date, -1))} aria-label="전날">
+          ‹
+        </button>
+        <input type="date" className="day-pick" value={date} max={last} onChange={(e) => e.target.value && go(e.target.value)} aria-label="날짜 고르기" />
+        <button className="ghost small" onClick={() => go(addDays(date, 1))} disabled={date >= last} aria-label="다음 날">
+          ›
+        </button>
+      </div>
+      <div className="chips four">
+        {quick.map(([d, label]) => (
+          <button key={label} className={d === date ? "on" : ""} onClick={() => go(d)}>
+            {label} {Number(d.slice(8, 10))}
+          </button>
+        ))}
+      </div>
+      <Confirm key={date} api={api} date={date} kind="final" who={who} inner />
+    </main>
+  );
+}
 
 /** 주간 잠정 — 다음 주 월 ~ 일, 요일을 골라 빵마다 잠정 확정 */
 function WeekView({ api, today, who }: { api: Api; today: string; who: string }) {
@@ -319,7 +357,7 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
  * 확정 표 — 빵마다 [제품명 · 지시 · 수정 칸 · 확정], 맨 위에 붙는 [일괄 확정]
  * kind = provisional(주간 잠정, 목요일) · final(3일 뒤 최종, 매일)
  */
-function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; kind: Kind; who: string; weekDays?: string[] }) {
+function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: string; kind: Kind; who: string; weekDays?: string[]; inner?: boolean }) {
   const { plan, order, setOrder, err, loaded } = useDay(api, date);
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -330,9 +368,11 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const after = (d: string) => now.date > d || (now.date === d && now.time >= CONFIRM_DEADLINE);
   const late = after(due);
   // 최종 마감(3일 전 18시)이 지난 날의 잠정 확정은 효과가 없어 막음
-  // 생산날 아침 6시부터는 최종도 못 바꿈 — 현장에 지시한 수량이 그날 생산 기록 (보고 앱 B 가 판매와 맞춤)
+  // 생산날 아침 6시 뒤에도 최종은 바꿀 수 있음 — 최종 당일 갑자기 줄일 수 있어서 (2026-11-01 사장님, 예전엔 막았음)
+  //   한 번 더 묻고, 바꾼 수량이 그날 생산 기록 (현장 명령서 · 보고 앱 B 생산 · 폐기에 바로) · 줄마다 '당일 변경 HH:MM'
   const made = kind === "final" && productionStarted(date, now);
-  const locked = (kind === "provisional" && after(addDays(date, -FINAL_LEAD))) || made;
+  const locked = kind === "provisional" && after(addDays(date, -FINAL_LEAD));
+  const madeOk = () => !made || confirm(`${shortLabel(date)}은 이미 생산을 시작한 날입니다.\n바꾼 수량이 그날 생산 기록이 되어 현장 명령서와 보고 앱 생산 · 폐기에 바로 반영됩니다.\n바꿀까요?`);
   const done = order?.[kind] || {};
   const prov = order?.provisional || {};
   // 사장님 표 순서 (2026-10-22, core BREAD_ORDER)
@@ -346,6 +386,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
     return done[name]?.qty ?? q;
   };
   const save = async (lines: Record<string, number>, label: string) => {
+    if (!madeOk()) return;
     setBusy(label);
     setMsg("");
     try {
@@ -405,7 +446,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
   const needInput = rows.filter((r) => r.manual && !done[r.name] && !filled(r.name)).length;
   const total = rows.reduce((a, r) => a + valueOf(r.name, r.qty), 0);
   return (
-    <section className={kind === "final" ? "content" : ""} style={kind === "final" ? undefined : { display: "grid", gap: 10 }}>
+    <section className={kind === "final" && !inner ? "content" : ""} style={kind === "final" && !inner ? undefined : { display: "grid", gap: 10 }}>
       <section className="sticky">
         <div className="sticky-head">
           <b>
@@ -413,7 +454,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
           </b>
           <span className={late ? "warn" : "muted"}>
             {made
-              ? "생산한 날 — 수량을 바꿀 수 없음 (그날 생산 기록)"
+              ? "생산한 날 — 바꾸면 그날 생산 기록이 바뀜 (현장 명령서 · 보고 앱)"
               : locked
               ? "최종 확정 단계로 넘어간 날 — 최종 확정 탭에서"
               : late
@@ -475,6 +516,7 @@ function Confirm({ api, date, kind, who, weekDays }: { api: Api; date: string; k
                 <span className="name">
                   <BreadName name={r.name} date={date} />
                   {r.manual && <small className="manual-tag"> 새 빵 — 매니저 기입</small>}
+                  {kind === "final" && dayChangeAt(c, date) && <small className="day-change"> 당일 변경 {dayChangeAt(c, date)}</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
                   {r.lo != null && (
                     <small className="muted">
@@ -625,16 +667,12 @@ function OrderList({ rows, date, big }: { rows: OrderRow[]; date: string; big: b
   );
 }
 
-/* ---------- D-1 현장 태블릿 — 아침 6시부터: 제품명 · 오늘 생산 · 내일 생산준비 · 3 ~ 5일 뒤(잠정) 한 표 ---------- */
-/** 태블릿 칸 — 오늘 · 내일은 최종, 3 ~ 5일 뒤는 잠정 (최종 확정 아님) */
-const FLOOR_COLS: { off: number; label: string; final: boolean }[] = [
-  { off: 0, label: "오늘 생산", final: true },
-  { off: 1, label: "내일 생산준비", final: true },
-  // 오늘을 1일째로 셈 — 3일 뒤 = 모레
-  { off: 2, label: "3일 뒤", final: false },
-  { off: 3, label: "4일 뒤", final: false },
-  { off: 4, label: "5일 뒤", final: false },
-];
+/* ---------- D-1 현장 태블릿 — 아침 6시부터: 제품명 · 오늘 생산 · 내일 생산준비 · 3 ~ 5일 뒤(잠정) 한 표 ----------
+   날짜를 넘겨 지난 날 · 앞날 수량도 봄 (읽기만 — 고치는 것은 매니저 앱, 2026-11-01 사장님) · 생산날 아침 6시 뒤 바뀐 수량에 '변경' */
+/** 태블릿 칸 — 고른 날부터 5일 (칸 이름 · 최종 여부는 오늘 기준: floorLabel · floorFinal) */
+const FLOOR_COLS = [0, 1, 2, 3, 4];
+/** 앞으로는 3일 뒤(최종안이 나온 날)까지 넘김 */
+const FLOOR_AHEAD = FINAL_LEAD;
 
 function Floor({ api, onBack }: { api: Api; onBack?: () => void }) {
   const [tick, setTick] = useState(0);
@@ -649,6 +687,9 @@ function Floor({ api, onBack }: { api: Api; onBack?: () => void }) {
     };
   }, []);
   const [d0] = displayDays(now);
+  // 날짜 넘기기 — 오늘에서 며칠 (지난 날은 −)
+  const [shift, setShift] = useState(0);
+  const base = addDays(d0, shift);
   // 위쪽 고정(엑셀 틀 고정처럼) — 제목 높이 · 잠정 안내 줄 높이를 재서 칸 이름 줄이 그 밑에 붙게 (글자가 줄바꿈되면 높이가 바뀌어 다시 잼)
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -674,37 +715,64 @@ function Floor({ api, onBack }: { api: Api; onBack?: () => void }) {
             ‹ 뒤로
           </button>
         )}
-        <h1>🥐 생산 명령서 · {shortLabel(d0)}</h1>
+        <h1>🥐 생산 명령서 · {shortLabel(base)}</h1>
         <span className="sub">5분마다 새로 고침 · 아침 6시에 날이 바뀜</span>
       </header>
-      <FloorTable key={`${d0}-${tick}`} api={api} today={d0} />
+      <div className="floor-nav">
+        <button className="ghost" onClick={() => setShift(shift - 1)} aria-label="전날">
+          ‹ 전날
+        </button>
+        {shift !== 0 ? (
+          <button className="primary" onClick={() => setShift(0)}>
+            오늘로
+          </button>
+        ) : (
+          <b>오늘</b>
+        )}
+        <button className="ghost" onClick={() => setShift(shift + 1)} disabled={shift >= FLOOR_AHEAD} aria-label="다음 날">
+          다음 날 ›
+        </button>
+      </div>
+      {shift !== 0 && <p className="floor-other">{shift < 0 ? `지난 날 (${shortLabel(base)}) 수량을 보는 중입니다` : `${shortLabel(base)} 부터 보는 중입니다`} — 오늘 생산은 [오늘로]</p>}
+      <FloorTable key={`${base}-${tick}`} api={api} start={base} today={d0} />
     </div>
   );
 }
 
-function FloorTable({ api, today }: { api: Api; today: string }) {
-  const dates = FLOOR_COLS.map((c) => addDays(today, c.off));
+/** start = 첫 칸 날짜(고른 날) · today = 오늘 (칸 이름 · 최종 여부 기준) */
+function FloorTable({ api, start, today }: { api: Api; start: string; today: string }) {
+  const dates = FLOOR_COLS.map((off) => addDays(start, off));
+  const fin = dates.map((d) => floorFinal(d, today));
   const [cols, setCols] = useState<Map<string, number>[] | null>(null);
+  // 생산날 아침 6시 뒤 바뀐 빵 (날짜마다 새 이름)
+  const [chg, setChg] = useState<Set<string>[]>([]);
   const [err, setErr] = useState("");
   useEffect(() => {
     let live = true;
     const now = nowKst();
-    Promise.all(dates.map(async (d) => orderRows(await api.plan(d), await api.order(d), now)))
+    Promise.all(dates.map(async (d) => ({ d, plan: await api.plan(d), order: await api.order(d) })))
       .then((all) => {
         if (!live) return;
-        // 오늘 · 내일 = 만들 수량, 3 ~ 5일 뒤 = 지금까지 정해진 수량(없으면 주간 계획 수량)
+        // 오늘 · 내일 · 지난 날 = 만들(만든) 수량, 3 ~ 5일 뒤 = 지금까지 정해진 수량(없으면 주간 계획 수량)
         // 이름이 바뀐 빵은 새 이름 한 줄로 (11-01 인절미팥빵 · 11-02 저당팥빵이 두 줄로 나뉘지 않게 — 2026-10-25)
-        setCols(all.map((rows, i) => new Map(rows.map((r) => [breadNewName(r.name), (FLOOR_COLS[i].final ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
+        setCols(all.map(({ plan, order }, i) => new Map(orderRows(plan, order, now).map((r) => [breadNewName(r.name), (fin[i] ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
+        setChg(all.map(({ d, order }) => new Set(Object.entries(order?.final || {}).filter(([, l]) => dayChangeAt(l, d)).map(([n]) => breadNewName(n)))));
       })
       .catch((e) => live && setErr((e as Error).message));
     return () => {
       live = false;
     };
-  }, [api, today]);
+  }, [api, start, today]);
   if (err) return <p className="error box floor-msg">{err}</p>;
   if (!cols) return <p className="muted center">불러오는 중…</p>;
   const names = sortBread([...new Set(cols.flatMap((m) => [...m.keys()]))], (n) => n);
   if (!names.length) return <p className="empty box floor-msg">작업지시가 없는 날입니다.</p>;
+  const cell = (i: number, n: string) => (
+    <>
+      {cols[i].get(n) ?? "—"}
+      {chg[i]?.has(n) && <small className="chg">변경</small>}
+    </>
+  );
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} (${WEEKDAY_KO[weekday(d)]})`;
   const sum = (i: number) => names.reduce((a, n) => a + (cols[i].get(n) ?? 0), 0);
   return (
@@ -713,19 +781,19 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
         <thead>
           <tr className="note-row">
             <th colSpan={FLOOR_COLS.length + 1} className="tentative-note">
-              3일 뒤 이후의 생산수량은 소폭 변경 될 수 있습니다.
+              3일 뒤 이후의 생산수량은 소폭 변경 될 수 있습니다.{chg.some((x) => x.size) ? " · '변경' = 그날 아침 6시 뒤에 바뀐 수량" : ""}
             </th>
           </tr>
           <tr>
             <th className="hl hl-top hl-left">제품명</th>
             <th className="num hl hl-top hl-right">
-              오늘 생산
+              {floorLabel(dates[0], today)}
               <small>{md(dates[0])}</small>
             </th>
-            {FLOOR_COLS.slice(1).map((c, i) => (
-              <th key={c.off} className={`num${c.final ? "" : " tentative"}`}>
-                {c.label}
-                <small>{md(dates[i + 1])}</small>
+            {dates.slice(1).map((d, i) => (
+              <th key={d} className={`num${fin[i + 1] ? "" : " tentative"}`}>
+                {floorLabel(d, today)}
+                <small>{md(d)}</small>
               </th>
             ))}
           </tr>
@@ -736,10 +804,10 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
               <td className={`hl hl-left${r === names.length - 1 ? " hl-bottom" : ""}`}>
                 <BreadName name={breadNameOn(n, dates[0])} date={dates[0]} />
               </td>
-              <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cols[0].get(n) ?? "—"}</td>
-              {FLOOR_COLS.slice(1).map((c, i) => (
-                <td key={c.off} className={`num${c.final ? "" : " tentative"}`}>
-                  {cols[i + 1].get(n) ?? "—"}
+              <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cell(0, n)}</td>
+              {dates.slice(1).map((d, i) => (
+                <td key={d} className={`num${fin[i + 1] ? "" : " tentative"}`}>
+                  {cell(i + 1, n)}
                 </td>
               ))}
             </tr>
@@ -748,8 +816,8 @@ function FloorTable({ api, today }: { api: Api; today: string }) {
         <tfoot>
           <tr>
             <td>합계</td>
-            {FLOOR_COLS.map((c, i) => (
-              <td key={c.off} className={`num${c.final ? "" : " tentative"}`}>
+            {dates.map((d, i) => (
+              <td key={d} className={`num${fin[i] ? "" : " tentative"}`}>
                 {sum(i)}
               </td>
             ))}

@@ -9,7 +9,7 @@
           금 → 월 · 토 → 화 · 일 → 수 · 월 → 목 · 화 → 금 · 수 → 토 · 목 → 일 (목요일은 다음 주 주간 계획도 함께)
    마감이 지나도 확정이 없으면: 잠정 = 주간 계획 수량, 최종 = 최종 계산 수량을 그대로 '자동'
    [현장] 아침 6시부터 그날 — 오늘 생산(최종) + 내일 준비(최종, 하루 전에 미리 준비) 두 날을 함께 보여 줌
-   생산 = 최종 수량, 폐기 = 생산 − 판매(정가 + 50% 할인). 그날 아침 6시부터는 최종 수량을 못 바꿈 (productionStarted)
+   생산 = 최종 수량, 폐기 = 생산 − 판매(정가 + 50% 할인). 그날 아침 6시(productionStarted) 뒤에도 매니저가 바꿀 수 있음 — 최종 당일 갑자기 줄일 수 있어서 (2026-11-01 사장님, 바꾼 수량이 그날 생산 기록 · dayChangeAt)
    보고 앱(B)은 마감일의 plans · orders 를 그날 생산 기록으로 읽어 영수증 판매와 맞춤 (dayResult · breadTotals)
    ============================================================ */
 import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, renameLast, renameSum } from "./breadNames";
@@ -570,7 +570,8 @@ export const validFloorKey = (k: string) => /^[0-9]{4,12}$/.test(k);
 export function floorCopy(plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): { plan: PlanDoc | null; order: OrderDoc | null } {
   const lite = (st?: PlanStep): PlanStep | undefined =>
     st && { madeOn: st.madeOn, asOf: st.asOf, kind: st.kind, visitors: 0, weather: "", total: st.total, items: st.items.map((i) => ({ name: i.name, qty: i.qty })) };
-  const lines = (m: Record<string, OrderLine>) => Object.fromEntries(Object.entries(m).map(([k, l]) => [k, { qty: l.qty, by: "", at: "" }]));
+  // 누가 확정했는지는 빼고 바꾼 시각만 (현장 표 '변경' 표시 — 2026-11-01)
+  const lines = (m: Record<string, OrderLine>) => Object.fromEntries(Object.entries(m).map(([k, l]) => [k, { qty: l.qty, by: "", at: l.at || "" }]));
   return {
     plan: plan ? { v: 2, date: plan.date, ...(plan.week ? { week: lite(plan.week) } : {}), ...(plan.final ? { final: lite(plan.final) } : {}) } : null,
     order: order ? { v: 2, date: order.date, provisional: lines(order.provisional), final: lines(order.final) } : null,
@@ -763,9 +764,31 @@ export function bakeryProducts(board: Board, date: string, plan: PlanDoc | null 
   );
 }
 
-/** 그날 생산이 시작됐는지 (아침 6시 = 현장 태블릿 하루 시작) — 그 뒤로는 그날 최종 수량을 못 바꿈 (현장에 지시한 수량 = 그날 생산 기록) */
+/** 그날 생산이 시작됐는지 (아침 6시 = 현장 태블릿 하루 시작) — 그 뒤에 바꾸면 매니저 앱이 한 번 더 묻고, 바꾼 수량이 그날 생산 기록 (2026-11-01 사장님: 예전엔 못 바꿨음) */
 export function productionStarted(date: string, now: Now): boolean {
   return now.date > date || (now.date === date && now.time >= DAY_START);
+}
+
+/** 생산이 시작된 뒤(그날 아침 6시 뒤) 바꾼 확정 줄이면 바꾼 시각 — 그날이면 "HH:MM", 그 뒤 날이면 "M/D HH:MM" · 아니면 null (2026-11-01) */
+export function dayChangeAt(line: OrderLine | undefined, date: string): string | null {
+  const t = line?.at ? Date.parse(line.at) : NaN;
+  if (!Number.isFinite(t)) return null;
+  const k = new Date(t + 9 * 3600e3).toISOString();
+  const d = k.slice(0, 10), hm = k.slice(11, 16);
+  if (!productionStarted(date, { date: d, time: hm })) return null;
+  return d === date ? hm : `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} ${hm}`;
+}
+
+/** 현장 표 칸 이름 — 오늘 생산 · 내일 생산준비 · N일 뒤(오늘을 1일째로 — 모레 = 3일 뒤) · 지난 날 '생산' (날짜를 넘겨 볼 때, 2026-11-01) */
+export function floorLabel(date: string, today: string): string {
+  if (date === today) return "오늘 생산";
+  if (date === addDays(today, 1)) return "내일 생산준비";
+  if (date < today) return "생산";
+  return `${Math.round((Date.parse(date) - Date.parse(today)) / 864e5) + 1}일 뒤`;
+}
+/** 현장 표에서 최종 수량인 칸 — 오늘 · 내일 · 지난 날 (그 뒤는 잠정, 소폭 바뀔 수 있음) */
+export function floorFinal(date: string, today: string): boolean {
+  return date <= addDays(today, 1);
 }
 
 /* ---------- 같은 요일 결과로 ±1 (2026-10-12 사장님 규칙) ----------
