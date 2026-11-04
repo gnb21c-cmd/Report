@@ -592,6 +592,13 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                 · 하루 목표 {step.target}개 맞춤 (추세 그대로면 {step.trendTotal}개) · 할인 · 폐기 많던 빵은 조금 줄임
               </b>
             )}
+            {/* 두 가지 계획 중 이번 주에 쓴 쪽 — 지난 7일 견주기 결과 (2026-11-05 사장님) */}
+            {step.mode && (
+              <b className="rain-up" title={step.mode.why}>
+                {" "}
+                · 이번 주 평일 {step.mode.평일} · 휴일 {step.mode.휴일} 계획{step.mode.drop?.length ? ` · 조정 뺀 빵 ${step.mode.drop.join(", ")}` : ""}
+              </b>
+            )}
           </div>
         )}
         {step?.trust && (

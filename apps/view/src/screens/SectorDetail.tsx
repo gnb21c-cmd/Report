@@ -39,8 +39,14 @@ import {
   type Metrics,
   type WeatherMap,
   lastBreadSale,
+  addDays,
+  breadNewName,
+  compareDay,
+  weekday,
+  type DayCompare,
 } from "@report/core";
 import { useBakeryDoc, type BakeryDoc } from "../data/bakery";
+import { bakeryDay } from "../data/firebase";
 import { BarChart } from "../charts/BarChart";
 import { ChartCard, Legend } from "../charts/common";
 import { LineChart, type Line } from "../charts/LineChart";
@@ -157,6 +163,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
           </>
         )}
 
+        {box === "베이커리" && <PlanCompareCard board={board} date={date} doc={bread} />}
         {box === "베이커리" && <BreadTable board={board} date={date} doc={bread} />}
         {box === "베이커리" && <BakeryList board={board} date={date} doc={bread} />}
       </main>
@@ -569,6 +576,138 @@ function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; r
         </button>
       </div>
     </div>
+  );
+}
+
+/** 두 가지 생산계획 견주기 (2026-11-05 사장님, 11-09 계획부터 · 마감 뒤) — 가 추세 계획 · 나 조정 계획을 그날 판매 실적과
+    어긋남 = |계획 − 생산실패 − 수요| (남음 · 모자람), 그 주 월요일부터 그날까지 누계도 · 목요일 주간안이 지난 7일 결과로 다음 주에 쓸 쪽을 정함 */
+function PlanCompareCard({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
+  const open = !!useLive()?.today;
+  const day = useMemo(() => (doc ? compareDay(board, date, doc.plan, doc.order) : null), [board, date, doc]);
+  const [week, setWeek] = useState<DayCompare[]>([]);
+  const [sheet, setSheet] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setWeek([]);
+    const mon = addDays(date, -((weekday(date) + 6) % 7));
+    const days: string[] = [];
+    for (let d = mon; d < date; d = addDays(d, 1)) days.push(d);
+    void Promise.all(days.map(async (d) => {
+      const x = await bakeryDay(d);
+      return x ? compareDay(board, d, x.plan, x.order) : null;
+    })).then((xs) => live && setWeek(xs.filter((x): x is DayCompare => !!x)));
+    return () => {
+      live = false;
+    };
+  }, [board, date]);
+  if (open || !day) return null;
+  const sum = (f: (r: DayCompare["rows"][number]) => number) => day.rows.reduce((a, r) => a + f(r), 0);
+  const made = day.rows.reduce((a, r) => a + (r.made ?? 0), 0);
+  const early = day.rows.filter((r) => r.soldOutAt).length;
+  const winner = (t: number, u: number) => (Math.abs(t - u) <= 0.03 * Math.max(t, u, 1) ? "비슷함 (조정 유지)" : t < u ? `가 추세 계획이 더 맞음 (어긋남 ${u - t}개 적음)` : `나 조정 계획이 더 맞음 (어긋남 ${t - u}개 적음)`);
+  const all = [...week, day];
+  const wT = all.reduce((a, d) => a + d.errTrend, 0);
+  const wU = all.reduce((a, d) => a + d.errTuned, 0);
+  return (
+    <section className="card">
+      <h2>
+        두 가지 생산계획 견주기 <small className="muted">가 추세 · 나 조정 · 개수</small>
+      </h2>
+      <table className="bread-tbl">
+        <thead>
+          <tr>
+            <th />
+            <th className="num">가 추세</th>
+            <th className="num">나 조정</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>계획</td>
+            <td className="num">{day.trend}</td>
+            <td className="num">{day.tuned}</td>
+          </tr>
+          <tr>
+            <td>남음 (계획 − 수요)</td>
+            <td className="num">{sum((r) => r.overTrend)}</td>
+            <td className="num">{sum((r) => r.overTuned)}</td>
+          </tr>
+          <tr>
+            <td>모자람 (못 판 수요)</td>
+            <td className="num">{sum((r) => r.shortTrend)}</td>
+            <td className="num">{sum((r) => r.shortTuned)}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>어긋남 합</td>
+            <td className="num">{day.errTrend}</td>
+            <td className="num">{day.errTuned}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p className="note strong">이날: {winner(day.errTrend, day.errTuned)}</p>
+      {all.length > 1 && (
+        <p className="note strong">
+          이번 주 누계 ({all.length}일): 가 {wT} · 나 {wU} — {winner(wT, wU)}
+        </p>
+      )}
+      <p className="note muted">
+        실제 생산 {made}개 · 판매 {day.sold}개 · 어림 수요 {day.demand}개{early ? ` (저녁 8시 40분 전에 다 팔린 빵 ${early}가지는 그 시각까지 팔린 몫을 평소 시간대 비율로 늘림)` : ""} · 어긋남 = |계획 − 생산실패 − 수요| · 목요일 주간안이 지난 7일 결과로 다음 주 평일 · 휴일에 쓸 계획을 정함 (조정이 틀렸으면 추세 수량으로 되돌림)
+      </p>
+      <button className="ghost wide" onClick={() => setSheet(true)}>
+        빵별 보기 ›
+      </button>
+      {sheet && (
+        <div className="sheet-bg" onClick={() => setSheet(false)}>
+          <div className="sheet list-sheet" role="dialog" aria-label="빵별 두 계획 견주기" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-head">
+              <b>빵별 두 계획 견주기</b>
+              <span className="muted">{shortLabel(date)}</span>
+            </div>
+            <div className="sheet-scroll">
+              <table className="bread-tbl">
+                <thead>
+                  <tr>
+                    <th>상품</th>
+                    <th className="num">가 추세</th>
+                    <th className="num">나 조정</th>
+                    <th className="num">생산</th>
+                    <th className="num">판매</th>
+                    <th className="num">수요</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...day.rows]
+                    .sort((a, b) => Math.abs(b.overTuned + b.shortTuned - b.overTrend - b.shortTrend) - Math.abs(a.overTuned + a.shortTuned - a.overTrend - a.shortTrend) || a.name.localeCompare(b.name, "ko"))
+                    .map((r) => {
+                      const eT = r.overTrend + r.shortTrend;
+                      const eU = r.overTuned + r.shortTuned;
+                      return (
+                        <tr key={r.name}>
+                          <td>
+                            {breadLabel(breadNewName(r.name), date)}
+                            {r.soldOutAt && <small className="muted"> {r.soldOutAt} 다 팔림</small>}
+                          </td>
+                          <td className={`num${eT < eU ? " strong" : ""}`}>{r.trend}</td>
+                          <td className={`num${eU < eT ? " strong" : ""}`}>{r.tuned}</td>
+                          <td className="num">{r.made ?? "—"}{r.fail ? <small className="muted"> −{r.fail}</small> : null}</td>
+                          <td className="num">{r.sold}</td>
+                          <td className="num">{r.demand}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+              <p className="note muted">굵은 수 = 그 빵에서 수요에 더 가까웠던 계획 · 생산 옆 −n = 생산실패 · 어긋남 차이가 큰 빵부터</p>
+            </div>
+            <button className="ghost wide" onClick={() => setSheet(false)}>
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

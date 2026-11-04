@@ -20,7 +20,10 @@ function demoDoc(board: Board, date: string): BakeryDoc | null {
   if (!items.length) return null;
   const total = items.reduce((a, i) => a + i.qty, 0);
   const fail = { [items[0].name]: { qty: 1, by: "체험", at: `${date}T03:00:00Z` } };
-  return { plan: { v: 2, date, final: { madeOn: date, asOf: date, kind: "평일", visitors: 0, weather: "", total, items } as any }, order: { v: 2, date, provisional: {}, final: {}, fail } };
+  // 체험판 두 계획 견주기 — 가 추세는 빵마다 조금 적게(판매 − 1 ~ + 1), 나 조정 = 지시 수량
+  const weekItems = items.map((it, i) => ({ ...it, tuned: it.qty, trend: Math.max(1, it.qty - 1 - (i % 3)) }));
+  const week = { madeOn: date, asOf: date, kind: "평일", visitors: 0, weather: "", total, items: weekItems, target: total, trendTotal: weekItems.reduce((a, i) => a + i.trend, 0) };
+  return { plan: { v: 2, date, week, final: { madeOn: date, asOf: date, kind: "평일", visitors: 0, weather: "", total, items } } as any, order: { v: 2, date, provisional: {}, final: {}, fail } };
 }
 
 /** 그날 작업지시 문서 — undefined = 받는 중, null = 없음 */

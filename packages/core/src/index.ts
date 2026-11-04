@@ -21,6 +21,7 @@ export * from "./forecast";
 export * from "./breadNames";
 export * from "./breadTrend";
 export * from "./bakery";
+export * from "./planCompare";
 export * from "./live";
 export * from "./liveLog";
 export * from "./survey";

@@ -115,6 +115,9 @@ export interface PlanItem {
   slow?: boolean;
   /** 새 빵 — 지난 4주 같은 요일 판매 평균으로 채운 수량 (매니저가 고칠 수 있음, 11-09 계획부터) */
   est?: boolean;
+  /** 두 가지 계획 (planCompare.ts, 2026-11-05 사장님) — 가 추세 계획 · 나 조정 계획 수량 (qty 는 그 주에 쓰는 쪽) */
+  trend?: number;
+  tuned?: number;
 }
 
 /** 한 번 센 계획 (주간 또는 최종) */
@@ -139,6 +142,8 @@ export interface PlanStep {
   /** 하루 목표 (11-09 계획부터 — 월 270 ~ 금 320 · 토 800 · 일 750, 새 빵 어림 포함 · 더하기 빵 제외) · 추세 그대로였다면 */
   target?: number;
   trendTotal?: number;
+  /** 평일 · 휴일 따로 이번 주에 쓴 계획 (조정 · 추세)과 그 까닭 (지난 7일 두 계획 견주기 — planCompare.ts) */
+  mode?: PlanModeNote;
   /** 예측 신뢰도 (11-09 계획부터 — 지난 4주가 고른지 · 최종안 때 그날 예보 기온 급변) · 매니저가 보고 조정 */
   trust?: Trust;
 }
@@ -453,6 +458,17 @@ const stepsByNew = (steps: Record<string, number>) => {
 
 /** 11-09 계획(11-05 목 발표)부터 — 같은 요일 추세(breadTrend.ts) → 만드는 단위 → 평일 300 ~ 320 (새 빵은 0 개 · 매니저 기입, 범위 밖)
  *  생산 늘림 · 같은 요일 칸 · 날씨 배수 없음. 예상 손님 · 날씨 칸은 보여 주기만 */
+/** 이번 주에 쓴 계획 (조정 · 추세) — 평일 · 휴일 따로, 빵별 조정은 빵마다 (지난 견주기 결과 · planCompare.ts verdictOf) */
+export interface PlanModeNote {
+  평일: "조정" | "추세";
+  휴일: "조정" | "추세";
+  /** 빵별 조정을 이번 주에 뺀 빵 (그 빵은 추세가 더 맞았음) */
+  drop?: string[];
+  /** 판정 까닭 — 어긋남 합 (가 추세 · 나 조정) · 견준 날 수 */
+  why?: string;
+}
+export const DEFAULT_MODE: PlanModeNote = { 평일: "조정", 휴일: "조정" };
+
 /* ---------- 하루 목표 (2026-11-05 사장님) — 11-09 계획부터 ----------
    11월이 빨리 추워짐 → 평일은 월 270 → 금 320 으로 차례로 · 토 800 · 일 750 (일요일이 토요일보다 조금 덜 팔림, 평일에 낀 공휴일은 일요일처럼)
    하루 합계(새 빵 어림 포함)를 목표에 맞추되 빵마다 추세를 감안:
@@ -509,7 +525,7 @@ function newBreadEstimate(board: Board, date: string, asOf: string, name: string
   return kind == null ? 0 : Math.round(kind * ratio);
 }
 
-function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, slow: ReadonlySet<string> = new Set()): PlanStep {
+function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, slow: ReadonlySet<string> = new Set(), mode: PlanModeNote = DEFAULT_MODE): PlanStep {
   const v = forecastVisitors(board, weather, asOf, date, learned);
   const t = trendDay(board, asOf, madeOn, date);
   const target = dayTarget(date);
@@ -556,11 +572,23 @@ function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: 
   const have = new Set(items.map((i) => breadKey(breadNewName(i.name))));
   for (const n of POS_NEW_BREADS) if (!have.has(breadKey(n))) items.push({ name: n, qty: 0, manual: true });
   const trendTotal = Math.round(t.items.reduce((a, i) => a + i.raw, 0) + estSum);
-  return { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(target != null ? { target, trendTotal } : {}), trust: trendTrust(t) };
+  // 두 가지 계획을 모두 남기고(가 추세 · 나 조정) 이번 주에 쓸 쪽을 qty 로 — 평일 · 휴일 따로, 빵별 조정은 빵마다 (2026-11-05 사장님)
+  if (target != null) {
+    const rawOf = new Map(t.items.map((i) => [i.name, i.raw]));
+    const use = hol ? mode.휴일 : mode.평일;
+    const drop = new Set((mode.drop || []).map((n) => breadNewName(n)));
+    for (const it of items) {
+      const trend = it.manual ? 0 : it.est ? it.base ?? 0 : snapUnit(it.name, rawOf.get(it.name) ?? it.qty, undefined, undefined, date);
+      it.tuned = it.qty;
+      it.trend = trend;
+      if (use === "추세" || drop.has(breadNewName(it.name))) it.qty = trend;
+    }
+  }
+  return { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(target != null ? { target, trendTotal, mode } : {}), trust: trendTrust(t) };
 }
 
-function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>, slow?: ReadonlySet<string>): PlanStep {
-  if (date >= TREND_FROM) return trendStep(board, weather, learned, madeOn, asOf, date, slow);
+function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>, slow?: ReadonlySet<string>, mode?: PlanModeNote): PlanStep {
+  if (date >= TREND_FROM) return trendStep(board, weather, learned, madeOn, asOf, date, slow, mode);
   const p = breadPlan(board, weather, asOf, date, learned);
   const boost = breadBoostOf(date);
   const band = breadBandOf(date);
@@ -605,11 +633,11 @@ export function trendOutlook(board: Board, asOf: string, today: string, start: s
 }
 
 /** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 (11-09 계획부터는 안 씀) */
-export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}, slow?: ReadonlySet<string>): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
+export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}, slow?: ReadonlySet<string>, mode?: PlanModeNote): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
   const dates = weekDates(thursday);
   return dates.map((date, i) => ({
     date,
-    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}, slow),
+    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}, slow, mode),
     ...(i === 0 ? { outlook: date >= TREND_FROM ? trendOutlook(board, asOf, thursday, date) : boostOutlook(weeklyOutlook(board, asOf, date, learned)) } : {}),
   }));
 }
