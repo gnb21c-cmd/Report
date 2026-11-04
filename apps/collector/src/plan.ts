@@ -19,7 +19,7 @@
      매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (core roundUnitOrder)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, dayRange, FINAL_LEAD, TREND_FROM, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, dayRange, FINAL_LEAD, slowBreads, SLOW_DAYS, TREND_FROM, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writeOrders, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -135,7 +135,10 @@ async function main() {
   const weekOnly = env("PLAN_MODE") === "week";
   if (weekday(today) === WEEK_PLAN_WEEKDAY) {
     const monday = addDays(today, 4);
-    const already = (await load(monday)).week?.madeOn === today;
+    // PLAN_REWEEK — 규칙이 바뀌어 오늘 센 주간안을 다시 셈 (손 실행 '주간 잠정안 다시', 2026-11-05 하루 목표 · 줄이는 빵)
+    //   매니저 잠정 확정(orders)은 그대로 — 계획 수량만 새로
+    const reweek = env("PLAN_REWEEK") === "1";
+    const already = !reweek && (await load(monday)).week?.madeOn === today;
     if (already) console.log("주간 잠정안: 오늘 이미 셈 — 그대로 둠");
     else {
       // 수요일(어제) 확정 카페가 아직 없으면(새벽 — 확정 수집은 09:12) 밤 마지막 마감 전 카페 숫자로 셈 (withLiveCafe, 클라우드 live/{어제})
@@ -153,11 +156,19 @@ async function main() {
       }
       const steps: Record<string, Record<string, number>> = {};
       for (const d of weekDates(today)) steps[d] = await stepsFor(d, wBoard, wAsOf);
-      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps)) {
+      // 할인 · 폐기 많은 빵 (11-09 계획부터 — 지난 28일 (할인 + 폐기) ÷ (생산 − 생산실패) 25% 이상 → 추세 × 0.9, 2026-11-05 사장님)
+      let slow: Set<string> | undefined;
+      if (monday >= TREND_FROM) {
+        const docs = new Map<string, { plan: PlanDoc | null; order: OrderDoc | null }>();
+        for (const d of dayRange(addDays(wAsOf, -(SLOW_DAYS - 1)), wAsOf)) docs.set(d, await docsOf(d));
+        slow = slowBreads(wBoard, wAsOf, (d) => docs.get(d));
+        console.log(`할인 · 폐기 많은 빵: ${slow.size}종 (지난 ${SLOW_DAYS}일)`);
+      }
+      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps, slow)) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
       }
-      console.log(`주간 잠정안: ${[...out.keys()][0]} ~ ${[...out.keys()].slice(-1)[0]}${weekOnly ? "" : " (새벽 계산이 빠져 지금 만듦)"}`);
+      console.log(`주간 잠정안: ${[...out.keys()][0]} ~ ${[...out.keys()].slice(-1)[0]}${reweek ? " (다시 셈)" : weekOnly ? "" : " (새벽 계산이 빠져 지금 만듦)"}`);
     }
   } else if (weekOnly) console.log("주간 잠정안은 목요일만");
 
