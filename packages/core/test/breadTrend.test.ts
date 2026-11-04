@@ -159,8 +159,8 @@ describe("주간안 (11-05 발표, 11-09 ~ 15) — 새 방식 · 하루 목표 (
   it("새 빵(판매 28일 안 됨) = 판 날의 같은 요일 판매 평균 × 작년 추세선 비율 (매니저가 고칠 수 있음) · 아직 안 팔린 포스 빵(클래식롤케이크)은 0 · 매니저 기입", () => {
     for (const w of week) {
       const q = Math.round(9 * trendDay(board, asOf, today, w.date).ratio);
-      expect(w.week.items.find((i) => i.name === "명란소금빵")).toEqual({ name: "명란소금빵", qty: q, base: q, est: true });
-      expect(w.week.items.at(-1)).toEqual({ name: "클래식롤케이크", qty: 0, manual: true });
+      expect(w.week.items.find((i) => i.name === "명란소금빵")).toEqual({ name: "명란소금빵", qty: q, base: q, est: true, trend: q, tuned: q });
+      expect(w.week.items.at(-1)).toEqual({ name: "클래식롤케이크", qty: 0, manual: true, trend: 0, tuned: 0 });
     }
   });
   it("빵별 조정 — 수수부꾸미 · 옥수수찰빵은 어림 + 2 (목표 위에 더함, 인기 시험) · 소금빵 −4", () => {
@@ -248,5 +248,21 @@ describe("11-08 까지(이미 발표한 주 · 10-29 발표 주간안)는 예전
     const f = makeFinal(board, {}, DEFAULT_LEARNED, "2026-10-30", "2026-10-29", { v: 2, date: w[0].date, week: w[0].week }, null)!;
     expect(f.trust).toBeUndefined();
     expect(f.items.some((i) => i.lo != null)).toBe(true);
+  });
+});
+
+describe("두 계획 중 이번 주에 쓸 쪽 (2026-11-05 사장님 — 지난 견주기 결과로)", () => {
+  it("평일 '추세'면 평일은 추세 수량 · 휴일은 조정 그대로 · 두 수량은 늘 남김 · 빵별 조정을 뺀 빵은 그 빵만 추세", () => {
+    const tuned = makeWeek(board, {}, DEFAULT_LEARNED, today, asOf);
+    const mixed = makeWeek(board, {}, DEFAULT_LEARNED, today, asOf, {}, undefined, { 평일: "추세", 휴일: "조정", drop: ["소금빵"] });
+    for (const [i, w] of mixed.entries()) {
+      expect(w.week.mode).toMatchObject({ 평일: "추세", 휴일: "조정" });
+      for (const it of w.week.items) {
+        const t = tuned[i].week.items.find((x) => x.name === it.name)!;
+        expect([it.trend, it.tuned]).toEqual([t.trend, t.tuned]);
+        const useTrend = dayKind(w.date) !== "휴일" || it.name === "소금빵";
+        expect(it.qty).toBe(useTrend ? it.trend : it.tuned);
+      }
+    }
   });
 });

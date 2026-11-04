@@ -19,7 +19,7 @@
      매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (core roundUnitOrder)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, Board, dayRange, FINAL_LEAD, slowBreads, SLOW_DAYS, TREND_FROM, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, Board, BREAD_PLUS, BREAD_SET, breadVerdictOf, compareDay, dayRange, DEFAULT_MODE, FINAL_LEAD, slowBreads, SLOW_DAYS, TREND_FROM, verdictOf, type DayCompare, type PlanModeNote, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writeOrders, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -164,7 +164,29 @@ async function main() {
         slow = slowBreads(wBoard, wAsOf, (d) => docs.get(d));
         console.log(`할인 · 폐기 많은 빵: ${slow.size}종 (지난 ${SLOW_DAYS}일)`);
       }
-      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps, slow)) {
+      // 두 가지 계획 견주기 (2026-11-05 사장님) — 지난 7일 가 추세 · 나 조정 계획을 판매 실적과 견줘 다음 주에 쓸 쪽을 정함
+      //   평일 · 휴일 따로 (견준 날이 없으면 지난 주에 쓴 그대로 — 처음은 조정), 빵별 조정 빵은 빵마다
+      let mode: PlanModeNote | undefined;
+      if (monday >= TREND_FROM) {
+        const cmp: DayCompare[] = [];
+        for (const d of dayRange(addDays(wAsOf, -6), wAsOf)) {
+          const x = await docsOf(d);
+          const c = compareDay(wBoard, d, x.plan, x.order, wAsOf);
+          if (c) cmp.push(c);
+        }
+        const prev = (await load(addDays(monday, -7))).week?.mode ?? DEFAULT_MODE;
+        const vW = verdictOf(cmp.filter((c) => c.kind === "평일"));
+        const vH = verdictOf(cmp.filter((c) => c.kind === "휴일"));
+        const drop = Object.keys({ ...BREAD_PLUS, ...BREAD_SET }).filter((n) => {
+          const v = breadVerdictOf(cmp, n);
+          return v ? v.mode === "추세" : (prev.drop || []).includes(n);
+        });
+        const note = (k: string, v: ReturnType<typeof verdictOf>) => (v ? `${k} 가 추세 ${v.errTrend} · 나 조정 ${v.errTuned} (${v.days.length}일)` : `${k} 견준 날 없음 — 지난 주 그대로`);
+        mode = { 평일: vW?.mode ?? prev.평일, 휴일: vH?.mode ?? prev.휴일, ...(drop.length ? { drop } : {}), why: `${note("평일", vW)} · ${note("휴일", vH)}` };
+        // 공개 기록에는 쓴 쪽 · 견준 날 수만
+        console.log(`두 계획 견주기: 평일 ${mode.평일} (${vW?.days.length ?? 0}일) · 휴일 ${mode.휴일} (${vH?.days.length ?? 0}일) · 빵별 조정 뺀 빵 ${drop.length}종`);
+      }
+      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps, slow, mode)) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
       }
