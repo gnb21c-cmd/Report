@@ -585,6 +585,13 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
             {kind === "final" && step.rainUp && <b className="rain-up"> · 비 예보 {WEEKDAY_KO[weekday(date)]}요일 — 예정 수량 × {Math.round(step.rainUp * 100)}%</b>}
             {step.boost && <b className="rain-up"> · 생산 늘림 — 작년 추세 × {Math.round(step.boost * 100)}%</b>}
             {step.band && <b className="rain-up"> · 평일 하루 {step.band[0]} ~ {step.band[1]}개 안으로</b>}
+            {/* 11-09 계획부터 — 하루 목표 (월 270 → 금 320 · 토 800 · 일 750, 2026-11-05 사장님) */}
+            {step.target != null && (
+              <b className="rain-up">
+                {" "}
+                · 하루 목표 {step.target}개 맞춤 (추세 그대로면 {step.trendTotal}개) · 할인 · 폐기 많던 빵은 조금 줄임
+              </b>
+            )}
           </div>
         )}
         {step?.trust && (
@@ -638,6 +645,8 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                 <span className="name">
                   <BreadName name={r.name} date={date} />
                   {r.manual && <small className="manual-tag"> 새 빵 — 매니저 기입</small>}
+                  {r.est && <small className="manual-tag"> 새 빵 — 판 날 실적 · 작년 추세로 (고칠 수 있음)</small>}
+                  {r.slow && <small className="kitchen-tag"> 할인 · 폐기 많아 조금 줄임</small>}
                   {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 시그니처 플래터용 (평일 {KITCHEN_QTY.평일} · 휴일 {KITCHEN_QTY.휴일}개 기준)</small>}
                   {kind === "final" && dayChangeAt(c, date) && <small className="day-change"> 당일 변경 {dayChangeAt(c, date)}</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
