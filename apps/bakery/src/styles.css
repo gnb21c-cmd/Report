@@ -572,6 +572,13 @@ small.rename {
   font-weight: 600;
   font-size: 12px;
 }
+/* 적은 수가 만드는 단위로 올라감 (우유모닝빵 5 → 6) — 확정 전에 알려 줌 */
+.row .name .snap-note {
+  display: block;
+  color: var(--bad);
+  font-weight: 600;
+  font-size: 12px;
+}
 
 /* 태블릿 주소 */
 .url-box {

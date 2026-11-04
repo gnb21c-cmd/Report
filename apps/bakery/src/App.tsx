@@ -22,6 +22,7 @@ import {
   displayDays,
   FINAL_LEAD,
   isKitchenBread,
+  KITCHEN_BREAD,
   KITCHEN_QTY,
   withKitchen,
   floorFinal,
@@ -33,6 +34,7 @@ import {
   shortLabel,
   snapUnit,
   planUnit,
+  roundUpUnit,
   sortBread,
   stepGroup,
   stepOf,
@@ -380,7 +382,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
   const prov = order?.provisional || {};
   // 사장님 표 순서 (2026-10-22, core BREAD_ORDER)
   // 키친용 모닝빵(판매용 아님 · 시그니처 플래터용)을 맨 위에 — 계획이 있는 날만 (2026-11-04 사장님)
-  const rows = sortBread(step ? withKitchen(step.items, date) : []);
+  const rows = sortBread(step ? withKitchen(step.items, date, kind === "final" ? prov[KITCHEN_BREAD]?.qty : null) : []);
   // 수정 칸에 수량을 적었는지
   const filled = (name: string) => (edit[name] ?? "") !== "";
   // 고친 수량도 만드는 단위로 (몽블랑 5개 · 10-26 부터 시나몬롤 10개 · 우유모닝빵 2개 올림)
@@ -389,15 +391,29 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
     if (v != null && v !== "") return snapUnit(name, Number(v) || 0, undefined, undefined, date);
     return done[name]?.qty ?? q;
   };
-  const save = async (lines: Record<string, number>, label: string) => {
+  const save = async (asked: Record<string, number>, label: string) => {
+    // 만드는 단위로 올라가거나(몽블랑은 5개 단위 가까운 수로) 바뀐 수량은 알려 줌 (우유모닝빵 2개 · 팥앙금샌드 4개 · 시나몬롤 10개 단위 — 5를 넣으면 6, 2026-11-04 사장님이 폰에서 헷갈림)
+    const up = Object.entries(asked)
+      .filter(([k, q]) => (edit[k] ?? "") !== "" && Number(edit[k]) !== q)
+      .map(([k, q]) => `${breadLabel(k, date)} ${Number(edit[k])}개 → ${q}개`);
+    const upText = up.length ? ` 만드는 단위에 맞춤: ${up.join(" · ")}` : "";
+    const clear = () => setEdit((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !(k in asked))));
+    // 생산한 날 — 수량이 그대로인 줄은 저장하지 않음 (바뀐 것이 없는데 '당일 변경'만 붙지 않게)
+    const cur = (k: string) => done[k]?.qty ?? rows.find((r) => r.name === k)?.qty;
+    const lines = made ? Object.fromEntries(Object.entries(asked).filter(([k, q]) => q !== cur(k))) : asked;
+    if (!Object.keys(lines).length) {
+      clear();
+      setMsg(`수량이 그대로라 바꾸지 않았습니다.${upText}`);
+      return;
+    }
     if (!madeOk()) return;
     setBusy(label);
     setMsg("");
     try {
       const o = await api.confirm(date, kind, lines, who);
       setOrder(o);
-      setEdit((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !(k in lines))));
-      setMsg(`${label === "all" ? "일괄" : label} ${kind === "final" ? "최종 확정" : "잠정 확정"} 했습니다.`);
+      clear();
+      setMsg(`${label === "all" ? "일괄" : label} ${kind === "final" ? "최종 확정" : "잠정 확정"} 했습니다.${upText}`);
     } catch (e) {
       setMsg((e as CloudError).message);
     } finally {
@@ -518,6 +534,13 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
           {rows.map((r) => {
             const c = done[r.name];
             const v = edit[r.name];
+            // 적은 수가 만드는 단위로 올라가면 확정 전에 보여 줌 (예: 우유모닝빵 5 → 6)
+            const typed = v != null && v !== "" ? Number(v) : null;
+            const snapped = typed == null ? null : valueOf(r.name, r.qty);
+            // 범위(±10%)도 만드는 단위로 고를 수 있는 수만 (우유모닝빵 6 의 5~7 → 6)
+            const ru = roundUpUnit(r.name, date);
+            const lo = r.lo == null ? null : ru > 1 ? Math.ceil(r.lo / ru) * ru : r.lo;
+            const hi = r.hi == null ? null : ru > 1 ? Math.floor(r.hi / ru) * ru : r.hi;
             return (
               <div key={r.name} className={`row${c ? " done" : ""}${kind === "final" ? " fin" : ""}`}>
                 <span className="name">
@@ -526,10 +549,16 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                   {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 시그니처 플래터용 (평일 {KITCHEN_QTY.평일} · 휴일 {KITCHEN_QTY.휴일}개 기준)</small>}
                   {kind === "final" && dayChangeAt(c, date) && <small className="day-change"> 당일 변경 {dayChangeAt(c, date)}</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
-                  {r.lo != null && (
+                  {lo != null && hi != null && lo <= hi && (
                     <small className="muted">
                       {" "}
-                      {r.lo}~{r.hi}
+                      {lo === hi ? lo : `${lo}~${hi}`}
+                    </small>
+                  )}
+                  {typed != null && snapped !== typed && (
+                    <small className="snap-note">
+                      {" "}
+                      {typed}개 → {snapped}개로 확정 ({planUnit(r.name, date)}개 단위{snapped! > typed ? "로 올림" : "에 맞춤"})
                     </small>
                   )}
                 </span>

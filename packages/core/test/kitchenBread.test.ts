@@ -73,6 +73,16 @@ describe("키친용 모닝빵 — 평일 2 · 휴일 5 · 맨 위 · 판매용 �
     expect(text.split("\n")[0]).toBe("[11월 7일 오늘 생산] 총 104개"); // 키친용 5개는 합계에 안 넣음
     expect(text.split("\n")[1]).toBe("· 키친용 모닝빵 5개 (판매용 아님 · 시그니처 플래터용) (자동)");
   });
+  it("목요일 잠정 확정 때 키친용을 고쳤으면 최종안 · 자동 수량도 그 수량 (다른 빵처럼 이어 감) · 최종안 계산 줄에는 안 들어감", () => {
+    const plan: PlanDoc = { ...planOf("2026-11-14", [["우유모닝빵", 30]]), week: { ...st, items: [{ name: "우유모닝빵", qty: 30, base: 30 }] } };
+    const o: OrderDoc = { v: 2, date: "2026-11-14", provisional: { [KITCHEN_BREAD]: L(3) }, final: {} };
+    const before = orderRows(plan, o, { date: "2026-11-11", time: "16:00" }).find((r) => r.name === KITCHEN_BREAD)!;
+    expect([before.week, before.provisional, before.suggested]).toEqual([5, 3, 3]);
+    const after = orderRows(plan, o, { date: "2026-11-14", time: "07:00" }).find((r) => r.name === KITCHEN_BREAD)!;
+    expect([after.qty, after.state]).toEqual([3, "자동"]);
+    expect(withKitchen([{ name: "우유모닝빵", qty: 30 }], "2026-11-14", 3)[1]).toEqual({ name: KITCHEN_BREAD, qty: 3, base: 5, kitchen: true });
+    expect(withKitchen([{ name: "우유모닝빵", qty: 30 }], "2026-11-14", null)[1].qty).toBe(5);
+  });
 });
 
 describe("시그니처 플래터 — 우유모닝빵 폐기에서 플래터에 쓴 것을 뺌 · 키친용은 보고 숫자에 없음", () => {

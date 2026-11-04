@@ -258,11 +258,12 @@ export function kitchenQty(date: string): number | null {
   if (date < KITCHEN_FROM) return null;
   return dayKind(date) === "휴일" ? KITCHEN_QTY.휴일 : KITCHEN_QTY.평일;
 }
-/** 계획 줄에 키친용 모닝빵을 붙임 (이미 있으면 · 11-05 전 날이면 그대로) — 매니저 결정 화면 · 7일 표 그림 */
-export function withKitchen<T extends { name: string; qty: number }>(items: T[], date: string): (T | PlanItem)[] {
+/** 계획 줄에 키친용 모닝빵을 붙임 (이미 있으면 · 11-05 전 날이면 그대로) — 매니저 결정 화면 · 7일 표 그림
+    qty = 매니저가 잠정 확정 때 고친 수량 (최종 확정 화면의 최종안 — 다른 빵처럼 잠정 확정 수량을 이어 감) */
+export function withKitchen<T extends { name: string; qty: number }>(items: T[], date: string, qty?: number | null): (T | PlanItem)[] {
   const q = kitchenQty(date);
   if (q == null || items.some((i) => isKitchenBread(i.name))) return items;
-  return [...items, { name: KITCHEN_BREAD, qty: q, base: q, kitchen: true }];
+  return [...items, { name: KITCHEN_BREAD, qty: qty ?? q, base: q, kitchen: true }];
 }
 /** 그날 시그니처 플래터 판매 개수 */
 export function platterSold(board: Board, date: string): number {
@@ -534,7 +535,8 @@ export function makeFinal(board: Board, weather: WeatherMap, learned: Learned, t
   const fresh = new Map(now.items.map((i) => [i.name, i]));
   const anchor = new Map<string, number>();
   for (const it of plan.week.items) anchor.set(it.name, it.qty);
-  for (const [n, l] of Object.entries(order?.provisional || {})) anchor.set(n, l.qty);
+  // 키친용 모닝빵은 계획 줄이 아님 (판매용 아님 — 평일 300 ~ 320 에 넣지 않게, orderRows 가 따로 붙임)
+  for (const [n, l] of Object.entries(order?.provisional || {})) if (!isKitchenBread(n)) anchor.set(n, l.qty);
   const names = [...new Set([...anchor.keys(), ...fresh.keys()])];
   const weekQty = new Map(plan.week.items.map((i) => [i.name, i.qty]));
   /** 매니저가 잠정 확정 때 주간안과 다른 수량으로 고쳤으면 그 수량 */
@@ -639,13 +641,13 @@ export function orderRows(plan: PlanDoc | null | undefined, order: OrderDoc | nu
   if (!date) return [];
   const week = new Map((plan?.week?.items || []).map((i) => [i.name, i.qty]));
   const fin = new Map((plan?.final?.items || []).map((i) => [i.name, i.qty]));
-  // 키친용 모닝빵 — 계획이 있는 날 기본 수량 (계획 문서에는 없음, 2026-11-04)
+  const prov = order?.provisional || {};
+  // 키친용 모닝빵 — 계획이 있는 날 기본 수량 (계획 문서에는 없음, 2026-11-04) · 최종안은 잠정 확정 수량을 이어 감
   const kq = kitchenQty(date);
   if (kq != null) {
     if (plan?.week && !week.has(KITCHEN_BREAD)) week.set(KITCHEN_BREAD, kq);
-    if (plan?.final && !fin.has(KITCHEN_BREAD)) fin.set(KITCHEN_BREAD, kq);
+    if (plan?.final && !fin.has(KITCHEN_BREAD)) fin.set(KITCHEN_BREAD, prov[KITCHEN_BREAD]?.qty ?? kq);
   }
-  const prov = order?.provisional || {};
   const conf = order?.final || {};
   const finalPassed = passed(now, finalDay(date));
   const provPassed = passed(now, plan?.week?.madeOn || weekPlanDay(date));
