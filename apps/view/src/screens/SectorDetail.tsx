@@ -491,6 +491,10 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
           POS 영수 {cafeAt ? hourMin(cafeAt) : "—"} 받음 · 마지막 빵 판매 {lastSale || "—"} · 남음 = 작업지시 − POS 판매 (빵마다 0 밑으로 안 내려감 · 작업지시에 없는 빵 · 시식 · 현장에서 바꾼 수량은 모름)
         </p>
       )}
+      {sales && t.platter > 0 && (
+        // 시그니처 플래터 — 키친용 모닝빵으로 모자라 판매 중인 우유모닝빵을 3등분해 씀 (2026-11-04 사장님) · 폐기가 아님
+        <p className="note muted">우유모닝빵 {count(t.platter, "개")}는 시그니처 플래터용(키친)으로 썼어요 — 폐기에서 뺌 (총 생산 = 정가판매 + 할인판매 + {open ? "남음" : "폐기"} + 플래터용)</p>
+      )}
       {sheet && <BreadSheet date={date} rows={rows} kind={sheet} wasteLabel={wasteLabel} onClose={() => setSheet(null)} />}
     </>
   );
@@ -530,7 +534,10 @@ function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; r
                     <td className="num">{n(producedOf(r))}</td>
                     <td className="num">{n(r.full)}</td>
                     <td className="num">{n(r.half)}</td>
-                    <td className={`num${kind === "waste" ? " strong" : ""}`}>{n(r.waste)}</td>
+                    <td className={`num${kind === "waste" ? " strong" : ""}`}>
+                      {n(r.waste)}
+                      {r.platter ? <small className="muted"> +플래터 {r.platter}</small> : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -590,7 +597,10 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
                   <td className="num">{hasSales ? n(producedOf(r)) : "—"}</td>
                   <td className="num">{hasSales ? n(r.full) : "—"}</td>
                   <td className="num">{hasSales ? n(r.half) : "—"}</td>
-                  <td className={`num${r.waste && !open ? " warn" : ""}`}>{hasSales ? n(r.waste) : "—"}</td>
+                  <td className={`num${r.waste && !open ? " warn" : ""}`}>
+                    {hasSales ? n(r.waste) : "—"}
+                    {hasSales && r.platter ? <small className="muted"> +플래터 {r.platter}</small> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -607,6 +617,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
           <p className="note muted">
             생산 = 정가판매 + 할인판매 + 폐기 (현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 영수증 · 폐기 = 작업지시(확정, 없으면 자동) 수량 − 판매 (일과 중 바뀐 양은 모름, 작업지시에 없는 상품은 —)
             {open && " · 오늘은 마감 전이라 남음 = 작업지시 수량 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
+            {rows.some((r) => r.platter) && " · 우유모닝빵 '+플래터'는 시그니처 플래터용(키친)으로 쓴 개수라 폐기에서 뺌"}
             {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
           </p>
         </>

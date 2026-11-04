@@ -21,6 +21,9 @@ import {
   validFloorKey,
   displayDays,
   FINAL_LEAD,
+  isKitchenBread,
+  KITCHEN_QTY,
+  withKitchen,
   floorFinal,
   floorLabel,
   nowKst,
@@ -297,7 +300,7 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
       if (!docs.some((x) => x.p?.week)) throw new Error("이 주 계획이 아직 없습니다.");
       const tot = new Map<string, number>();
       for (const { p, o } of docs) {
-        for (const it of p?.week?.items || []) tot.set(it.name, (tot.get(it.name) || 0) + (o?.provisional[it.name]?.qty ?? it.qty));
+        for (const it of p?.week ? withKitchen(p.week.items, p.date) : []) tot.set(it.name, (tot.get(it.name) || 0) + (o?.provisional[it.name]?.qty ?? it.qty));
         for (const [n, l] of Object.entries(o?.provisional || {})) if (!tot.has(n)) tot.set(n, l.qty);
       }
       // 7일 모두 0 개(기입 안 한 새 빵 등)는 그림에서 뺌
@@ -310,7 +313,7 @@ function WeekView({ api, today, who }: { api: Api; today: string; who: string })
         const x = docs.find((y) => y.d === d)!;
         const c = x.o?.provisional[n];
         if (c) return { qty: c.qty, pending: false };
-        const w = x.p?.week?.items.find((i) => i.name === n);
+        const w = x.p?.week ? withKitchen(x.p.week.items, d).find((i) => i.name === n) : undefined;
         return w ? { qty: w.qty, pending: true } : null;
       };
       const b = await weekImage(dates, names, get, who);
@@ -376,7 +379,8 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
   const done = order?.[kind] || {};
   const prov = order?.provisional || {};
   // 사장님 표 순서 (2026-10-22, core BREAD_ORDER)
-  const rows = sortBread(step?.items || []);
+  // 키친용 모닝빵(판매용 아님 · 시그니처 플래터용)을 맨 위에 — 계획이 있는 날만 (2026-11-04 사장님)
+  const rows = sortBread(step ? withKitchen(step.items, date) : []);
   // 수정 칸에 수량을 적었는지
   const filled = (name: string) => (edit[name] ?? "") !== "";
   // 고친 수량도 만드는 단위로 (몽블랑 5개 · 10-26 부터 시나몬롤 10개 · 우유모닝빵 2개 올림)
@@ -444,7 +448,9 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
   const confirmedN = rows.filter((r) => done[r.name]).length;
   // 새 빵(매니저 기입) 중 아직 수량을 안 적은 것
   const needInput = rows.filter((r) => r.manual && !done[r.name] && !filled(r.name)).length;
-  const total = rows.reduce((a, r) => a + valueOf(r.name, r.qty), 0);
+  // 합계는 판매용 빵만 (키친용 모닝빵은 따로)
+  const total = rows.reduce((a, r) => a + (isKitchenBread(r.name) ? 0 : valueOf(r.name, r.qty)), 0);
+  const kitchenNow = rows.find((r) => isKitchenBread(r.name));
   return (
     <section className={kind === "final" && !inner ? "content" : ""} style={kind === "final" && !inner ? undefined : { display: "grid", gap: 10 }}>
       <section className="sticky">
@@ -466,7 +472,8 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
         </div>
         {step && (
           <div className="sticky-sub">
-            예상 손님 {count(step.visitors, "명")} · {step.kind} · 날씨 {step.weather} · 합계 <b>{count(total, "개")}</b> · {kind === "final" ? "확정" : "잠정"} {confirmedN}/{rows.length}
+            예상 손님 {count(step.visitors, "명")} · {step.kind} · 날씨 {step.weather} · 합계 <b>{count(total, "개")}</b>
+            {kitchenNow && ` (키친용 모닝빵 ${valueOf(kitchenNow.name, kitchenNow.qty)}개 따로)`} · {kind === "final" ? "확정" : "잠정"} {confirmedN}/{rows.length}
             {kind === "final" && step.rainUp && <b className="rain-up"> · 비 예보 {WEEKDAY_KO[weekday(date)]}요일 — 예정 수량 × {Math.round(step.rainUp * 100)}%</b>}
             {step.boost && <b className="rain-up"> · 생산 늘림 — 작년 추세 × {Math.round(step.boost * 100)}%</b>}
             {step.band && <b className="rain-up"> · 평일 하루 {step.band[0]} ~ {step.band[1]}개 안으로</b>}
@@ -516,6 +523,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                 <span className="name">
                   <BreadName name={r.name} date={date} />
                   {r.manual && <small className="manual-tag"> 새 빵 — 매니저 기입</small>}
+                  {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 시그니처 플래터용 (평일 {KITCHEN_QTY.평일} · 휴일 {KITCHEN_QTY.휴일}개 기준)</small>}
                   {kind === "final" && dayChangeAt(c, date) && <small className="day-change"> 당일 변경 {dayChangeAt(c, date)}</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
                   {r.lo != null && (
@@ -525,7 +533,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                     </small>
                   )}
                 </span>
-                {kind === "final" && <span className="num muted">{prov[r.name]?.qty ?? (r.manual ? "—" : plan?.week?.items.find((i) => i.name === r.name)?.qty ?? "—")}</span>}
+                {kind === "final" && <span className="num muted">{prov[r.name]?.qty ?? (r.manual ? "—" : isKitchenBread(r.name) ? r.qty : plan?.week?.items.find((i) => i.name === r.name)?.qty ?? "—")}</span>}
                 <span className="num">{r.manual && !r.qty ? "기입" : r.qty}</span>
                 <input
                   className="num"
@@ -646,13 +654,15 @@ function OrderView({ api }: { api: Api }) {
 function OrderList({ rows, date, big }: { rows: OrderRow[]; date: string; big: boolean }) {
   const list = rows.filter((r) => r.state === "확정 전" || (r.qty || 0) > 0);
   if (!list.length) return null;
-  const total = list.reduce((a, r) => a + (r.qty || 0), 0);
+  // 키친용 모닝빵은 판매용이 아니라 합계에 안 넣음
+  const total = list.reduce((a, r) => a + (isKitchenBread(r.name) ? 0 : r.qty || 0), 0);
   return (
     <div className={`order${big ? " big" : ""}`}>
       {list.map((r) => (
         <div key={r.name} className={`order-row s-${r.state === "확정" ? "ok" : r.state === "자동" ? "auto" : "wait"}`}>
           <span className="name">
             <BreadName name={r.name} date={date} />
+            {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님</small>}
           </span>
           <span className="qty">{r.qty == null ? "—" : `${r.qty}개`}</span>
           <span className="state">{r.state}</span>
@@ -774,7 +784,8 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
     </>
   );
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} (${WEEKDAY_KO[weekday(d)]})`;
-  const sum = (i: number) => names.reduce((a, n) => a + (cols[i].get(n) ?? 0), 0);
+  // 합계는 판매용 빵만 (키친용 모닝빵은 뺌)
+  const sum = (i: number) => names.reduce((a, n) => a + (isKitchenBread(n) ? 0 : cols[i].get(n) ?? 0), 0);
   return (
     <div className="floor-wrap">
       <table className="floor-table">
@@ -803,6 +814,7 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
             <tr key={n}>
               <td className={`hl hl-left${r === names.length - 1 ? " hl-bottom" : ""}`}>
                 <BreadName name={breadNameOn(n, dates[0])} date={dates[0]} />
+                {isKitchenBread(n) && <small className="kitchen-tag"> 판매용 아님 · 플래터용</small>}
               </td>
               <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cell(0, n)}</td>
               {dates.slice(1).map((d, i) => (
@@ -891,7 +903,10 @@ function Result({ api, today }: { api: Api; today: string }) {
                   <td className="num">{r.made == null ? "—" : producedOf(r)}</td>
                   <td className="num">{r.sold}</td>
                   <td className="num">{r.half || ""}</td>
-                  <td className="num">{r.waste == null ? "—" : r.waste || ""}</td>
+                  <td className="num">
+                    {r.waste == null ? "—" : r.waste || ""}
+                    {r.platter ? <small className="muted"> +플래터 {r.platter}</small> : null}
+                  </td>
                   <td className={`num step${stepOf(r, date) ? (stepOf(r, date)! > 0 ? " up" : " down") : ""}`}>{stepOf(r, date) == null ? "—" : stepOf(r, date)! > 0 ? "+1" : stepOf(r, date)! < 0 ? "−1" : "그대로"}</td>
                 </tr>
               ))}
