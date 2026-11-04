@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  asFailInbox,
   asOrder,
   Board,
   breadTotals,
+  dayChanged,
   dayResult,
+  FAIL_BY_FLOOR,
+  FAIL_INBOX_KIND,
+  failInboxPut,
+  failOpen,
   failQty,
+  failSyncLines,
   floorCopy,
   HOURS,
   KITCHEN_BREAD,
   producedOf,
   stepOf,
+  withInbox,
   type DayReport,
   type OrderDoc,
   type PlanDoc,
@@ -86,5 +94,58 @@ describe("생산 실패 — 판매를 시작한 수량 = 생산 − 실패", () 
     // 키친용 1개 실패: 12개분 → 3개 모자람 → 우유모닝빵 1개
     const m = dayResult(b, "2026-11-07", p, orderOf("2026-11-07", { [KITCHEN_BREAD]: 1 })).find((x) => x.name === "우유모닝빵")!;
     expect([m.platter, m.waste, producedOf(m)]).toEqual([1, 3, 24]);
+  });
+});
+
+/* 2026-11-04 사장님 — 생산한 작업자가 현장 명령서에서 바로 적음 (매니저 앱 기입도 그대로, 늦게 적은 쪽이 이김) */
+describe("현장 생산실패 기입함 — 현장 명령서에서 적고 수집이 작업지시 확정으로 옮김", () => {
+  const at1 = "2026-11-04T01:00:00Z"; // 10:00
+  const at2 = "2026-11-04T03:00:00Z"; // 12:00
+  it("기입함 글 검사 — 모양이 다르면 버림 · 이상한 줄(음수 · 소수 · 1000 이상 · 시각 없음 · 잼)은 뺌", () => {
+    const ok = asFailInbox({ kind: FAIL_INBOX_KIND, v: 1, date: "2026-11-04", lines: { 소금빵: { qty: 3, at: at1 }, 몽블랑: { qty: -1, at: at1 }, 시나몬롤: { qty: 1.5, at: at1 }, 에그타르트: { qty: 1000, at: at1 }, 초코바게트: { qty: 2 }, 딸기잼: { qty: 1, at: at1 } } }, "2026-11-04");
+    expect(ok?.lines).toEqual({ 소금빵: { qty: 3, at: at1 } });
+    expect(asFailInbox({ kind: FAIL_INBOX_KIND, v: 1, date: "2026-11-03", lines: {} }, "2026-11-04")).toBeNull();
+    expect(asFailInbox({ kind: "x", v: 1, date: "2026-11-04", lines: {} }, "2026-11-04")).toBeNull();
+    expect(asFailInbox(null, "2026-11-04")).toBeNull();
+  });
+  it("빵 하나 적기 — 있던 줄에 더해 씀 · 다른 날 기입함은 버리고 새로", () => {
+    const a = failInboxPut(null, "2026-11-04", "소금빵", 3, at1);
+    const b = failInboxPut(a, "2026-11-04", "몽블랑", 2, at2);
+    expect(b.lines).toEqual({ 소금빵: { qty: 3, at: at1 }, 몽블랑: { qty: 2, at: at2 } });
+    expect(failInboxPut(b, "2026-11-05", "소금빵", 1, at2).lines).toEqual({ 소금빵: { qty: 1, at: at2 } });
+  });
+  it("옮길 줄 — 확정 쪽에 없거나 현장이 더 늦게 적은 줄만 · 매니저가 더 늦게 고쳤으면 매니저 것", () => {
+    const inbox = failInboxPut(failInboxPut(null, "2026-11-04", "소금빵", 3, at2), "2026-11-04", "몽블랑", 2, at1);
+    const order: OrderDoc = { v: 2, date: "2026-11-04", provisional: {}, final: {}, fail: { 몽블랑: { qty: 4, by: "매니저", at: at2 } } };
+    expect(failSyncLines(order, inbox)).toEqual({ 소금빵: { qty: 3, by: FAIL_BY_FLOOR, at: at2 } });
+    // 한 번 옮기면 더 옮길 것 없음
+    const merged = withInbox(order, inbox, "2026-11-04")!;
+    expect(merged.fail).toEqual({ 몽블랑: { qty: 4, by: "매니저", at: at2 }, 소금빵: { qty: 3, by: FAIL_BY_FLOOR, at: at2 } });
+    expect(failSyncLines(merged, inbox)).toBeNull();
+    expect(withInbox(merged, inbox, "2026-11-04")).toBe(merged);
+    // 확정 문서가 아직 없는 날도
+    expect(withInbox(null, inbox, "2026-11-04")!.fail!.몽블랑.qty).toBe(2);
+    expect(withInbox(order, null, "2026-11-04")).toBe(order);
+  });
+  it("현장에서 적은 실패도 보고 숫자에 — 판매 시작 = 생산 − 실패", () => {
+    const plan = planOf("2026-11-04", [["소금빵", 20]]);
+    const order = withInbox(null, failInboxPut(null, "2026-11-04", "소금빵", 3, at1), "2026-11-04");
+    const s = dayResult(new Board([day("2026-11-04", [["소금빵", 15]])]), "2026-11-04", plan, order).find((x) => x.name === "소금빵")!;
+    expect([s.fail, s.waste, producedOf(s)]).toEqual([3, 2, 20]);
+  });
+  it("적을 수 있는 때 — 그날 아침 6시 뒤 ~ 다음 날 (그 전 · 이틀 뒤는 못 적음)", () => {
+    expect(failOpen("2026-11-04", { date: "2026-11-04", time: "05:59" })).toBe(false);
+    expect(failOpen("2026-11-04", { date: "2026-11-04", time: "06:00" })).toBe(true);
+    expect(failOpen("2026-11-04", { date: "2026-11-05", time: "23:59" })).toBe(true);
+    expect(failOpen("2026-11-04", { date: "2026-11-06", time: "00:00" })).toBe(false);
+  });
+});
+
+describe("'변경' 표시 — 생산날 아침 6시 뒤 수량이 최종안과 달라진 빵만", () => {
+  it("같은 수량 그대로 일괄 확정한 줄에는 안 붙음 · 생산 전에 고친 줄도 아님", () => {
+    const plan = planOf("2026-11-04", [["시나몬롤", 20], ["우유모닝빵", 6], ["소금빵", 30]]);
+    const late = "2026-11-04T04:58:00Z"; // 13:58
+    const order: OrderDoc = { v: 2, date: "2026-11-04", provisional: {}, final: { 시나몬롤: { qty: 10, by: "매니저", at: late }, 우유모닝빵: { qty: 6, by: "매니저", at: late }, 소금빵: { qty: 28, by: "매니저", at: "2026-11-03T08:00:00Z" } } };
+    expect([...dayChanged(plan, order, "2026-11-04")]).toEqual([["시나몬롤", "13:58"]]);
   });
 });

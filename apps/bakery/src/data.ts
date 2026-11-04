@@ -4,7 +4,7 @@
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, isEventDonkatsu, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
+import { addDays, asFailInbox, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, failInboxPut, floorCopy, withInbox, type FailInbox, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, isEventDonkatsu, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
 
 export type Kind = "provisional" | "final";
 /** 저장 종류 — 잠정 · 최종 확정 + 생산 실패(생산한 날 상품성이 떨어져 버린 수량, 2026-11-04 사장님) */
@@ -24,6 +24,8 @@ export interface Api {
   report(date: string): Promise<DayReport | null>;
   /** 빵 몇 개를 잠정(provisional) 또는 최종(final) 확정 · 생산 실패(fail) 수량 — 있던 줄에 더해 씀 */
   confirm(date: string, kind: SaveKind, lines: Record<string, number>, by: string): Promise<OrderDoc>;
+  /** 현장 명령서에서 생산실패 수량 적기 (현장 태블릿 · 근무자 화면 — 현장 기입함, 2026-11-04 사장님) → 그날 확정(기입함과 합친 것) */
+  saveFail?(date: string, name: string, qty: number): Promise<OrderDoc | null>;
 }
 
 const env = { apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined };
@@ -172,7 +174,13 @@ export function cloudApi(board: string, auth: boolean): Api {
   return {
     kind: "cloud",
     plan: async (date) => asPlan(await readJson<PlanDoc>(board, "plans", date, auth)),
-    order: async (date) => asOrder(await readJson<OrderDoc>(board, "orders", date, auth)),
+    // 오늘까지는 현장 생산실패 기입함도 같이 (현장에서 적은 것을 수집이 옮기기 전에도 매니저 앱에 바로)
+    async order(date) {
+      const o = asOrder(await readJson<OrderDoc>(board, "orders", date, auth));
+      if (!auth || date > nowKst().date) return o;
+      const fk = await this.floorKey!().catch(() => "");
+      return fk ? withInbox(o, await readInbox(fk, date).catch(() => null), date) : o;
+    },
     async report(date) {
       try {
         const headers: Record<string, string> = auth ? { Authorization: `Bearer ${await idToken()}` } : {};
@@ -245,6 +253,13 @@ export function cloudApi(board: string, auth: boolean): Api {
         const order = asOrder(o);
         if (plan || order) await patchJson(`${docs()}/floor/${k}/days/${d}`, d, floorCopy(plan, order));
       }
+      // 현장에서 적은 생산실패(어제 · 오늘)도 새 번호 기입함으로
+      if (old) {
+        for (const d of [addDays(today, -1), today]) {
+          const inbox = await readInbox(old, d).catch(() => null);
+          if (inbox && Object.keys(inbox.lines).length) await writeInbox(k, inbox).catch(() => {});
+        }
+      }
       await http(`${docs()}/boards/${board}/config/floor`, { method: "PATCH", headers: { "Content-Type": "application/json", ...auth }, body: JSON.stringify({ fields: { key: { stringValue: k }, at: { timestampValue: now } } }) });
       floorCache = k;
       // 예전 번호는 끔 → 예전 주소로는 더 못 봄
@@ -270,6 +285,32 @@ async function patchJson(url: string, date: string, json: unknown) {
   });
 }
 
+/** 현장 생산실패 기입함 읽기 — floor/{키}/fails/{날짜} (키가 살아 있으면 누구나 읽음 · 없으면 null)
+    막히면(보안 규칙을 콘솔에 아직 안 붙였을 때 등) 없는 것으로 — 생산 명령서는 그대로 열리게 */
+async function readInbox(fk: string, date: string): Promise<FailInbox | null> {
+  try {
+    const doc = await http(`${docs()}/floor/${fk}/fails/${date}?key=${env.apiKey}`);
+    return asFailInbox(JSON.parse(doc.fields?.json?.stringValue || "null"), date);
+  } catch (e) {
+    const st = (e as CloudError).status;
+    if (st === 404 || st === 403) return null;
+    throw e;
+  }
+}
+/** 현장 생산실패 기입함 쓰기 (로그인 없음 — 보안 규칙: 키가 살아 있고 그날 ~ 다음 날 · 빵 이름 · 개수 · 시각만) */
+async function writeInbox(fk: string, inbox: FailInbox): Promise<void> {
+  try {
+    await http(`${docs()}/floor/${fk}/fails/${inbox.date}?key=${env.apiKey}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: { date: { stringValue: inbox.date }, at: { stringValue: new Date().toISOString() }, json: { stringValue: JSON.stringify(inbox) } } }),
+    });
+  } catch (e) {
+    if ((e as CloudError).status === 403) throw new CloudError("저장하지 못했습니다 — 생산한 날과 다음 날까지만 적을 수 있습니다 (주소가 바뀌었으면 새 QR 을 찍어 주세요).", 403);
+    throw e;
+  }
+}
+
 /** 현장 태블릿 — 태블릿 열쇠로 floor/{열쇠}/days/{날짜} 복사본만 읽음 (로그인 없음) */
 export function floorApi(fk: string): Api {
   const day = async (date: string): Promise<{ plan: PlanDoc | null; order: OrderDoc | null }> => {
@@ -283,13 +324,25 @@ export function floorApi(fk: string): Api {
       throw e;
     }
   };
+  // 오늘까지는 현장 기입함도 같이 (늦게 적은 쪽 — 수집이 확정 문서로 옮기기 전에도 바로 보이게)
+  const order = async (date: string) => {
+    const o = (await day(date)).order;
+    // 기입함을 못 읽어도(인터넷 · 규칙) 명령서는 그대로
+    return date <= nowKst().date ? withInbox(o, await readInbox(fk, date).catch(() => null), date) : o;
+  };
   return {
     kind: "cloud",
     plan: async (date) => (await day(date)).plan,
-    order: async (date) => (await day(date)).order,
+    order,
     report: async () => null,
     confirm: async () => {
       throw new CloudError("현장 태블릿에서는 확정할 수 없습니다.");
+    },
+    // 생산한 작업자가 바로 적음 — 기입함을 새로 읽어 그 빵만 더해 씀 (다른 빵 줄은 그대로)
+    async saveFail(date, name, qty) {
+      const next = failInboxPut(await readInbox(fk, date), date, name, qty, new Date().toISOString());
+      await writeInbox(fk, next);
+      return withInbox((await day(date)).order, next, date);
     },
   };
 }
@@ -310,6 +363,16 @@ export function demoApi(): Api {
   const plans = new Map<string, PlanDoc>();
   const orders = new Map<string, OrderDoc>();
   const KEY = "bakery.demo.orders.v2";
+  const INBOX = "bakery.demo.fails.v1";
+  const inboxes = new Map<string, FailInbox>();
+  try {
+    for (const [d, x] of Object.entries(JSON.parse(localStorage.getItem(INBOX) || "{}"))) {
+      const b = asFailInbox(x, d);
+      if (b) inboxes.set(d, b);
+    }
+  } catch {
+    /* 처음 */
+  }
   try {
     for (const o of Object.values(JSON.parse(localStorage.getItem(KEY) || "{}"))) {
       const x = asOrder(o);
@@ -331,6 +394,7 @@ export function demoApi(): Api {
   }
   const save = () => {
     try {
+      localStorage.setItem(INBOX, JSON.stringify(Object.fromEntries(inboxes)));
       localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(orders)));
     } catch {
       /* 이번만 */
@@ -339,8 +403,15 @@ export function demoApi(): Api {
   return {
     kind: "demo",
     plan: async (date) => plans.get(date) || null,
-    order: async (date) => orders.get(date) || null,
+    order: async (date) => withInbox(orders.get(date) || null, inboxes.get(date) || null, date),
     report: async (date) => board.report(date) || null,
+    // 체험판 현장 기입함 — 이 기기에만 (진짜는 floor/{키}/fails)
+    async saveFail(date, name, qty) {
+      const next = failInboxPut(inboxes.get(date), date, name, qty, new Date().toISOString());
+      inboxes.set(date, next);
+      save();
+      return withInbox(orders.get(date) || null, next, date);
+    },
     floorKey: async () => demoFloor,
     isAdmin: async () => true,
     async setFloorKey(k) {

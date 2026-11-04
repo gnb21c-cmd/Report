@@ -29,8 +29,8 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statS
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOG_BRANCH, LIVE_LOOP_END, liveLogPath, logLines, logPrune, logPushDue, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
-import { fbLogin, readConfigJson, readDeskLive, readFloorKey, readLive, writeConfigJson, writeWork, type Fb } from "./firebase";
+import { addDays, asFailInbox, asOrder, asPlan, failSyncLines, floorCopy, checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOG_BRANCH, LIVE_LOOP_END, liveLogPath, logLines, logPrune, logPushDue, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
+import { fbLogin, readConfigJson, readDeskLive, readFailInbox, readFloorKey, readLive, readOrderDoc, readPlan, writeConfigJson, writeFloor, writeOrderIf, writeWork, type Fb } from "./firebase";
 import { mask, say } from "./okpos";
 
 const env = (k: string) => process.env[k] || "";
@@ -357,7 +357,44 @@ function eventTick(): void {
   eventBusy = true;
   eventCheck()
     .catch((e) => once(`근무자 화면 이벤트: ${mask((e as Error).message)}`))
+    .then(() => failSync())
+    .catch((e) => once(`생산실패 옮기기: ${mask((e as Error).message)}`))
     .finally(() => (eventBusy = false));
+}
+
+/* ---------- 현장 생산실패 → 작업지시 확정 (2026-11-04 사장님) ----------
+   생산한 작업자가 현장 명령서(태블릿 · 근무자 화면)에 적은 생산실패 = floor/{태블릿 키}/fails/{날짜} (현장은 매장 열쇠를 몰라 확정에 못 씀)
+   → 2분마다 그저께 ~ 오늘 기입함을 읽어(현장은 다음 날 밤까지 적을 수 있고 하루 수집은 21:50 에 끝나므로), 바뀌었으면 orders/{날짜}.fail 로 옮김 (늦게 적은 쪽이 이김 — 매니저 앱이 더 늦게 고쳤으면 그대로)
+   → 보고 앱 생산실패 · 남음 · 폐기에 들어감. 기록에는 줄 수만 (빵 이름 · 수량은 안 남김) */
+let failAt = 0;
+const failSeen = new Map<string, string>();
+async function failSync(): Promise<void> {
+  if (dry || !floorKey || Date.now() - failAt < 2 * 60e3) return;
+  failAt = Date.now();
+  const f = await cloud();
+  for (const d of [addDays(today(), -2), addDays(today(), -1), today()]) {
+    const raw = await readFailInbox(f, floorKey, d);
+    if (!raw || failSeen.get(d) === raw) continue;
+    const inbox = asFailInbox(JSON.parse(raw), d);
+    if (!inbox) {
+      once(`생산실패 옮기기: ${d} 기입함 모양이 달라 건너뜀`);
+      failSeen.set(d, raw);
+      continue;
+    }
+    const doc = await readOrderDoc(f, d);
+    const order = asOrder(doc?.json ? JSON.parse(doc.json) : null);
+    const lines = failSyncLines(order, inbox);
+    if (lines) {
+      const next = { ...(order || { v: 2 as const, date: d, provisional: {}, final: {} }), fail: { ...(order?.fail || {}), ...lines } };
+      // 읽은 뒤 매니저 앱이 그사이 확정했으면 실패 → 다음 차례(2분 뒤)에 다시
+      await writeOrderIf(f, d, JSON.stringify(next), doc?.updateTime || null);
+      // 현장 태블릿 복사본도 (현장 표는 기입함도 같이 읽지만 지난 날을 넘겨 볼 때 맞게)
+      const plan = asPlan(JSON.parse((await readPlan(f, d)) || "null"));
+      await writeFloor(f, floorKey, [{ date: d, json: JSON.stringify(floorCopy(plan, next)) }]).catch(() => {});
+      say(`${hm(now())} 생산실패 ${Object.keys(lines).length}줄 옮김 (${d})`);
+    }
+    failSeen.set(d, raw);
+  }
 }
 
 async function main() {

@@ -191,6 +191,35 @@ export async function readOrder(fb: Fb, date: string): Promise<string | undefine
   }
 }
 
+/** 현장 생산실패 기입함 — floor/{열쇠}/fails/{날짜} 의 json (없으면 null · 그 밖의 오류는 멈춤) — 2026-11-04 */
+export async function readFailInbox(fb: Fb, floor: string, date: string): Promise<string | null> {
+  try {
+    const doc = await http(`${base(fb)}/floor/${floor}/fails/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return doc.fields?.json?.stringValue || null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
+/** 작업지시 확정 읽기 — json · 문서가 바뀐 시각 (없으면 null). 404 말고 오류는 멈춤 — 모르고 확정 수량을 덮지 않게 */
+export async function readOrderDoc(fb: Fb, date: string): Promise<{ json: string | null; updateTime: string } | null> {
+  try {
+    const doc = await http(`${base(fb)}/boards/${fb.board}/orders/${date}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    return { json: doc.fields?.json?.stringValue || null, updateTime: String(doc.updateTime || "") };
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
+/** 작업지시 확정 쓰기 — 읽은 뒤 아무도 안 바꿨을 때만 (매니저 앱이 그사이 확정하면 실패 → 다음 차례에 다시 읽어 옮김) */
+export async function writeOrderIf(fb: Fb, date: string, json: string, updateTime: string | null): Promise<void> {
+  const name = `projects/${fb.projectId}/databases/(default)/documents/boards/${fb.board}/orders/${date}`;
+  const write = { update: { name, fields: { date: str(date), at: { timestampValue: new Date().toISOString() }, json: str(json) } }, currentDocument: updateTime ? { updateTime } : { exists: false } };
+  await http(`${base(fb)}:commit`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` }, body: JSON.stringify({ writes: [write] }) });
+}
+
 /** 현장 태블릿 열쇠 (매니저 앱이 처음 만들 때까지는 없음) */
 export async function readFloorKey(fb: Fb): Promise<string | null> {
   try {

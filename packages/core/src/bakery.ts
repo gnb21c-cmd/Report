@@ -856,6 +856,75 @@ export function dayChangeAt(line: OrderLine | undefined, date: string): string |
   return d === date ? hm : `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} ${hm}`;
 }
 
+/** 생산날 아침 6시 뒤 바꾼 빵 → 바꾼 시각 ('변경' 표시) — 수량이 최종안(없으면 잠정 · 주간안)과 다른 줄만
+    (같은 수량 그대로 일괄 확정한 줄은 바뀐 것이 아님 — 2026-11-04 사장님 화면에 수량이 그대로인 빵까지 '변경'이 붙었던 것) */
+export function dayChanged(plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined, date: string): Map<string, string> {
+  const fin = new Map((plan?.final?.items || []).map((i) => [i.name, i.qty]));
+  const week = new Map((plan?.week?.items || []).map((i) => [i.name, i.qty]));
+  const out = new Map<string, string>();
+  for (const [name, l] of Object.entries(order?.final || {})) {
+    const at = dayChangeAt(l, date);
+    const before = fin.get(name) ?? order?.provisional?.[name]?.qty ?? week.get(name);
+    if (at && l.qty !== before) out.set(name, at);
+  }
+  return out;
+}
+
+/* ---------- 현장 생산실패 기입함 (2026-11-04 사장님) ----------
+   생산한 작업자가 현장 명령서(태블릿 · 근무자 화면)에서 자기가 맡은 빵의 생산실패 수량을 바로 적음 — 매니저 앱 기입도 그대로 (늦게 적은 쪽이 이김)
+   floor/{키 번호}/fails/{날짜} = { date, at, json } · json = FailInbox (빵 이름 · 개수 · 시각만)
+   현장은 매장 열쇠를 몰라 작업지시 확정(boards/…/orders)에 못 씀 → 수집(포스 본체 1분 반복, liveLoop)이 orders.fail 로 옮김
+   매니저 앱 · 현장 표는 기입함을 바로 같이 읽음(withInbox) · 보고 앱은 옮긴 orders.fail 을 읽음 */
+export const FAIL_INBOX_KIND = "astana-fail";
+/** 현장에서 적은 줄의 '누가' */
+export const FAIL_BY_FLOOR = "현장";
+export interface FailInbox {
+  kind: typeof FAIL_INBOX_KIND;
+  v: 1;
+  date: string;
+  lines: Record<string, { qty: number; at: string }>;
+}
+/** 기입함 글 검사 — 모양이 다르면 null (개수 0 ~ 999 · 시각 글) */
+export function asFailInbox(x: unknown, date: string): FailInbox | null {
+  const o = x as FailInbox | null;
+  if (!o || o.kind !== FAIL_INBOX_KIND || o.v !== 1 || o.date !== date || typeof o.lines !== "object" || !o.lines) return null;
+  const lines: FailInbox["lines"] = {};
+  for (const [n, l] of Object.entries(o.lines)) {
+    const q = Number(l?.qty);
+    if (!n || NOT_BREAD.has(n) || !Number.isInteger(q) || q < 0 || q > 999 || typeof l?.at !== "string" || !Number.isFinite(Date.parse(l.at))) continue;
+    lines[n] = { qty: q, at: l.at };
+  }
+  return { kind: FAIL_INBOX_KIND, v: 1, date, lines };
+}
+/** 기입함에 빵 하나 적기 (있던 줄에 더해 씀) */
+export function failInboxPut(inbox: FailInbox | null | undefined, date: string, name: string, qty: number, at: string): FailInbox {
+  return { kind: FAIL_INBOX_KIND, v: 1, date, lines: { ...(inbox?.date === date ? inbox.lines : {}), [name]: { qty: Math.max(0, Math.round(qty) || 0), at } } };
+}
+/** 기입함에서 작업지시 확정(orders.fail)으로 옮길 줄 — 확정 쪽에 없거나 기입함이 더 늦게 적은 줄만 (없으면 null) */
+export function failSyncLines(order: OrderDoc | null | undefined, inbox: FailInbox | null | undefined): Record<string, OrderLine> | null {
+  if (!inbox) return null;
+  const out: Record<string, OrderLine> = {};
+  for (const [n, l] of Object.entries(inbox.lines)) {
+    const had = order?.fail?.[n];
+    const hadAt = had?.at ? Date.parse(had.at) : NaN;
+    if (had && Number.isFinite(hadAt) && hadAt >= Date.parse(l.at)) continue;
+    if (had && had.qty === l.qty && had.at === l.at) continue;
+    out[n] = { qty: l.qty, by: FAIL_BY_FLOOR, at: l.at };
+  }
+  return Object.keys(out).length ? out : null;
+}
+/** 작업지시 확정 + 현장 기입함 (늦게 적은 쪽) — 매니저 앱 · 현장 표가 바로 보이게 */
+export function withInbox(order: OrderDoc | null | undefined, inbox: FailInbox | null | undefined, date: string): OrderDoc | null {
+  const lines = failSyncLines(order, inbox);
+  if (!lines) return order ?? null;
+  const base = order ?? emptyOrder(date);
+  return { ...base, fail: { ...(base.fail || {}), ...lines } };
+}
+/** 그날 생산실패를 적을 수 있는지 — 그날 아침 6시 뒤 ~ 다음 날 (현장 명령서 · 보안 규칙과 같은 기간) */
+export function failOpen(date: string, now: Now): boolean {
+  return productionStarted(date, now) && now.date <= addDays(date, 1);
+}
+
 /** 현장 표 칸 이름 — 오늘 생산 · 내일 생산준비 · N일 뒤(오늘을 1일째로 — 모레 = 3일 뒤) · 지난 날 '생산' (날짜를 넘겨 볼 때, 2026-11-01) */
 export function floorLabel(date: string, today: string): string {
   if (date === today) return "오늘 생산";
