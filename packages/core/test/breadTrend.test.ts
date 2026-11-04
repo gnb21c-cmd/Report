@@ -119,7 +119,8 @@ describe("같은 요일 추세 — 지난 4주 · 작년 추세선 · 비율", (
 
 describe("주간안 (11-05 발표, 11-09 ~ 15) — 새 방식", () => {
   const week = makeWeek(board, {}, DEFAULT_LEARNED, today, asOf, { "2026-11-09": { 소금빵: 3 }, "2026-11-14": { 소금빵: -2 } });
-  it("만드는 단위 · 생산 늘림 없음 · 같은 요일 칸 없음 · 평일 300 ~ 320 · 휴일은 추세 그대로", () => {
+  // 평일 300 ~ 320 범위도 없앰 (2026-11-05 사장님 — 그 범위는 생산 늘림 때 정한 것, 평일 270 ~ 280 쯤이 맞았던 원래대로 = 추세 그대로)
+  it("만드는 단위 · 생산 늘림 없음 · 같은 요일 칸 없음 · 평일 범위 없음 — 평일 · 휴일 모두 추세 그대로", () => {
     expect(BREAD_BOOST.평일).toBe(1.5); // 10-26 ~ 11-08 계획에만 남음
     for (const w of week) {
       const st = w.week;
@@ -128,16 +129,10 @@ describe("주간안 (11-05 발표, 11-09 ~ 15) — 새 방식", () => {
       for (const it of st.items) expect(it.step).toBeUndefined();
       expect(st.items.find((i) => i.name === "몽블랑")!.qty % 5).toBe(0);
       expect(st.items.find((i) => i.name === "시나몬롤")!.qty % 10).toBe(0);
-      const auto = st.items.filter((i) => !i.manual).reduce((a, b) => a + b.qty, 0);
-      if (dayKind(w.date) === "평일") {
-        expect(st.band).toEqual([300, 320]);
-        expect(auto).toBeGreaterThanOrEqual(300);
-        expect(auto).toBeLessThanOrEqual(320);
-      } else expect(st.band).toBeUndefined();
-      if (hol(w.date)) {
-        const t = trendDay(board, asOf, today, w.date);
-        for (const r of t.items) expect(st.items.find((i) => i.name === r.name)!.qty).toBe(snapUnit(r.name, r.raw, undefined, undefined, w.date));
-      }
+      expect(st.band).toBeUndefined();
+      // 빵마다 = 추세 수치를 만드는 단위로 (몽블랑 5 가까운 수 · 시나몬롤 10 · 우유모닝빵 2 · 팥앙금샌드 4 올림) — 합계 맞춤 없음
+      const t = trendDay(board, asOf, today, w.date);
+      for (const r of t.items) expect(st.items.find((i) => i.name === r.name)?.qty ?? 0).toBe(snapUnit(r.name, r.raw, undefined, undefined, w.date));
       expect(st.trust?.level).toBeDefined();
     }
   });
@@ -152,9 +147,8 @@ describe("주간안 (11-05 발표, 11-09 ~ 15) — 새 방식", () => {
     expect(o[0].from).toBe("2026-11-09");
     const t = (d: string) => trendDay(board, asOf, today, d).items.reduce((a, i) => a + i.raw, 0);
     expect(o[0].holiday).toBe(Math.round((t("2026-11-14") + t("2026-11-15")) / 2));
-    // 평일 칸 — 월 ~ 목은 300 ~ 320 범위 안으로 (실제 계획과 같게), 금요일은 추세 그대로
-    const band = (d: string) => Math.min(320, Math.max(300, t(d)));
-    expect(o[0].weekday).toBe(Math.round((band("2026-11-09") + band("2026-11-10") + band("2026-11-11") + band("2026-11-12") + t("2026-11-13")) / 5));
+    // 평일 칸도 추세 그대로 (평일 범위 없앰 — 2026-11-05)
+    expect(o[0].weekday).toBe(Math.round((t("2026-11-09") + t("2026-11-10") + t("2026-11-11") + t("2026-11-12") + t("2026-11-13")) / 5));
   });
 });
 

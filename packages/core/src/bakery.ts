@@ -325,10 +325,13 @@ export function sortBread<T>(xs: readonly T[], nameOf: (x: T) => string = (x) =>
 
 /* ---------- 평일 하루 합계 범위 (2026-10-21 사장님) ----------
    월 ~ 목 평일은 하루 300 ~ 320개 안 — 같은 요일 칸(±1) · 날씨 · 예상 손님 추세로 날마다 달라지되 그 범위 안에서
-   넘으면 320, 모자라면 300 으로 빵마다 같은 비율로 줄이거나 늘림 (빵 사이 비율 · 몽블랑 5개 단위는 그대로). 10-26 계획부터 · 금요일 · 휴일은 없음 */
+   넘으면 320, 모자라면 300 으로 빵마다 같은 비율로 줄이거나 늘림 (빵 사이 비율 · 몽블랑 5개 단위는 그대로). 10-26 계획부터 · 금요일 · 휴일은 없음
+   [11-09 계획부터 없앰 — 2026-11-05 사장님] 이 범위는 생산 늘림(× 1.5 · 120% 이야기) 때 정한 것 — 평일은 270 ~ 280 쯤이 맞았으니
+   같은 요일 추세(TREND_FROM)부터는 원래대로 추세 그대로 (실제 자료 미리 셈: 월 ~ 목 새 빵 포함 약 250 ~ 275개) */
 export const WEEKDAY_BREAD_BAND: Readonly<[number, number]> = [300, 320];
-/** 그날 하루 합계 범위 (없으면 null) */
+/** 그날 하루 합계 범위 (없으면 null) — 10-26 ~ 11-08 계획의 월 ~ 목만 */
 export function breadBandOf(date: string): [number, number] | null {
+  if (date >= TREND_FROM) return null;
   return date >= BREAD_BOOST_FROM && dayKind(date) === "평일" ? [WEEKDAY_BREAD_BAND[0], WEEKDAY_BREAD_BAND[1]] : null;
 }
 
