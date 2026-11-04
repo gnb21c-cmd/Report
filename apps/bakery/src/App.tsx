@@ -7,7 +7,7 @@
    D-1 — 현장 태블릿 (…/d1/<열쇠>/, 로그인 없음): 아침 6시부터 오늘 생산 + 내일 준비 두 칸 · 날짜를 넘겨 지난 날 · 앞날도 봄 (읽기만, 2026-11-01)
    매출 금액은 어디에도 보이지 않음 (수량 · 예상 손님 수만). 규칙은 packages/core/src/bakery.ts
    ============================================================ */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   addDays,
   Board,
@@ -18,6 +18,7 @@ import {
   count,
   dayChangeAt,
   dayResult,
+  failQty,
   validFloorKey,
   displayDays,
   FINAL_LEAD,
@@ -279,8 +280,106 @@ function FinalView({ api, today, who }: { api: Api; today: string; who: string }
           </button>
         ))}
       </div>
-      <Confirm key={date} api={api} date={date} kind="final" who={who} inner />
+      {/* 생산한 날(그날 아침 6시 뒤 · 지난 날)은 생산 수량을 바꾸지 않고 생산 실패 수량을 적음 (2026-11-04 사장님 — 11-01 에 만든 '생산한 날 수량 바꾸기'를 바꿈) */}
+      {productionStarted(date, nowKst()) ? <FailEntry key={date} api={api} date={date} who={who} /> : <Confirm key={date} api={api} date={date} kind="final" who={who} inner />}
     </main>
+  );
+}
+
+/**
+ * 생산 실패 기입 — 생산한 날(그날 아침 6시 뒤 · 지난 날). 생산 수량(작업지시 확정, 없으면 자동)은 그대로 두고
+ * 생산 중 상품성이 떨어지게 구워져 판매 전에 버린 수량을 적음 → 판매를 시작한 수량 = 생산 − 실패
+ * 현장 명령서 · 보고 앱 '생산실패' 칸에 바로 (2026-11-04 사장님)
+ */
+function FailEntry({ api, date, who }: { api: Api; date: string; who: string }) {
+  const { plan, order, setOrder, err, loaded } = useDay(api, date);
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+  // 그날 생산 = 작업지시(확정, 없으면 자동) — 현장 명령서 · 보고 앱과 같은 수량
+  const rows = sortBread(orderRows(plan, order, { date: "9999-12-31", time: "00:00" }).filter((r) => (r.qty || 0) > 0));
+  const made = (name: string) => rows.find((r) => r.name === name)?.qty || 0;
+  const failed = order?.fail || {};
+  const filled = (name: string) => (edit[name] ?? "") !== "";
+  const failOf = (name: string) => (filled(name) ? Math.max(0, Math.round(Number(edit[name]) || 0)) : failed[name]?.qty || 0);
+  const save = async (names: string[], label: string) => {
+    const lines = Object.fromEntries(names.filter(filled).map((n) => [n, failOf(n)]));
+    if (!Object.keys(lines).length) return setMsg("실패 수량을 적어 주세요.");
+    const over = Object.keys(lines).filter((n) => lines[n] > made(n));
+    if (over.length) return setMsg(`생산보다 많이 적을 수 없습니다 — ${over.map((n) => `${breadLabel(n, date)} 생산 ${made(n)}개`).join(" · ")}`);
+    setBusy(label);
+    setMsg("");
+    try {
+      setOrder(await api.confirm(date, "fail", lines, who));
+      setEdit((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !(k in lines))));
+      setMsg(`${label === "all" ? "적은 빵 모두" : breadLabel(label, date)} 생산 실패 수량을 저장했습니다.`);
+    } catch (e) {
+      setMsg((e as CloudError).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  // 합계는 판매용 빵만 (키친용 모닝빵은 따로)
+  const sale = rows.filter((r) => !isKitchenBread(r.name));
+  const madeSum = sale.reduce((a, r) => a + (r.qty || 0), 0);
+  const failSum = sale.reduce((a, r) => a + failOf(r.name), 0);
+  return (
+    <section style={{ display: "grid", gap: 10 }}>
+      <section className="sticky">
+        <div className="sticky-head">
+          <b>{shortLabel(date)} 생산 실패 기입</b>
+          <span className="warn">생산한 날 — 생산 수량은 그대로</span>
+        </div>
+        <div className="sticky-sub">
+          굽다가 상품성이 떨어져 판매 전에 버린 수량을 적어 주세요 · 생산 <b>{count(madeSum, "개")}</b> − 실패 <b>{count(failSum, "개")}</b> = 판매 시작 <b>{count(madeSum - failSum, "개")}</b>
+          {rows.some((r) => isKitchenBread(r.name)) && " (키친용 모닝빵 따로)"} · 현장 명령서 · 보고 앱 '생산실패' 칸에 바로 들어감
+        </div>
+        <button className="primary big" disabled={!!busy || !rows.some((r) => filled(r.name))} onClick={() => save(rows.map((r) => r.name), "all")}>
+          {busy === "all" ? "저장 중…" : "적은 실패 수량 모두 저장"}
+        </button>
+        {msg && <p className="msg">{msg}</p>}
+      </section>
+      {err && <p className="error box">{err}</p>}
+      {loaded && !err && !rows.length && <p className="empty box">이날은 작업지시가 없습니다.</p>}
+      {rows.length > 0 && (
+        <div className="rows">
+          <div className="row head">
+            <span>제품명</span>
+            <span className="num">생산</span>
+            <span className="num">실패</span>
+            <span />
+          </div>
+          {rows.map((r) => {
+            const f = failed[r.name];
+            const v = edit[r.name];
+            const now = failOf(r.name);
+            const changed = dayChangeAt(order?.final?.[r.name], date);
+            return (
+              <div key={r.name} className={`row${f?.qty ? " done" : ""}`}>
+                <span className="name">
+                  <BreadName name={r.name} date={date} />
+                  {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 플래터용</small>}
+                  {changed && <small className="day-change"> 당일 변경 {changed}</small>}
+                  {now > 0 && <small className="muted"> 판매 시작 {Math.max(0, (r.qty || 0) - now)}개</small>}
+                </span>
+                <span className="num">{r.qty}</span>
+                <input
+                  className="num"
+                  inputMode="numeric"
+                  value={v ?? (f?.qty ? String(f.qty) : "")}
+                  placeholder="0"
+                  onChange={(e) => setEdit({ ...edit, [r.name]: e.target.value.replace(/[^0-9]/g, "") })}
+                  aria-label={`${r.name} 생산 실패 수량`}
+                />
+                <button className={f && v == null ? "ok" : "primary"} disabled={!!busy || !filled(r.name)} onClick={() => save([r.name], r.name)}>
+                  {busy === r.name ? "…" : f && v == null ? `✓ ${f.qty}` : "저장"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -373,11 +472,8 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
   const after = (d: string) => now.date > d || (now.date === d && now.time >= CONFIRM_DEADLINE);
   const late = after(due);
   // 최종 마감(3일 전 18시)이 지난 날의 잠정 확정은 효과가 없어 막음
-  // 생산날 아침 6시 뒤에도 최종은 바꿀 수 있음 — 최종 당일 갑자기 줄일 수 있어서 (2026-11-01 사장님, 예전엔 막았음)
-  //   한 번 더 묻고, 바꾼 수량이 그날 생산 기록 (현장 명령서 · 보고 앱 B 생산 · 폐기에 바로) · 줄마다 '당일 변경 HH:MM'
-  const made = kind === "final" && productionStarted(date, now);
+  // 생산한 날(그날 아침 6시 뒤)은 이 화면 대신 생산 실패 기입(FailEntry) — 2026-11-04 사장님 (11-01 ~ 11-04 에는 여기서 생산 수량을 바꿨음, 그 기록의 '당일 변경'은 그대로 보임)
   const locked = kind === "provisional" && after(addDays(date, -FINAL_LEAD));
-  const madeOk = () => !made || confirm(`${shortLabel(date)}은 이미 생산을 시작한 날입니다.\n바꾼 수량이 그날 생산 기록이 되어 현장 명령서와 보고 앱 생산 · 폐기에 바로 반영됩니다.\n바꿀까요?`);
   const done = order?.[kind] || {};
   const prov = order?.provisional || {};
   // 사장님 표 순서 (2026-10-22, core BREAD_ORDER)
@@ -398,15 +494,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
       .map(([k, q]) => `${breadLabel(k, date)} ${Number(edit[k])}개 → ${q}개`);
     const upText = up.length ? ` 만드는 단위에 맞춤: ${up.join(" · ")}` : "";
     const clear = () => setEdit((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !(k in asked))));
-    // 생산한 날 — 수량이 그대로인 줄은 저장하지 않음 (바뀐 것이 없는데 '당일 변경'만 붙지 않게)
-    const cur = (k: string) => done[k]?.qty ?? rows.find((r) => r.name === k)?.qty;
-    const lines = made ? Object.fromEntries(Object.entries(asked).filter(([k, q]) => q !== cur(k))) : asked;
-    if (!Object.keys(lines).length) {
-      clear();
-      setMsg(`수량이 그대로라 바꾸지 않았습니다.${upText}`);
-      return;
-    }
-    if (!madeOk()) return;
+    const lines = asked;
     setBusy(label);
     setMsg("");
     try {
@@ -475,9 +563,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
             {shortLabel(date)} {kind === "final" ? "최종 확정" : "잠정 확정"}
           </b>
           <span className={late ? "warn" : "muted"}>
-            {made
-              ? "생산한 날 — 바꾸면 그날 생산 기록이 바뀜 (현장 명령서 · 보고 앱)"
-              : locked
+            {locked
               ? "최종 확정 단계로 넘어간 날 — 최종 확정 탭에서"
               : late
                 ? kind === "final"
@@ -706,10 +792,11 @@ function OrderList({ rows, date, big }: { rows: OrderRow[]; date: string; big: b
   );
 }
 
-/* ---------- D-1 현장 태블릿 — 아침 6시부터: 제품명 · 오늘 생산 · 내일 생산준비 · 3 ~ 5일 뒤(잠정) 한 표 ----------
-   날짜를 넘겨 지난 날 · 앞날 수량도 봄 (읽기만 — 고치는 것은 매니저 앱, 2026-11-01 사장님) · 생산날 아침 6시 뒤 바뀐 수량에 '변경' */
-/** 태블릿 칸 — 고른 날부터 5일 (칸 이름 · 최종 여부는 오늘 기준: floorLabel · floorFinal) */
-const FLOOR_COLS = [0, 1, 2, 3, 4];
+/* ---------- D-1 현장 태블릿 — 아침 6시부터: 제품명 · 오늘 생산 · 생산실패 · 내일 생산준비 · 3일 뒤(잠정) 한 표 ----------
+   날짜를 넘겨 지난 날 · 앞날 수량도 봄 (읽기만 — 고치는 것은 매니저 앱, 2026-11-01 사장님) · 생산날 아침 6시 뒤 바뀐 수량에 '변경'
+   생산실패 = 첫 칸 날에 매니저가 적은 생산 실패 수량 (2026-11-04 사장님 — 4 · 5일 뒤 칸은 빼고 이 칸을 넣음) */
+/** 태블릿 칸 — 고른 날 · 다음 날 · 3일 뒤 (칸 이름 · 최종 여부는 오늘 기준: floorLabel · floorFinal) */
+const FLOOR_COLS = [0, 1, 2];
 /** 앞으로는 3일 뒤(최종안이 나온 날)까지 넘김 */
 const FLOOR_AHEAD = FINAL_LEAD;
 
@@ -785,6 +872,8 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
   const [cols, setCols] = useState<Map<string, number>[] | null>(null);
   // 생산날 아침 6시 뒤 바뀐 빵 (날짜마다 새 이름)
   const [chg, setChg] = useState<Set<string>[]>([]);
+  // 첫 칸 날의 생산 실패 수량 (새 이름)
+  const [fails, setFails] = useState<Map<string, number>>(new Map());
   const [err, setErr] = useState("");
   useEffect(() => {
     let live = true;
@@ -796,6 +885,7 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
         // 이름이 바뀐 빵은 새 이름 한 줄로 (11-01 인절미팥빵 · 11-02 저당팥빵이 두 줄로 나뉘지 않게 — 2026-10-25)
         setCols(all.map(({ plan, order }, i) => new Map(orderRows(plan, order, now).map((r) => [breadNewName(r.name), (fin[i] ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
         setChg(all.map(({ d, order }) => new Set(Object.entries(order?.final || {}).filter(([, l]) => dayChangeAt(l, d)).map(([n]) => breadNewName(n)))));
+        setFails(failQty(all[0].order, true));
       })
       .catch((e) => live && setErr((e as Error).message));
     return () => {
@@ -815,12 +905,13 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} (${WEEKDAY_KO[weekday(d)]})`;
   // 합계는 판매용 빵만 (키친용 모닝빵은 뺌)
   const sum = (i: number) => names.reduce((a, n) => a + (isKitchenBread(n) ? 0 : cols[i].get(n) ?? 0), 0);
+  const failSum = names.reduce((a, n) => a + (isKitchenBread(n) ? 0 : fails.get(n) ?? 0), 0);
   return (
     <div className="floor-wrap">
       <table className="floor-table">
         <thead>
           <tr className="note-row">
-            <th colSpan={FLOOR_COLS.length + 1} className="tentative-note">
+            <th colSpan={FLOOR_COLS.length + 2} className="tentative-note">
               3일 뒤 이후의 생산수량은 소폭 변경 될 수 있습니다.{chg.some((x) => x.size) ? " · '변경' = 그날 아침 6시 뒤에 바뀐 수량" : ""}
             </th>
           </tr>
@@ -829,6 +920,10 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
             <th className="num hl hl-top hl-right">
               {floorLabel(dates[0], today)}
               <small>{md(dates[0])}</small>
+            </th>
+            <th className="num fail-col">
+              생산실패
+              <small>버린 수량</small>
             </th>
             {dates.slice(1).map((d, i) => (
               <th key={d} className={`num${fin[i + 1] ? "" : " tentative"}`}>
@@ -846,6 +941,7 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
                 {isKitchenBread(n) && <small className="kitchen-tag"> 판매용 아님 · 플래터용</small>}
               </td>
               <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cell(0, n)}</td>
+              <td className="num fail-col">{fails.get(n) || ""}</td>
               {dates.slice(1).map((d, i) => (
                 <td key={d} className={`num${fin[i + 1] ? "" : " tentative"}`}>
                   {cell(i + 1, n)}
@@ -858,9 +954,10 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
           <tr>
             <td>합계</td>
             {dates.map((d, i) => (
-              <td key={d} className={`num${fin[i] ? "" : " tentative"}`}>
-                {sum(i)}
-              </td>
+              <Fragment key={d}>
+                <td className={`num${fin[i] ? "" : " tentative"}`}>{sum(i)}</td>
+                {i === 0 && <td className="num fail-col">{failSum || ""}</td>}
+              </Fragment>
             ))}
           </tr>
         </tfoot>
@@ -888,7 +985,7 @@ function Result({ api, today }: { api: Api; today: string }) {
       live = false;
     };
   }, [api, date]);
-  const sum = (k: "made" | "sold" | "half" | "waste") => (rows || []).reduce((a, r) => a + (r[k] || 0), 0);
+  const sum = (k: "made" | "sold" | "half" | "waste" | "fail") => (rows || []).reduce((a, r) => a + (r[k] || 0), 0);
   const known = (rows || []).some((r) => r.made != null);
   return (
     <main className="content">
@@ -916,6 +1013,7 @@ function Result({ api, today }: { api: Api; today: string }) {
               <tr>
                 <th>제품명</th>
                 <th className="num">생산</th>
+                <th className="num">실패</th>
                 <th className="num">판매</th>
                 <th className="num">50%</th>
                 <th className="num">폐기</th>
@@ -927,9 +1025,10 @@ function Result({ api, today }: { api: Api; today: string }) {
                 <tr key={r.name}>
                   <td>
                     <BreadName name={r.name} date={date} />
-                    {r.made != null && r.made > 0 && r.sold >= r.made && (r.soldOut || r.last) && <span className="sold-out">다 팔림{r.last ? ` ${r.last}` : ""}</span>}
+                    {r.made != null && r.made - (r.fail || 0) > 0 && r.sold >= r.made - (r.fail || 0) && (r.soldOut || r.last) && <span className="sold-out">다 팔림{r.last ? ` ${r.last}` : ""}</span>}
                   </td>
                   <td className="num">{r.made == null ? "—" : producedOf(r)}</td>
+                  <td className="num">{r.fail || ""}</td>
                   <td className="num">{r.sold}</td>
                   <td className="num">{r.half || ""}</td>
                   <td className="num">
@@ -942,6 +1041,7 @@ function Result({ api, today }: { api: Api; today: string }) {
               <tr className="sum">
                 <td>합계</td>
                 <td className="num">{known ? (rows || []).reduce((a, r) => a + (r.made == null ? 0 : producedOf(r)), 0) : "—"}</td>
+                <td className="num">{sum("fail") || ""}</td>
                 <td className="num">{sum("sold")}</td>
                 <td className="num">{sum("half")}</td>
                 <td className="num">{known ? sum("waste") : "—"}</td>

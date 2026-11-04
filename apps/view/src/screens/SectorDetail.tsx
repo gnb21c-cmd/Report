@@ -488,12 +488,16 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
       {open && sales && (
         // 마감 전 빵 숫자가 POS 영수증 어디까지인지 (2026-10-27 사장님: 19:45 ~ 48 에 판 빵이 20:00 숫자에 없었음)
         <p className="note muted">
-          POS 영수 {cafeAt ? hourMin(cafeAt) : "—"} 받음 · 마지막 빵 판매 {lastSale || "—"} · 남음 = 작업지시 − POS 판매 (빵마다 0 밑으로 안 내려감 · 작업지시에 없는 빵 · 시식 · 현장에서 바꾼 수량은 모름)
+          POS 영수 {cafeAt ? hourMin(cafeAt) : "—"} 받음 · 마지막 빵 판매 {lastSale || "—"} · 남음 = 작업지시 − 생산실패 − POS 판매 (빵마다 0 밑으로 안 내려감 · 작업지시에 없는 빵 · 시식 · 현장에서 바꾼 수량은 모름)
         </p>
       )}
       {sales && t.platter > 0 && (
         // 시그니처 플래터 — 키친용 모닝빵으로 모자라 판매 중인 우유모닝빵을 3등분해 씀 (2026-11-04 사장님) · 폐기가 아님
         <p className="note muted">우유모닝빵 {count(t.platter, "개")}는 시그니처 플래터용(키친)으로 썼어요 — 폐기에서 뺌 (총 생산 = 정가판매 + 할인판매 + {open ? "남음" : "폐기"} + 플래터용)</p>
+      )}
+      {sales && t.fail > 0 && (
+        // 생산 실패 — 생산 중 상품성이 떨어져 판매 전에 버린 것 (매니저가 생산한 날 적음, 2026-11-04 사장님)
+        <p className="note muted">생산실패 {count(t.fail, "개")} — 굽다가 상품성이 떨어져 판매 전에 버린 것 (총 생산에 들어 있고 {open ? "남음" : "폐기"}에는 없음 · 총 생산 = 정가판매 + 할인판매 + 생산실패 + {open ? "남음" : "폐기"})</p>
       )}
       {sheet && <BreadSheet date={date} rows={rows} kind={sheet} wasteLabel={wasteLabel} onClose={() => setSheet(null)} />}
     </>
@@ -502,7 +506,8 @@ function BreadCount({ board, date, doc }: { board: Board; date: string; doc: Bak
 
 /** 아래에서 올라오는 상품별 목록 — all: 생산 · 정가 · 할인 · 폐기 전체 (생산 많은 순) / waste: 폐기된 빵만 (폐기 많은 순) */
 function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; rows: BreadResult[]; kind: "all" | "waste"; wasteLabel: string; onClose: () => void }) {
-  const list = kind === "all" ? [...rows].sort((a, b) => producedOf(b) - producedOf(a) || a.name.localeCompare(b.name, "ko")) : rows.filter((r) => (r.waste || 0) > 0).sort((a, b) => b.waste! - a.waste! || a.name.localeCompare(b.name, "ko"));
+  // 폐기(남음) 목록에는 생산실패만 있는 빵도 (폐기 많은 순 → 생산실패 많은 순)
+  const list = kind === "all" ? [...rows].sort((a, b) => producedOf(b) - producedOf(a) || a.name.localeCompare(b.name, "ko")) : rows.filter((r) => (r.waste || 0) > 0 || (r.fail || 0) > 0).sort((a, b) => (b.waste || 0) - (a.waste || 0) || (b.fail || 0) - (a.fail || 0) || a.name.localeCompare(b.name, "ko"));
   const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("ko-KR"));
   const total = (f: (r: BreadResult) => number | null) => list.reduce((a, r) => a + (f(r) || 0), 0);
   const title = kind === "all" ? "상품별 생산 · 판매 · 폐기" : wasteLabel === "폐기" ? "폐기된 빵" : "남은 빵 (마감 전)";
@@ -522,6 +527,7 @@ function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; r
                 <tr>
                   <th>상품</th>
                   <th className="num">생산</th>
+                  <th className="num">생산실패</th>
                   <th className="num">정가판매</th>
                   <th className="num">할인판매</th>
                   <th className="num">{wasteLabel === "폐기" ? "폐기" : "남음"}</th>
@@ -532,9 +538,10 @@ function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; r
                   <tr key={r.name}>
                     <td>{breadLabel(r.name, date)}</td>
                     <td className="num">{n(producedOf(r))}</td>
+                    <td className="num">{r.made == null ? "—" : n(r.fail ?? 0)}</td>
                     <td className="num">{n(r.full)}</td>
                     <td className="num">{n(r.half)}</td>
-                    <td className={`num${kind === "waste" ? " strong" : ""}`}>
+                    <td className={`num${kind === "waste" && r.waste ? " strong" : ""}`}>
                       {n(r.waste)}
                       {r.platter ? <small className="muted"> +플래터 {r.platter}</small> : null}
                     </td>
@@ -545,13 +552,16 @@ function BreadSheet({ date, rows, kind, wasteLabel, onClose }: { date: string; r
                 <tr>
                   <td>합계 {list.length}종</td>
                   <td className="num">{n(total(producedOf))}</td>
+                  <td className="num">{n(total((r) => r.fail ?? 0))}</td>
                   <td className="num">{n(total((r) => r.full))}</td>
                   <td className="num">{n(total((r) => r.half))}</td>
                   <td className="num">{n(total((r) => r.waste))}</td>
                 </tr>
               </tfoot>
             </table>
-            <p className="note muted">생산 = 정가판매 + 할인판매 + {wasteLabel === "폐기" ? "폐기" : "남음"} · {wasteLabel === "폐기" ? "폐기" : "남음"} = 작업지시(확정, 없으면 자동) 수량 − 판매 · 작업지시에 없는 상품은 —</p>
+            <p className="note muted">
+              생산 = 생산실패 + 정가판매 + 할인판매 + {wasteLabel === "폐기" ? "폐기" : "남음"} · 생산실패 = 굽다가 상품성이 떨어져 판매 전에 버린 것(매니저 기입) · {wasteLabel === "폐기" ? "폐기" : "남음"} = 작업지시(확정, 없으면 자동) 수량 − 생산실패 − 판매 · 작업지시에 없는 상품은 —
+            </p>
           </div>
         )}
         <button className="ghost wide" onClick={onClose}>
@@ -585,6 +595,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
               <tr>
                 <th>상품</th>
                 <th className="num">생산</th>
+                <th className="num">생산실패</th>
                 <th className="num">정가판매</th>
                 <th className="num">할인판매</th>
                 <th className="num">{open ? "남음" : "폐기"}</th>
@@ -595,6 +606,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
                 <tr key={r.name}>
                   <td>{breadLabel(r.name, date)}</td>
                   <td className="num">{hasSales ? n(producedOf(r)) : "—"}</td>
+                  <td className={`num${r.fail ? " warn" : ""}`}>{hasSales && r.made != null ? n(r.fail ?? 0) : "—"}</td>
                   <td className="num">{hasSales ? n(r.full) : "—"}</td>
                   <td className="num">{hasSales ? n(r.half) : "—"}</td>
                   <td className={`num${r.waste && !open ? " warn" : ""}`}>
@@ -608,6 +620,7 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
               <tr>
                 <td>합계 {rows.length}종</td>
                 <td className="num">{hasSales ? n(sum((r) => producedOf(r))) : "—"}</td>
+                <td className="num">{hasSales ? n(sum((r) => (r.made == null ? null : r.fail ?? 0))) : "—"}</td>
                 <td className="num">{hasSales ? n(sum((r) => r.full)) : "—"}</td>
                 <td className="num">{hasSales ? n(sum((r) => r.half)) : "—"}</td>
                 <td className="num">{hasSales ? n(sum((r) => r.waste)) : "—"}</td>
@@ -615,8 +628,8 @@ function BreadTable({ board, date, doc }: { board: Board; date: string; doc: Bak
             </tfoot>
           </table>
           <p className="note muted">
-            생산 = 정가판매 + 할인판매 + 폐기 (현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 영수증 · 폐기 = 작업지시(확정, 없으면 자동) 수량 − 판매 (일과 중 바뀐 양은 모름, 작업지시에 없는 상품은 —)
-            {open && " · 오늘은 마감 전이라 남음 = 작업지시 수량 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
+            생산 = 생산실패 + 정가판매 + 할인판매 + 폐기 (현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신) · 생산실패 = 굽다가 상품성이 떨어져 판매 전에 버린 것(매니저가 생산한 날 기입) · 정가판매 · 할인판매(저녁 8시 30분 뒤 50%) = 영수증 · 폐기 = 작업지시(확정, 없으면 자동) 수량 − 생산실패 − 판매 (일과 중 바뀐 양은 모름, 작업지시에 없는 상품은 —)
+            {open && " · 오늘은 마감 전이라 남음 = 작업지시 수량 − 생산실패 − 지금까지 판매 (마감 뒤 폐기로 바뀜)"}
             {rows.some((r) => r.platter) && " · 우유모닝빵 '+플래터'는 시그니처 플래터용(키친)으로 쓴 개수라 폐기에서 뺌"}
             {!doc && " · 이날은 작업지시 자료가 없어 생산 · 폐기는 비어 있습니다 (작업지시 앱을 쓰기 전)"}
           </p>

@@ -97,7 +97,7 @@ describe("시그니처 플래터 — 우유모닝빵 폐기에서 플래터에 �
     const m = rows.find((r) => r.name === "우유모닝빵")!;
     expect([m.sold, m.platter, m.waste, producedOf(m)]).toEqual([21, 2, 2, 25]);
     const t = breadTotals(rows);
-    expect(t).toMatchObject({ made: 105, full: 101, half: 0, waste: 2, platter: 2 });
+    expect(t).toMatchObject({ made: 105, full: 101, half: 0, waste: 2, platter: 2, fail: 0 });
     expect(t.made).toBe(t.full + t.half + t.waste! + t.platter);
   });
   it("플래터가 키친용으로 다 덮이면 그대로 · 쓸 것이 폐기보다 많으면 폐기만큼 · 키친용을 매니저가 고쳤으면 그 수량으로", () => {

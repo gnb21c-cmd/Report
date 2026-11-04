@@ -808,6 +808,14 @@ small.rename {
   font-weight: 700;
   font-size: 18px;
 }
+/* 생산실패 칸 — 매니저가 적은 실패 수량 (빨강 · 없으면 빈칸, 2026-11-04) */
+.floor-table .fail-col {
+  color: var(--bad);
+  font-weight: 700;
+}
+.floor-table thead th.fail-col {
+  color: var(--bad);
+}
 .floor-table .chg {
   margin-left: 6px;
   font-size: 13px;

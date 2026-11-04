@@ -167,6 +167,9 @@ export interface OrderDoc {
   provisional: Record<string, OrderLine>;
   /** 3일 전 최종 확정 */
   final: Record<string, OrderLine>;
+  /** 생산 실패 — 생산 중 상품성이 떨어지게 구워져 판매 전에 버린 수량 (생산한 날 매니저가 적음, 2026-11-04 사장님)
+      판매를 시작한 수량 = 생산(최종) − 실패 · 보고 앱 '생산실패' · 현장 명령서 '생산실패' */
+  fail?: Record<string, OrderLine>;
 }
 
 /** 베이커리 생산품이 아닌 상품(NOT_BREAD — 딸기잼 · 블루베리잼)을 뺀 계획 단계 (합계도 다시) — 이미 만든 계획을 읽을 때 */
@@ -187,7 +190,7 @@ export function asPlan(x: unknown): PlanDoc | null {
 }
 export function asOrder(x: unknown): OrderDoc | null {
   const o = x as OrderDoc | null;
-  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: breadLines(o.provisional), final: breadLines(o.final) } : null;
+  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: breadLines(o.provisional), final: breadLines(o.final), ...(o.fail ? { fail: breadLines(o.fail) } : {}) } : null;
 }
 export const emptyOrder = (date: string): OrderDoc => ({ v: 2, date, provisional: {}, final: {} });
 
@@ -609,8 +612,20 @@ export function floorCopy(plan: PlanDoc | null | undefined, order: OrderDoc | nu
   const lines = (m: Record<string, OrderLine>) => Object.fromEntries(Object.entries(m).map(([k, l]) => [k, { qty: l.qty, by: "", at: l.at || "" }]));
   return {
     plan: plan ? { v: 2, date: plan.date, ...(plan.week ? { week: lite(plan.week) } : {}), ...(plan.final ? { final: lite(plan.final) } : {}) } : null,
-    order: order ? { v: 2, date: order.date, provisional: lines(order.provisional), final: lines(order.final) } : null,
+    order: order ? { v: 2, date: order.date, provisional: lines(order.provisional), final: lines(order.final), ...(order.fail ? { fail: lines(order.fail) } : {}) } : null,
   };
+}
+
+/** 그날 빵마다 생산 실패 수량 (0 은 뺌) — 이름이 바뀐 빵은 새 이름으로도 찾게 newName 을 주면 그 이름으로 묶음 */
+export function failQty(order: OrderDoc | null | undefined, newName = false): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [n, l] of Object.entries(order?.fail || {})) {
+    const q = Math.max(0, Math.round(Number(l?.qty) || 0));
+    if (!q) continue;
+    const k = newName ? breadNewName(n) : n;
+    out.set(k, (out.get(k) || 0) + q);
+  }
+  return out;
 }
 
 /* ---------- 만들 목록 ---------- */
@@ -712,12 +727,17 @@ export interface BreadResult {
   last?: string | null;
   /** 시그니처 플래터에 쓴 개수 (우유모닝빵만 · 11-05 부터) — 폐기에서 뺌 */
   platter?: number;
+  /** 생산실패 — 생산 중 실패해 판매 전에 버린 수량 (매니저가 적은 날만, 생산보다 많을 수 없음) */
+  fail?: number;
 }
 
 export function dayResult(board: Board, date: string, plan: PlanDoc | null | undefined, order: OrderDoc | null | undefined): BreadResult[] {
   // 지난 날이라 최종 확정 안 한 빵은 모두 '자동'
   const rows = orderRows(plan, order, { date: "9999-12-31", time: "00:00" });
   const made = new Map(rows.map((r) => [r.name, r.qty]));
+  // 생산 실패 — 판매를 시작한 수량 = 생산 − 실패 (2026-11-04 사장님)
+  const failed = failQty(order);
+  const failOf = (name: string) => Math.min(failed.get(name) || 0, made.get(name) ?? 0);
   // 이름이 바뀐 빵은 그날 계획 이름으로 묶어 견줌 (10-24 부터 저당팥빵으로 팔려도 11-01 까지 계획은 인절미팥빵 — breadNames.ts)
   const sold = breadSold(board, date, date);
   const halfBy = renameSum(board.report(date)?.cafe?.bakeryHalfBy || {}, date);
@@ -726,7 +746,7 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
   for (const it of plan?.week?.items || []) baseOf.set(it.name, it.base ?? it.qty);
   for (const it of plan?.final?.items || []) baseOf.set(it.name, it.base ?? it.qty);
   // 시그니처 플래터 — 키친용 모닝빵(× 3개분)으로 모자란 플래터는 판매 중인 우유모닝빵을 3등분해 씀 (11-05 부터, 2026-11-04 사장님)
-  const kitchen = kitchenQty(date) != null ? made.get(KITCHEN_BREAD) ?? 0 : null;
+  const kitchen = kitchenQty(date) != null ? (made.get(KITCHEN_BREAD) ?? 0) - failOf(KITCHEN_BREAD) : null;
   const short = kitchen == null ? 0 : Math.max(0, platterSold(board, date) - kitchen * PLATTER_PER_BREAD);
   const need = Math.ceil(short / PLATTER_PER_BREAD);
   // 키친용 모닝빵은 판매용이 아니라 결과(생산 · 판매 · 폐기)에 넣지 않음
@@ -737,10 +757,12 @@ export function dayResult(board: Board, date: string, plan: PlanDoc | null | und
       // 그날 짝을 못 찾은 반품 줄 등으로 개수가 마이너스면 판매 0 으로 (판매 · 할인 · 생산이 마이너스로 보이지 않게)
       const s = Math.max(0, sold.get(name) || 0);
       const h = Math.max(0, Math.min(s, halfBy[name] || 0));
-      const left = m == null ? null : Math.max(0, m - s);
+      // 판매를 시작한 수량 = 생산 − 생산 실패 → 남음(폐기) = 그 수량 − 판매
+      const f = m == null ? 0 : failOf(name);
+      const left = m == null ? null : Math.max(0, m - f - s);
       // 우유모닝빵 — 남은 것 중 플래터에 쓴 것은 폐기가 아님 (남은 것보다 많이는 못 씀)
       const pl = kitchen != null && left != null && breadNewName(name) === PLATTER_BREAD ? Math.min(left, need) : 0;
-      return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: left == null ? null : left - pl, soldOut: m != null && m > 0 && s >= m && h === 0, last: lastBy[name] ? lastBy[name].slice(0, 5) : null, ...(kitchen != null && breadNewName(name) === PLATTER_BREAD ? { platter: pl } : {}) };
+      return { name, made: m, base: baseOf.get(name) ?? null, sold: s, half: h, full: s - h, waste: left == null ? null : left - pl, soldOut: m != null && m - f > 0 && s >= m - f && h === 0, last: lastBy[name] ? lastBy[name].slice(0, 5) : null, ...(kitchen != null && breadNewName(name) === PLATTER_BREAD ? { platter: pl } : {}), ...(m != null && order?.fail ? { fail: f } : {}) };
     })
     .sort((a, b) => (b.made ?? b.sold) - (a.made ?? a.sold) || a.name.localeCompare(b.name, "ko"));
 }
@@ -756,17 +778,18 @@ export function lastBreadSale(by: Record<string, string> | null | undefined): st
 /** 그날 빵 하나의 생산(보고 앱 표시) = 판매 + 폐기 — 현장에서 그날 수량이 바뀔 수 있어 지시 수량 대신 (2026-10-13 사장님 지시)
     폐기 = 지시(확정 · 자동) − 판매(모자라면 0, 일과 중 바뀐 양은 모름) · 작업지시에 없는 상품은 폐기를 몰라 판매만 */
 export function producedOf(r: BreadResult): number {
-  return r.sold + (r.waste ?? 0) + (r.platter ?? 0);
+  return r.sold + (r.waste ?? 0) + (r.platter ?? 0) + (r.fail ?? 0);
 }
 
-/** 그날 합계 (B 베이커리 상세 맨 위) — 총 생산 = 정가판매 + 할인판매 + 폐기 + 플래터용(우유모닝빵, 11-05 부터). 작업지시가 없는 빵뿐이면 생산 · 폐기는 null */
-export function breadTotals(rows: BreadResult[]): { made: number | null; full: number; half: number; waste: number | null; platter: number } {
+/** 그날 합계 (B 베이커리 상세 맨 위) — 총 생산 = 정가판매 + 할인판매 + 폐기 + 플래터용(우유모닝빵, 11-05 부터) + 생산실패. 작업지시가 없는 빵뿐이면 생산 · 폐기는 null */
+export function breadTotals(rows: BreadResult[]): { made: number | null; full: number; half: number; waste: number | null; platter: number; fail: number } {
   const planned = rows.filter((r) => r.made != null);
   const full = rows.reduce((a, r) => a + r.full, 0);
   const half = rows.reduce((a, r) => a + r.half, 0);
   const platter = rows.reduce((a, r) => a + (r.platter || 0), 0);
+  const fail = rows.reduce((a, r) => a + (r.fail || 0), 0);
   const waste = planned.length ? planned.reduce((a, r) => a + (r.waste || 0), 0) : null;
-  return { made: waste == null ? null : full + half + waste + platter, full, half, waste, platter };
+  return { made: waste == null ? null : full + half + waste + platter + fail, full, half, waste, platter, fail };
 }
 
 /** 베이커리로 셈해진 상품 하나 (B 베이커리 상세 맨 아래 목록) */
@@ -882,7 +905,8 @@ export function sameGroupBefore(date: string, n = 8): string[] {
 /** 빵 하나의 그 날(date) 결과 → 한 칸 (+1 · 0 · −1). 작업지시에 없었거나 0개면 null */
 export function stepOf(r: BreadResult, date: string): number | null {
   if (!r.made) return null;
-  if (r.sold < r.made) return -1;
+  // 생산 실패(판매 전에 버린 것)는 남은 빵이 아님 — 판매를 시작한 수량과 견줌 (2026-11-04)
+  if (r.sold < r.made - (r.fail || 0)) return -1;
   if (r.last && date >= SELL_OUT_RULE_FROM) return r.last.slice(0, 5) < SELL_OUT_TARGET ? 1 : 0;
   return r.half > 0 ? 0 : 1;
 }
