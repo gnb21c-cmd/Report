@@ -696,6 +696,26 @@ small.rename {
   background: var(--surface);
   box-shadow: inset 0 -2px 0 var(--border);
 }
+/* 제품명 · 오늘 생산 · 생산실패 칸은 글자만큼만 — 오늘 생산 숫자를 빵 이름 바로 옆으로 (빵 이름은 가리지 않음, 2026-11-04 사장님) · 남는 폭은 내일 · 3일 뒤가 나눔 */
+.floor-table thead tr:last-child th:nth-child(-n + 3),
+.floor-table tbody td:nth-child(-n + 3),
+.floor-table tfoot td:nth-child(-n + 3) {
+  width: 1%;
+}
+/* 생산실패 칸도 글자만큼 — 입력 칸 · 저장이 빨간 테두리(오늘 생산) 바로 옆에 */
+.floor-table .fail-col {
+  padding-left: 18px;
+  padding-right: 18px;
+}
+.floor-table tbody td:first-child {
+  padding-right: 28px;
+}
+/* 키친용 모닝빵 '판매용 아님 · 플래터용'은 빵 이름 아래 줄로 (2026-11-04 사장님) */
+.floor-table .kitchen-tag {
+  display: block;
+  font-size: 15px;
+  line-height: 1.2;
+}
 /* 빨간 테두리 — 제품명 · 오늘 생산 칸 둘레 */
 .floor-table .hl-left {
   border-left: 3px solid #d62828;
@@ -808,6 +828,38 @@ small.rename {
   font-weight: 700;
   font-size: 18px;
 }
+/* 생산실패 적기 — 현장 명령서에서 작업자가 바로 (입력 칸 + 저장, 2026-11-04) */
+.floor-table .fail-edit {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.floor-table .fail-edit input {
+  width: 64px;
+  font-size: 22px;
+  text-align: right;
+  padding: 6px 8px;
+}
+.floor-table .fail-edit button {
+  font-size: 18px;
+  padding: 8px 12px;
+  min-width: 64px;
+}
+.floor-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--surface);
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  max-width: calc(100% - 32px);
+  z-index: 20;
+}
 /* 생산실패 칸 — 매니저가 적은 실패 수량 (빨강 · 없으면 빈칸, 2026-11-04) */
 .floor-table .fail-col {
   color: var(--bad);
@@ -877,6 +929,35 @@ p.small {
   }
   .floor-table td.today {
     font-size: 1.2em;
+  }
+  .floor-table .kitchen-tag {
+    font-size: 11px;
+  }
+  .floor-table .fail-col {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .floor-table tbody td:first-child {
+    padding-right: 12px;
+  }
+  /* 휴대폰(근무자 화면) — 생산실패 입력 칸 · 저장을 위아래로 작게 (표가 옆으로 넘치지 않게) */
+  .floor-table .fail-edit {
+    flex-direction: column;
+    gap: 4px;
+    align-items: stretch;
+  }
+  .floor-table .fail-edit input {
+    width: 48px;
+    font-size: 16px;
+    padding: 4px 6px;
+  }
+  .floor-table .fail-edit button {
+    font-size: 13px;
+    padding: 4px 6px;
+    min-width: 48px;
+  }
+  .floor-toast {
+    font-size: 15px;
   }
 }
 .event-card .ev-today {

@@ -17,11 +17,14 @@ import {
   CONFIRM_DEADLINE,
   count,
   dayChangeAt,
+  dayChanged,
   dayResult,
+  failOpen,
   failQty,
   validFloorKey,
   displayDays,
   FINAL_LEAD,
+  FAIL_BY_FLOOR,
   isKitchenBread,
   KITCHEN_BREAD,
   KITCHEN_QTY,
@@ -319,6 +322,8 @@ function FailEntry({ api, date, who }: { api: Api; date: string; who: string }) 
       setBusy(null);
     }
   };
+  // '당일 변경' = 생산날 아침 6시 뒤 수량이 최종안과 달라진 빵만
+  const changedAt = dayChanged(plan, order, date);
   // 합계는 판매용 빵만 (키친용 모닝빵은 따로)
   const sale = rows.filter((r) => !isKitchenBread(r.name));
   const madeSum = sale.reduce((a, r) => a + (r.qty || 0), 0);
@@ -353,7 +358,7 @@ function FailEntry({ api, date, who }: { api: Api; date: string; who: string }) 
             const f = failed[r.name];
             const v = edit[r.name];
             const now = failOf(r.name);
-            const changed = dayChangeAt(order?.final?.[r.name], date);
+            const changed = changedAt.get(r.name);
             return (
               <div key={r.name} className={`row${f?.qty ? " done" : ""}`}>
                 <span className="name">
@@ -361,6 +366,7 @@ function FailEntry({ api, date, who }: { api: Api; date: string; who: string }) 
                   {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 플래터용</small>}
                   {changed && <small className="day-change"> 당일 변경 {changed}</small>}
                   {now > 0 && <small className="muted"> 판매 시작 {Math.max(0, (r.qty || 0) - now)}개</small>}
+                  {f?.by === FAIL_BY_FLOOR && v == null && <small className="muted"> · 현장에서 적음 {dayChangeAt(f, date) || ""}</small>}
                 </span>
                 <span className="num">{r.qty}</span>
                 <input
@@ -860,13 +866,14 @@ function Floor({ api, onBack }: { api: Api; onBack?: () => void }) {
         </button>
       </div>
       {shift !== 0 && <p className="floor-other">{shift < 0 ? `지난 날 (${shortLabel(base)}) 수량을 보는 중입니다` : `${shortLabel(base)} 부터 보는 중입니다`} — 오늘 생산은 [오늘로]</p>}
-      <FloorTable key={`${base}-${tick}`} api={api} start={base} today={d0} />
+      {/* 5분마다 숫자만 새로 받음 — 표를 다시 그리지 않아 적던 생산실패 수량이 지워지지 않게 */}
+      <FloorTable key={base} api={api} start={base} today={d0} tick={tick} />
     </div>
   );
 }
 
-/** start = 첫 칸 날짜(고른 날) · today = 오늘 (칸 이름 · 최종 여부 기준) */
-function FloorTable({ api, start, today }: { api: Api; start: string; today: string }) {
+/** start = 첫 칸 날짜(고른 날) · today = 오늘 (칸 이름 · 최종 여부 기준) · tick = 새로 받기 */
+function FloorTable({ api, start, today, tick }: { api: Api; start: string; today: string; tick: number }) {
   const dates = FLOOR_COLS.map((off) => addDays(start, off));
   const fin = dates.map((d) => floorFinal(d, today));
   const [cols, setCols] = useState<Map<string, number>[] | null>(null);
@@ -874,6 +881,18 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
   const [chg, setChg] = useState<Set<string>[]>([]);
   // 첫 칸 날의 생산 실패 수량 (새 이름)
   const [fails, setFails] = useState<Map<string, number>>(new Map());
+  // 첫 칸 날 계획 이름 (새 이름 → 그날 이름 — 기입함에는 그날 이름으로 적음)
+  const [orig0, setOrig0] = useState<Map<string, string>>(new Map());
+  // 생산실패 적기 — 생산한 작업자가 현장에서 바로 (2026-11-04 사장님) · 그날 아침 6시 뒤 ~ 다음 날
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState("");
+  const [toast, setToast] = useState("");
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const canFail = !!api.saveFail && failOpen(dates[0], nowKst());
   const [err, setErr] = useState("");
   useEffect(() => {
     let live = true;
@@ -884,14 +903,32 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
         // 오늘 · 내일 · 지난 날 = 만들(만든) 수량, 3 ~ 5일 뒤 = 지금까지 정해진 수량(없으면 주간 계획 수량)
         // 이름이 바뀐 빵은 새 이름 한 줄로 (11-01 인절미팥빵 · 11-02 저당팥빵이 두 줄로 나뉘지 않게 — 2026-10-25)
         setCols(all.map(({ plan, order }, i) => new Map(orderRows(plan, order, now).map((r) => [breadNewName(r.name), (fin[i] ? r.qty : (r.qty ?? r.week)) ?? 0]).filter(([, q]) => (q as number) > 0) as [string, number][])));
-        setChg(all.map(({ d, order }) => new Set(Object.entries(order?.final || {}).filter(([, l]) => dayChangeAt(l, d)).map(([n]) => breadNewName(n)))));
+        // '변경' = 생산날 아침 6시 뒤 수량이 최종안과 달라진 빵만 (같은 수량 일괄 확정은 아님)
+        setChg(all.map(({ d, plan, order }) => new Set([...dayChanged(plan, order, d).keys()].map(breadNewName))));
         setFails(failQty(all[0].order, true));
+        setOrig0(new Map(orderRows(all[0].plan, all[0].order, now).map((r) => [breadNewName(r.name), r.name])));
       })
       .catch((e) => live && setErr((e as Error).message));
     return () => {
       live = false;
     };
-  }, [api, start, today]);
+  }, [api, start, today, tick]);
+  const saveFail = async (n: string) => {
+    const q = Math.max(0, Math.round(Number(edit[n]) || 0));
+    const made = cols?.[0].get(n) ?? 0;
+    if (q > made) return setToast(`${n} — 오늘 생산 ${made}개보다 많이 적을 수 없습니다`);
+    setBusy(n);
+    try {
+      const o = await api.saveFail!(dates[0], orig0.get(n) ?? n, q);
+      setFails(failQty(o, true));
+      setEdit(({ [n]: _, ...rest }) => rest);
+      setToast(`${n} 생산실패 ${q}개 저장했습니다`);
+    } catch (e) {
+      setToast((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
   if (err) return <p className="error box floor-msg">{err}</p>;
   if (!cols) return <p className="muted center">불러오는 중…</p>;
   const names = sortBread([...new Set(cols.flatMap((m) => [...m.keys()]))], (n) => n);
@@ -923,7 +960,7 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
             </th>
             <th className="num fail-col">
               생산실패
-              <small>버린 수량</small>
+              <small>{canFail ? "버린 수량 적고 저장" : "버린 수량"}</small>
             </th>
             {dates.slice(1).map((d, i) => (
               <th key={d} className={`num${fin[i + 1] ? "" : " tentative"}`}>
@@ -941,7 +978,24 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
                 {isKitchenBread(n) && <small className="kitchen-tag"> 판매용 아님 · 플래터용</small>}
               </td>
               <td className={`num today hl hl-right${r === names.length - 1 ? " hl-bottom" : ""}`}>{cell(0, n)}</td>
-              <td className="num fail-col">{fails.get(n) || ""}</td>
+              <td className="num fail-col">
+                {canFail && (cols[0].get(n) ?? 0) > 0 ? (
+                  <span className="fail-edit">
+                    <input
+                      inputMode="numeric"
+                      value={edit[n] ?? (fails.get(n) ? String(fails.get(n)) : "")}
+                      placeholder="0"
+                      onChange={(e) => setEdit({ ...edit, [n]: e.target.value.replace(/[^0-9]/g, "") })}
+                      aria-label={`${n} 생산실패 수량`}
+                    />
+                    <button className={fails.has(n) && edit[n] == null ? "ok" : "primary"} disabled={!!busy || (edit[n] ?? "") === ""} onClick={() => saveFail(n)}>
+                      {busy === n ? "…" : fails.has(n) && edit[n] == null ? "✓" : "저장"}
+                    </button>
+                  </span>
+                ) : (
+                  fails.get(n) || ""
+                )}
+              </td>
               {dates.slice(1).map((d, i) => (
                 <td key={d} className={`num${fin[i + 1] ? "" : " tentative"}`}>
                   {cell(i + 1, n)}
@@ -962,6 +1016,11 @@ function FloorTable({ api, start, today }: { api: Api; start: string; today: str
           </tr>
         </tfoot>
       </table>
+      {toast && (
+        <div className="floor-toast" role="status">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
