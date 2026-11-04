@@ -31,6 +31,10 @@ export function breadNameOn(name: string, date: string): string {
   return r ? (date >= r.from ? r.to : r.old) : name;
 }
 
+/** 이름이 바뀐 빵인지 (옛 · 새 · 다른 이름) — POS 에서 새 이름이 상품 분류표에 없어 기타로 찍혀도 베이커리로 (rules.ts etcMove, 2026-11-04 사장님:
+ *  판매코드는 같은데 이름만 바뀜 — 10-28 ~ 11-03 팥앙금샌드 84개가 기타로 저장돼 빵 판매에서 빠졌었음) */
+export const isRenamedBread = (name: string): boolean => RENAME_OF.has(breadKey(name || ""));
+
 /** 새 이름 (날짜와 상관없이 — 순서 · 올림 단위 · 같은 요일 칸을 찾을 때) */
 export const breadNewName = (name: string): string => RENAME_OF.get(breadKey(name))?.to ?? name;
 

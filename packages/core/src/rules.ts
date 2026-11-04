@@ -8,6 +8,7 @@
    - 카페아스타나 방문인원 = 음료·맥주 잔 수 × 0.96 (두 잔 마시는 사람을 감안). 한 팀(영수증)의 인원 = 그 팀의 잔 수
    - 1인 평균 소비금액 = 총매출 ÷ 방문인원
    ============================================================ */
+import { isRenamedBread } from "./breadNames";
 import { weekday } from "./dates";
 import { EXTRA_HOLIDAYS, HOLIDAYS } from "./holidays";
 import { currentSettings } from "./settings";
@@ -122,6 +123,7 @@ export function isKidsCoupon(line: Pick<SaleLine, "name" | "net">): boolean {
 /* ---------- 기타로 잡히던 상품 옮기기 (2026-10-06 사장님 기준) ----------
    카페: 생맥주(C3 필스너 · C5 바이젠 · C7 페일에일) · 상품권 판매 → 바리스타, 폭립할인(−) → 키친
          원두 · 드립백 · 콜드브루 원액('[원두200g]…' · '[드립백]…' · '[원액500ml]…' — 잔은 아님) → 바리스타, 흑미로만든수수부꾸미(빵) → 베이커리 (2026-10-14)
+         이름이 바뀐 빵(팥앙금샌드 · 저당팥빵 … breadNames.ts) → 베이커리 (2026-11-04 — 새 이름이 분류표에 없어 기타로 찍혔음)
          상품권(1만원권) 사용 '[종이쿠폰]만원권'(−) → 그날 바리스타에서 뺌 (giftUse — 판 날 이미 바리스타 매출로 잡았으므로)
    키즈: 음료(쥬스 · 우유 · 생수) · 자판기상품 → 자판기 매출, 열쇠 분실 · 인원추가 → 키즈입장료
          퇴장 지연(이름이 '02.51-03.00' 같은 시각 칸인 것 포함) → 기타 상자 안 '퇴장지연페널티' 칸 (2026-10-25 사장님 — 예전엔 키즈입장료)
@@ -134,6 +136,7 @@ export function etcMove(store: StoreId, name: string): EtcMove | null {
     if (/상품권/.test(n)) return "바리스타";
     if (/\[(원두|드립백|원액)/.test(n)) return "바리스타";
     if (/수수부꾸미/.test(n)) return "베이커리";
+    if (isRenamedBread(n)) return "베이커리";
     if (/폭립\s*할인/.test(n)) return "키친";
     return null;
   }

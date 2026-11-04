@@ -598,10 +598,10 @@ describe("베이커리 결과 보고 (B 베이커리 상세) · 생산일 잠금
       { name: "딸기빵", made: null, base: null, sold: 3, half: 0, full: 3, waste: null, soldOut: false }, // 작업지시 없음 — 폐기 모름
     ];
     const t = breadTotals(rows);
-    expect(t).toEqual({ made: 76, full: 68, half: 6, waste: 2 });
+    expect(t).toEqual({ made: 76, full: 68, half: 6, waste: 2, platter: 0, fail: 0 });
     expect(t.made).toBe(t.full + t.half + t.waste!);
     expect(rows.map(producedOf)).toEqual([50, 23, 3]);
-    expect(breadTotals([{ name: "x", made: null, base: null, sold: 3, half: 1, full: 2, waste: null, soldOut: false }])).toEqual({ made: null, full: 2, half: 1, waste: null });
+    expect(breadTotals([{ name: "x", made: null, base: null, sold: 3, half: 1, full: 2, waste: null, soldOut: false }])).toEqual({ made: null, full: 2, half: 1, waste: null, platter: 0, fail: 0 });
   });
   it("그날 아침 6시(현장 시작)부터는 그날 최종 수량을 못 바꿈 — 현장에 지시한 수량이 그날 생산 기록", () => {
     expect(productionStarted("2026-10-08", { date: "2026-10-08", time: "05:59" })).toBe(false);
@@ -631,7 +631,7 @@ describe("베이커리 기본 기준 (2026-10-13 사장님) — 그날 만든 �
     const r = day("2026-10-13", 100, [["소금빵", 18], ["크루아상", 20], ["시나몬롤", 21]]);
     r.cafe!.bakeryHalfBy = { 소금빵: 3 };
     const t = breadTotals(dayResult(new Board([r]), "2026-10-13", plan, null));
-    expect(t).toEqual({ made: 61, full: 56, half: 3, waste: 2 });
+    expect(t).toEqual({ made: 61, full: 56, half: 3, waste: 2, platter: 0, fail: 0 });
     expect(t.made).toBe(t.full + t.half + t.waste!);
   });
 });
@@ -646,7 +646,7 @@ describe("그날 개수가 마이너스인 빵(짝 못 찾은 반품 등) — �
   it("반품만 잡힌 빵은 판매 0 · 할인 0 · 남음 = 지시 수량", () => {
     expect(rows.find((x) => x.name === "크루아상")).toMatchObject({ sold: 0, half: 0, full: 0, waste: 10 });
     const t = breadTotals(rows);
-    expect(t).toEqual({ made: 30, full: 5, half: 0, waste: 25 });
+    expect(t).toEqual({ made: 30, full: 5, half: 0, waste: 25, platter: 0, fail: 0 });
   });
   it("상품 목록의 그날 · 4주 판매도 마이너스로 안 셈", () => {
     const x = bakeryProducts(b, "2026-10-13", plan, null).find((p) => p.name === "크루아상")!;

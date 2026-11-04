@@ -4,7 +4,7 @@
    - 다음 주 잠정 확정: 빵 × 월 ~ 일 표 한 장
    폰의 '공유하기'(navigator.share files)로 카톡을 고름. 안 되는 기기는 그림 파일을 내려받음
    ============================================================ */
-import { shortLabel, weekday, WEEKDAY_KO } from "@report/core";
+import { isKitchenBread, shortLabel, weekday, WEEKDAY_KO } from "@report/core";
 import qrcode from "qrcode-generator";
 
 const FONT = `system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif`;
@@ -50,7 +50,8 @@ export function finalImage(date: string, rows: ImgRow[], who: string): Promise<B
   font(g, 46, true);
   g.fillStyle = C.ink;
   g.fillText(`${shortLabel(date)} 최종 생산 지시`, PAD, 76);
-  const total = rows.reduce((a, r) => a + r.qty, 0);
+  // 키친용 모닝빵은 판매용이 아니라 합계에 안 넣음 (2026-11-04)
+  const total = rows.reduce((a, r) => a + (isKitchenBread(r.name) ? 0 : r.qty), 0);
   font(g, 28);
   g.fillStyle = C.sub;
   g.fillText(`총 ${total.toLocaleString("ko-KR")}개 · ${rows.length}종 · 확정 ${who}`, PAD, 130);
@@ -62,7 +63,7 @@ export function finalImage(date: string, rows: ImgRow[], who: string): Promise<B
     }
     font(g, 34, true);
     g.fillStyle = C.ink;
-    g.fillText(fit(g, r.name + (r.pending ? " •" : ""), W - 2 * PAD - 220), PAD, y + RH / 2);
+    g.fillText(fit(g, r.name + (isKitchenBread(r.name) ? " (판매용 아님)" : "") + (r.pending ? " •" : ""), W - 2 * PAD - 220), PAD, y + RH / 2);
     g.textAlign = "right";
     g.fillStyle = r.pending ? C.wait : C.ink;
     g.fillText(`${r.qty}개`, W - PAD, y + RH / 2);
@@ -127,7 +128,7 @@ export function weekImage(dates: string[], names: string[], qty: (date: string, 
     }
     font(g, 28, true);
     g.fillStyle = C.ink;
-    g.fillText(fit(g, n, nameW - 16), PAD, y + RH / 2);
+    g.fillText(fit(g, isKitchenBread(n) ? `${n} (판매용 아님)` : n, nameW - 16), PAD, y + RH / 2);
     g.textAlign = "center";
     dates.forEach((d, i) => {
       const q = qty(d, n);
@@ -135,7 +136,7 @@ export function weekImage(dates: string[], names: string[], qty: (date: string, 
       font(g, 28, !!q && !q.pending);
       g.fillStyle = q?.pending ? C.wait : C.ink;
       g.fillText(q && q.qty ? `${q.qty}${q.pending ? "•" : ""}` : "—", x, y + RH / 2);
-      if (q) totals[i] += q.qty;
+      if (q && !isKitchenBread(n)) totals[i] += q.qty;
       if (q?.pending) anyPending = true;
     });
     g.textAlign = "left";

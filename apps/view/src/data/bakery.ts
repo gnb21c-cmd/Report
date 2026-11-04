@@ -1,6 +1,6 @@
 /* ============================================================
    베이커리 작업지시를 보고 앱(B)에서 읽기 — 그날 계획(plans) · 매니저 확정(orders)
-   D(매니저)가 확정한 그날 수량 = 그날 생산 기록 (생산날 아침 6시부터는 못 바꿈)
+   D(매니저)가 확정한 그날 수량 = 그날 생산 기록 (생산날 아침 6시부터는 못 바꾸고 생산 실패 수량만 적음 — 2026-11-04)
    → 다음 날 아침 영수증이 들어오면 베이커리 상세에서 빵별 생산 · 정가판매 · 할인판매 · 폐기 (core dayResult · breadTotals)
    체험판은 작업지시 문서가 없으므로 그날(없으면 마지막 날) 판매로 가짜 수량을 만듦
    ============================================================ */
@@ -14,12 +14,13 @@ export type BakeryDoc = { plan: PlanDoc | null; order: OrderDoc | null };
 function demoDoc(board: Board, date: string): BakeryDoc | null {
   const from = board.report(date)?.cafe ? date : board.latest();
   if (!from) return null;
-  // 체험판에서도 보이게: 두 번째 빵은 지시보다 더 팔림 · 마지막 상품은 작업지시에 없음
+  // 체험판에서도 보이게: 두 번째 빵은 지시보다 더 팔림 · 마지막 상품은 작업지시에 없음 · 첫 빵은 생산 실패 1개(생산실패)
   const sold = board.products(from, from, "베이커리").filter((p) => !NOT_BREAD.has(p.name) && p.qty > 0);
   const items = sold.slice(0, -1).map((p, i) => ({ name: p.name, qty: i === 1 ? Math.max(1, p.qty - 2) : p.qty + (i % 3) + 1 }));
   if (!items.length) return null;
   const total = items.reduce((a, i) => a + i.qty, 0);
-  return { plan: { v: 2, date, final: { madeOn: date, asOf: date, kind: "평일", visitors: 0, weather: "", total, items } as any }, order: null };
+  const fail = { [items[0].name]: { qty: 1, by: "체험", at: `${date}T03:00:00Z` } };
+  return { plan: { v: 2, date, final: { madeOn: date, asOf: date, kind: "평일", visitors: 0, weather: "", total, items } as any }, order: { v: 2, date, provisional: {}, final: {}, fail } };
 }
 
 /** 그날 작업지시 문서 — undefined = 받는 중, null = 없음 */

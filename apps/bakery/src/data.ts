@@ -7,6 +7,8 @@
 import { addDays, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, floorCopy, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, isEventDonkatsu, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
 
 export type Kind = "provisional" | "final";
+/** 저장 종류 — 잠정 · 최종 확정 + 생산 실패(생산한 날 상품성이 떨어져 버린 수량, 2026-11-04 사장님) */
+export type SaveKind = Kind | "fail";
 
 export interface Api {
   kind: "cloud" | "demo";
@@ -20,8 +22,8 @@ export interface Api {
   isAdmin?(): Promise<boolean>;
   /** 그날 카페 실적 (빵 판매 · 50% 할인) — 매출 금액은 화면에 쓰지 않음 */
   report(date: string): Promise<DayReport | null>;
-  /** 빵 몇 개를 잠정(provisional) 또는 최종(final) 확정 — 있던 확정에 더해 씀 */
-  confirm(date: string, kind: Kind, lines: Record<string, number>, by: string): Promise<OrderDoc>;
+  /** 빵 몇 개를 잠정(provisional) 또는 최종(final) 확정 · 생산 실패(fail) 수량 — 있던 줄에 더해 씀 */
+  confirm(date: string, kind: SaveKind, lines: Record<string, number>, by: string): Promise<OrderDoc>;
 }
 
 const env = { apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined };
@@ -185,7 +187,7 @@ export function cloudApi(board: string, auth: boolean): Api {
     },
     async confirm(date, kind, lines, by) {
       const doc = asOrder(await readJson<OrderDoc>(board, "orders", date, true)) || emptyOrder(date);
-      doc[kind] = put(doc[kind], lines, by);
+      doc[kind] = put(doc[kind] || {}, lines, by);
       await patchJson(`${docs()}/boards/${board}/orders/${date}`, date, doc);
       // 현장 태블릿 복사본도 (수량 · 상태만, 태블릿 키를 정한 뒤부터)
       const fk = await this.floorKey!();
@@ -347,7 +349,7 @@ export function demoApi(): Api {
     },
     async confirm(date, kind, lines, by) {
       const doc = orders.get(date) || emptyOrder(date);
-      doc[kind] = put(doc[kind], lines, by);
+      doc[kind] = put(doc[kind] || {}, lines, by);
       orders.set(date, doc);
       save();
       return doc;

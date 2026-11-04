@@ -25,6 +25,10 @@ import {
   roundUpUnit,
   snapUnit,
   sortBread,
+  breadSold,
+  buildStorePart,
+  etcMove,
+  producedOf,
   type DayReport,
   type OrderDoc,
   type PlanDoc,
@@ -293,5 +297,47 @@ describe("명란소금빵 — 11-02 계획부터 · 처음 4주는 그날 소보
     expect(newBreadEarly(board, "명란소금빵", "2026-11-20")).toBe(false); // 28일
     const w = makeWeek(board, {}, DEFAULT_LEARNED, "2026-11-26", "2026-11-25");
     for (const x of w) expect(x.week.items.find((i) => i.name === "명란소금빵")).toBeDefined();
+  });
+});
+
+describe("이름이 바뀐 빵이 POS 에서 기타로 찍혀도 베이커리로 (2026-11-04 사장님 — 판매코드는 같은데 이름만 바뀜)", () => {
+  /* 실제: 10-28 부터 POS 이름이 '팥앙금샌드' 로 바뀌었는데 상품 분류표에 없어 기타로 저장 → 10-28 ~ 11-03 7일 84개가 빵 판매에서 빠지고
+     보고 앱에 '고소한옛날맘모스 (변경명칭:팥앙금샌드) 생산 16 · 판매 0 · 폐기 16', 그 매출은 기타로 감 */
+  const etcDay = (date: string, mammoth: number): DayReport => {
+    const r = day(date, 100, [["소금빵", 30]]);
+    r.cafe!.products.push(["팥앙금샌드", "기타", mammoth, mammoth * 3500]);
+    r.cafe!.sectors.베이커리 = 30 * 4000;
+    r.cafe!.sectors.기타 = mammoth * 3500;
+    return r;
+  };
+  it("옮기는 규칙 — 바뀐 이름 · 옛 이름 · 다른 이름 모두 베이커리 (띄어쓰기 상관없음) · 다른 기타는 그대로", () => {
+    for (const n of ["팥앙금샌드", "팥앙금 샌드", "고소한옛날맘모스", "맘모스", "팥앙금빵", "저당팥빵", "인절미팥빵"]) expect(etcMove("cafe", n)).toBe("베이커리");
+    expect(etcMove("cafe", "테이크아웃")).toBeNull();
+    expect(etcMove("cafe", "딸기잼")).toBeNull();
+  });
+  it("이미 기타로 저장된 날도 볼 때 베이커리 — 베이커리 매출 · 빵 판매 · 결과(판매 · 폐기)", () => {
+    const b = new Board([etcDay("2026-10-31", 15)]);
+    const m = b.day("2026-10-31");
+    expect(m.box.베이커리).toBe(30 * 4000 + 15 * 3500);
+    expect(m.box.기타).toBe(0);
+    // 11-01 까지 계획은 옛 이름 → 판매도 옛 이름으로 묶임
+    expect(breadSold(b, "2026-10-31", "2026-10-31").get("고소한옛날맘모스")).toBe(15);
+    const st = { madeOn: "2026-10-28", asOf: "2026-10-27", kind: "휴일" as const, visitors: 0, weather: "", total: 16 };
+    const plan: PlanDoc = { v: 2, date: "2026-10-31", final: { ...st, items: [{ name: "고소한옛날맘모스", qty: 16, base: 16 }] } };
+    const r = dayResult(b, "2026-10-31", plan, null).find((x) => x.name === "고소한옛날맘모스")!;
+    expect([producedOf(r), r.sold, r.waste]).toEqual([16, 15, 1]);
+    // 11-02 부터 계획은 새 이름
+    expect(breadSold(new Board([etcDay("2026-11-03", 5)]), "2026-11-03", "2026-11-03").get("팥앙금샌드")).toBe(5);
+  });
+  it("새로 올리는 날 — 분류표에 없는 바뀐 이름도 처음부터 베이커리로 저장", () => {
+    const date = "2026-11-04";
+    const part = buildStorePart({
+      store: "cafe", date, file: "c.xls",
+      sheet: { from: date, to: date, lines: [{ pos: "01", receipt: "0001", refund: false, time: "12:00:00", name: "팥앙금샌드", qty: 2, gross: 7000, discount: 0, net: 7000 }], sheetNet: null } as any,
+      sectorOf: () => "기타",
+    }).part;
+    expect(part.products.find((p) => p[0] === "팥앙금샌드")![1]).toBe("베이커리");
+    expect(part.sectors.베이커리).toBe(7000);
+    expect(part.sectors.기타).toBe(0);
   });
 });
