@@ -12,7 +12,7 @@
    생산 = 최종 수량, 폐기 = 생산 − 판매(정가 + 50% 할인). 그날 아침 6시(productionStarted) 뒤에도 매니저가 바꿀 수 있음 — 최종 당일 갑자기 줄일 수 있어서 (2026-11-01 사장님, 바꾼 수량이 그날 생산 기록 · dayChangeAt)
    보고 앱(B)은 마감일의 plans · orders 를 그날 생산 기록으로 읽어 영수증 판매와 맞춤 (dayResult · breadTotals)
    ============================================================ */
-import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, renameLast, renameSum } from "./breadNames";
+import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, isDiscontinued, renameLast, renameSum } from "./breadNames";
 import { addDays, dayRange, weekday, WEEKDAY_KO } from "./dates";
 import { TREND_FROM, trendDay, trendPastDays, trendTrust, type Trust } from "./breadTrend";
 import { bandRange, breadPlan, dayKind, forecastVisitors, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
@@ -184,25 +184,26 @@ export interface OrderDoc {
   fail?: Record<string, OrderLine>;
 }
 
-/** 베이커리 생산품이 아닌 상품(NOT_BREAD — 딸기잼 · 블루베리잼)을 뺀 계획 단계 (합계도 다시) — 이미 만든 계획을 읽을 때 */
-function breadOnly(st: PlanStep | undefined): PlanStep | undefined {
-  if (!st || !st.items?.some((i) => NOT_BREAD.has(i.name))) return st;
-  const items = st.items.filter((i) => !NOT_BREAD.has(i.name));
+/** 베이커리 생산품이 아닌 상품(NOT_BREAD — 딸기잼 · 블루베리잼)과 그날 단종된 빵(isDiscontinued)을 뺀 계획 단계 (합계도 다시) — 이미 만든 계획을 읽을 때 */
+function breadOnly(st: PlanStep | undefined, date: string): PlanStep | undefined {
+  const out = (n: string) => NOT_BREAD.has(n) || isDiscontinued(n, date);
+  if (!st || !st.items?.some((i) => out(i.name))) return st;
+  const items = st.items.filter((i) => !out(i.name));
   return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
-const breadLines = (m: Record<string, OrderLine> | undefined) => Object.fromEntries(Object.entries(m || {}).filter(([n]) => !NOT_BREAD.has(n)));
+const breadLines = (m: Record<string, OrderLine> | undefined, date: string) => Object.fromEntries(Object.entries(m || {}).filter(([n]) => !NOT_BREAD.has(n) && !isDiscontinued(n, date)));
 
-/** 클라우드 문서 → 계획 (예전 모양 v1 은 버림). 생산품이 아닌 상품은 여기서 뺌 — 매니저 앱 · 현장 태블릿 · 보고 앱 · 계획 작업이 모두 이렇게 읽음 */
+/** 클라우드 문서 → 계획 (예전 모양 v1 은 버림). 생산품이 아닌 상품 · 그날 단종된 빵은 여기서 뺌 — 매니저 앱 · 현장 태블릿 · 보고 앱 · 계획 작업이 모두 이렇게 읽음 */
 export function asPlan(x: unknown): PlanDoc | null {
   const o = x as PlanDoc | null;
   if (!(o && o.v === 2 && typeof o.date === "string")) return null;
-  const week = breadOnly(o.week);
-  const final = breadOnly(o.final);
+  const week = breadOnly(o.week, o.date);
+  const final = breadOnly(o.final, o.date);
   return week === o.week && final === o.final ? o : { ...o, ...(week ? { week } : {}), ...(final ? { final } : {}) };
 }
 export function asOrder(x: unknown): OrderDoc | null {
   const o = x as OrderDoc | null;
-  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: breadLines(o.provisional), final: breadLines(o.final), ...(o.fail ? { fail: breadLines(o.fail) } : {}) } : null;
+  return o && o.v === 2 && typeof o.date === "string" ? { ...o, provisional: breadLines(o.provisional, o.date), final: breadLines(o.final, o.date), ...(o.fail ? { fail: breadLines(o.fail, o.date) } : {}) } : null;
 }
 export const emptyOrder = (date: string): OrderDoc => ({ v: 2, date, provisional: {}, final: {} });
 

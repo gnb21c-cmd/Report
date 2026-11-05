@@ -12,7 +12,7 @@
    - 신뢰도: 지난 4주 실적이 작년 추세선에 고르게 맞는지 + (예보가 있으면) 그날 예보 최고기온이 지난 4주 같은 요일보다 크게 다른지
      — 날씨가 급격히 추워지거나 더워지면 지난 실적 · 작년 추세로 센 수치를 덜 믿을 수 있어 매니저가 보고 조정
    ============================================================ */
-import { breadSold } from "./breadNames";
+import { breadSold, isDiscontinued } from "./breadNames";
 import { addDays, dayRange, weekday } from "./dates";
 import { dayKind } from "./forecast";
 import type { Board } from "./metrics";
@@ -129,7 +129,8 @@ export function trendDay(board: Board, asOf: string, today: string, date: string
   const first = new Map<string, string>();
   for (const d of dayRange(addDays(asOf, -(FIRST_LOOKBACK - 1)), asOf)) for (const n of soldOn(board, d, date).keys()) if (!first.has(n)) first.set(n, d);
   const isNew = (n: string) => (first.get(n) ?? asOf) > addDays(asOf, -NEW_BREAD_DAYS);
-  const names = [...active].sort((a, b) => a.localeCompare(b, "ko"));
+  // 그날 단종된 빵은 뺌 (초코바게트 11-05 · 감계무량샌드위치 11-08 까지 — breadNames.ts DISCONTINUED) → 하루 목표로 다른 빵이 채움
+  const names = [...active].filter((n) => !isDiscontinued(n, date)).sort((a, b) => a.localeCompare(b, "ko"));
   const items = names
     .filter((n) => !isNew(n))
     .map((name) => ({ name, raw: past.length ? (past.reduce((a, p) => a + (soldOn(board, p, date).get(name) || 0), 0) / past.length) * ratio : 0 }));
