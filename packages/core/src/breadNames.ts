@@ -25,6 +25,18 @@ export const breadKey = (n: string) => n.replace(/\s+/g, "");
 const RENAME_OF = new Map<string, BreadRename>();
 for (const r of BREAD_RENAME) for (const n of [r.old, r.to, ...(r.also || [])]) RENAME_OF.set(breadKey(n), r);
 
+/* ---------- 단종 빵 (2026-11-05 매니저 요청 · 사장님 전달) ----------
+   마지막으로 만드는 날까지만 — 그 뒤 날짜의 계획 · 확정 · 추세 · 현장 표 · 매니저 앱 · 두 계획 견주기에서 뺌
+   (이미 만든 계획 · 확정에 있어도 asPlan · asOrder 가 뺌, 다음 계획부터는 하루 목표로 다른 빵이 채움)
+   - 초코바게트: 11-05(목)까지 · 감계무량샌드위치: 11-08(일)까지 */
+export const DISCONTINUED: Readonly<Record<string, string>> = { 초코바게트: "2026-11-05", 감계무량샌드위치: "2026-11-08" };
+const GONE = new Map(Object.entries(DISCONTINUED).map(([n, last]) => [breadKey(n), last]));
+/** 그날 단종된 빵인지 (마지막으로 만드는 날 다음 날부터) */
+export function isDiscontinued(name: string, date: string): boolean {
+  const last = GONE.get(breadKey(name || ""));
+  return last != null && date > last;
+}
+
 /** 그날 계획에서 쓰는 이름 — 바꾸기 전 날짜는 옛 이름, 그날부터 새 이름 (옛 · 새 · 다른 이름 모두) */
 export function breadNameOn(name: string, date: string): string {
   const r = RENAME_OF.get(breadKey(name));
