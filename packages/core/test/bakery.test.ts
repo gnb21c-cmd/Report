@@ -341,8 +341,11 @@ describe("평일(월 ~ 목) 하루 합계 300 ~ 320개 안 — 같은 요일 칸
 describe("제빵 품목 순서 · 시나몬롤 10개 · 우유모닝빵 2개 단위 올림 (2026-10-22 사장님 표 · 올림은 11-02 계획부터)", () => {
   it("표 순서 — 우유모닝빵 · 팥앙금샌드(옛 고소한옛날맘모스) · 갈릭소시지빵 · 시나몬롤 … 티라미두유볼(소) · 생크림케이크 (POS 이름) · 10-25 명란소금빵 더함", () => {
     expect(BREAD_ORDER.slice(0, 4)).toEqual(["우유모닝빵", "팥앙금샌드", "갈릭소시지빵", "시나몬롤"]);
-    expect(BREAD_ORDER).toHaveLength(34);
-    expect(new Set(BREAD_ORDER).size).toBe(34);
+    // 2026-11-05 단종 두 가지(초코바게트 · 감계무량샌드위치)를 목록에서 지움 — 34 → 32, 나머지 순서는 그대로
+    expect(BREAD_ORDER).toHaveLength(32);
+    expect(new Set(BREAD_ORDER).size).toBe(32);
+    expect(BREAD_ORDER.includes("초코바게트") || BREAD_ORDER.includes("감계무량샌드위치")).toBe(false);
+    expect(BREAD_ORDER.slice(4, 6)).toEqual(["메가모카번", "피칸무화과베이글"]);
     const xs = [{ name: "소금빵" }, { name: "새 빵" }, { name: "스위트파누쪼" }, { name: "우유모닝빵" }, { name: "몽블랑" }, { name: "가 새 빵" }];
     // 띄어쓰기는 상관없음 ('스위트 파누쪼') · 표에 없는 빵은 맨 뒤 가나다
     expect(sortBread(xs).map((x) => x.name)).toEqual(["우유모닝빵", "소금빵", "몽블랑", "스위트파누쪼", "가 새 빵", "새 빵"]);
