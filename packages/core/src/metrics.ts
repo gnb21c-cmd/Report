@@ -22,6 +22,7 @@ import { rentalIn } from "./cash";
 import { etcMove, holidayName, isShortTime, kidsPrice, kidsSales, NOT_BREAD, OLD_VOUCHER_PRICE, shortPrice, visitorsFromCups } from "./rules";
 import { count, won } from "./format";
 import { NAVER_SLOTS, sum, type DayReport, type ProductTuple, type StorePart } from "./part";
+import { naverTicketsOf } from "./naverAuto";
 import type { KidsKind, Sector } from "./classify";
 import type { StoreId } from "./types";
 
@@ -309,7 +310,8 @@ export class Board {
     if (r?.naver) {
       m.has.naver = 1;
       m.naverInput = 1;
-      m.naver = sum(r.naver.tickets);
+      // 숏타임이 빠진 자동 수집 날(10-04 ~ 11-06)은 POS 숏타임을 10시 칸에 더해 읽음 (2026-11-07 사장님 — naverAuto.ts naverTicketsOf)
+      m.naver = sum(naverTicketsOf(r) ?? r.naver.tickets);
       m.newVisitors = sum(r.naver.newVisitors);
       m.newKnown = r.naver.noNew ? 0 : 1;
     } else m.naver = m.naverPos;
@@ -629,7 +631,7 @@ export function naverSlots(board: Board, from: string, to: string): { tickets: n
       const n = board.report(d)?.naver;
       if (!n) continue;
       days++;
-      n.tickets.forEach((v, i) => (tickets[i] += v || 0));
+      (naverTicketsOf(board.report(d)) ?? n.tickets).forEach((v, i) => (tickets[i] += v || 0));
       n.newVisitors.forEach((v, i) => (newVisitors[i] += v || 0));
     }
   return { tickets, newVisitors, days };

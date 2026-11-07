@@ -10,6 +10,7 @@ import { addDays, dayRange, monthStart, weekdayLabel } from "./dates";
 import { holidayName, isOffDay, kidsPrice, kidsSales, VISITOR_FACTOR } from "./rules";
 import { wonMan } from "./format";
 import { HOURS, sum } from "./part";
+import { naverTicketsOf } from "./naverAuto";
 import { BOXES, valueOf, type Board, type BoxKey, type ProductRow } from "./metrics";
 import type { WeatherMap } from "./weather";
 
@@ -39,7 +40,9 @@ export function hourDay(board: Board, date: string, box: BoxKey): HourDay | null
     let tickets: number[];
     if (r.naver) {
       if (!kh && !r.kids) return null;
-      tickets = HOURS.map((_, i) => (r.naver!.tickets[i * 2] || 0) + (r.naver!.tickets[i * 2 + 1] || 0));
+      // 숏타임이 빠진 자동 수집 날은 POS 숏타임을 10시 칸에 (naverTicketsOf)
+      const nt = naverTicketsOf(r) ?? r.naver.tickets;
+      tickets = HOURS.map((_, i) => (nt[i * 2] || 0) + (nt[i * 2 + 1] || 0));
       tickets = add(tickets, kh?.walkIn);
     } else if (kh) tickets = [...kh.issued];
     else return null;

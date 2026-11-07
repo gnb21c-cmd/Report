@@ -1,23 +1,47 @@
 /* ============================================================
    네이버 예약 자동 수집 — 다음 날 아침 '예약현황 → 일간 → 전체'에서 어제를 읽어 A 의 네이버 칸(30분마다)을 채움
-   - 판매입장권: 회차 칸의 '이용완료 N' (수량 합 = 1건 1장) — 상품은 '평일 무제한' · '야간자유 입장' 두 가지만
+   - 판매입장권: 회차 칸의 '이용완료 N' (수량 합 = 1건 1장) — 상품은 '평일 무제한' · '야간자유 입장' · '숏타임'(10시 칸, 2026-11-07 더함)
    - 신규방문자: 칸을 눌러 나오는 완료자 목록(1줄 = 예약 1건)을 어제 하루 모아, 한 손님이 나온 줄 수가 그 손님의 '완료 N' 과 같으면 처음 온 손님
      '완료 N' 은 손님 아이디를 따라가는 지금까지의 이용완료 예약 건수 — 3장을 한 번에 예약하면 1줄 · 완료 1, 1장씩 3번이면 3줄 · 모두 완료 3
      누적이라 다음 날 아침(다시 오기 전)에 본 어제만 맞음 — 지난 날은 noNew
      문 연 뒤 다시 읽으면 오늘 이용완료 목록도 같이 읽어, 그 손님의 오늘 줄 수만큼 빼고 견줌
-   - 10:00 ~ 19:30 칸만 (NAVER_SLOTS). 두 상품은 시간이 겹치지 않음 — 겹치면 더하고 기록에 '겹침'으로 남김
+   - 10:00 ~ 19:30 칸만 (NAVER_SLOTS). 상품끼리 시간이 겹치면 더하고 기록에 '겹침'으로 남김 (숏타임은 늘 10시 칸에서 겹침)
    - 사람이 A 에서 넣은 네이버 칸은 덮지 않음 (자동 수집이 넣은 칸만 다시 씀)
    같은 손님인지는 이름 · 전화번호 뒷자리로 맞춰 보되, 수집기가 읽자마자 알아볼 수 없는 표시(who)로 바꿔 메모리에서만 씀 — 저장 · 기록 · 클라우드에 남기지 않음
    ============================================================ */
-import { NAVER_SLOTS, naverSlotIndex, type NaverPart } from "./part";
+import { NAVER_SLOTS, naverSlotIndex, type DayReport, type NaverPart } from "./part";
+import { isShortTime } from "./rules";
 
 export const NAVER_AUTO_BY = "자동 수집 (네이버)";
 
-/** 판매입장권으로 세는 상품 — 평일 무제한 · 야간자유 입장 (단체 · 열쇠분실 · 매진 시 상품 · 지난 상품은 뺌) */
+/** 판매입장권으로 세는 상품 — 평일 무제한(휴일 1시간 50분) · 야간자유 입장 · 숏타임('10시 매진 시 숏타임 80분' — 10시 칸)
+    (단체 · 열쇠분실 · 지난 상품은 뺌) — 숏타임은 2026-11-07 사장님: 10시 예약 수에 들어가야 함 (예전엔 '매진 시 상품'이라 뺐음) */
 export function isNaverTicketProduct(name: string): boolean {
   const s = name.replace(/\s+/g, "");
   if (/~?\d{2}\.\d{1,2}\.\d{1,2}/.test(s)) return false; // '~26.3.31 …' 같은 지난 상품
-  return /평일무제한/.test(s) || /야간자유/.test(s);
+  return /평일무제한/.test(s) || /야간자유/.test(s) || isShortTime(name);
+}
+
+/** 자동 수집 네이버 칸에 숏타임이 들어가기 시작한 날 — 그 전 자동 수집 날(10-04 ~ 11-06)은 읽을 때 키즈 POS 숏타임을 10시 칸에 더함 */
+export const NAVER_SHORT_FROM = "2026-11-07";
+/** 그날 네이버 숏타임 장수 = 키즈 POS 숏타임 발행 − 숏타임 현장결제 (0 아래면 0) */
+export function naverShortPos(r: DayReport | undefined): number {
+  let issued = 0;
+  let walk = 0;
+  for (const p of r?.kids?.products || []) {
+    if (!isShortTime(p[0])) continue;
+    if (p[1] === "입장발행") issued += p[2];
+    else if (p[1] === "현장결제") walk += p[2];
+  }
+  return Math.max(0, issued - walk);
+}
+/** 그날 네이버 30분 칸 (없으면 null) — 숏타임이 빠진 자동 수집 날은 POS 숏타임을 10시 칸에 더함 (사람이 넣은 날 · 11-07 부터는 그대로) */
+export function naverTicketsOf(r: DayReport | undefined): number[] | null {
+  const t = r?.naver?.tickets;
+  if (!r || !Array.isArray(t)) return null;
+  if (r.date >= NAVER_SHORT_FROM || r.meta?.naver?.by !== NAVER_AUTO_BY) return t;
+  const n = naverShortPos(r);
+  return n ? t.map((v, i) => (i === 0 ? (Number(v) || 0) + n : v)) : t;
 }
 
 /** '오전10:00' · '오후6:30' · '오후 12:30' · '18:00' · '1:30'(오후) → 'HH:MM' (모르면 null) */
