@@ -270,6 +270,48 @@ describe("2026-04 부터 숏타임 입장료 — 평일 1만원 · 휴일 1만1�
   });
 });
 
+describe("네이버 숏타임 — 10시 예약 수에 들어감 (2026-11-07 사장님: 11-07 10시 칸 = 일반 10 + 숏타임 8 = 18, 통합데스크와 같게)", () => {
+  const SHORT = "10시 매진 시 숏타임 80분";
+  const MAIN = "평일 무제한 / 휴일 1시간 50분 입장권";
+  it("판매입장권 상품 — 평일 무제한(휴일 1시간 50분) · 야간자유 · 숏타임 (단체 · 열쇠분실 · 지난 상품은 아님)", async () => {
+    const { isNaverTicketProduct } = await import("../src");
+    expect([MAIN, "야간자유 입장권", SHORT].map(isNaverTicketProduct)).toEqual([true, true, true]);
+    expect(["단체 예약", "열쇠 분실", "~26.3.31 평일 무제한"].map(isNaverTicketProduct)).toEqual([false, false, false]);
+  });
+  it("다음 날 아침 수집 · 마감 전 수집 · 통합데스크 — 숏타임 이용완료가 10시 칸에 더해짐", async () => {
+    const { naverPartFrom, liveNaverPart, deskNaverPart } = await import("../src");
+    const cells = [
+      { key: 1, product: MAIN, time: "오전 10:00", done: 10, first: 0 },
+      { key: 2, product: SHORT, time: "오전 10:00", done: 8, first: 0 },
+      { key: 3, product: MAIN, time: "오전 10:30", done: 10, first: 0 },
+    ];
+    const r = naverPartFrom("2026-11-07", cells);
+    expect(r.part.tickets.slice(0, 2)).toEqual([18, 10]);
+    expect(r.overlap).toEqual(["10:00"]); // 숏타임은 늘 10시 칸에서 겹침 (기록용)
+    expect(liveNaverPart("2026-11-07", cells, []).tickets.slice(0, 2)).toEqual([18, 10]);
+    // 통합데스크 — 숏타임 상품이 있어도 받음 (예전엔 '보고 기준과 다른 상품'이라 통째로 안 받았음)
+    const desk = { day: "2026-11-07", at: "2026-11-07 14:15:27", naver: { ready: true, products: [{ name: SHORT, done: 8 }, { name: MAIN, done: 90 }], slots: [{ t: "10:00", done: 18, conf: 0 }] } } as any;
+    const d = deskNaverPart(desk, "2026-11-07", new Date("2026-11-07T05:16:00Z"));
+    expect(d.why).toBe("");
+    expect(d.part!.tickets[0]).toBe(18);
+  });
+  it("숏타임이 빠진 자동 수집 날(11-06 까지)은 읽을 때 키즈 POS 숏타임을 10시 칸에 더함 · 사람이 넣은 날 · 11-07 부터는 그대로", async () => {
+    const { naverTicketsOf, NAVER_AUTO_BY } = await import("../src");
+    const date = "2026-10-06"; // 화요일
+    const kids = buildStorePart({ store: "kids", date, file: "k", sheet: { from: date, to: date, lines: [line({ name: "11시20분 퇴장 [10시 입장]", qty: 2 })], sheetNet: null } as any, sectorOf: () => "기타" as any }).part;
+    const tickets = NAVER_SLOTS.map((_, i) => (i === 0 ? 5 : i === 1 ? 3 : 0));
+    const naver = { v: 1 as const, date, tickets, newVisitors: NAVER_SLOTS.map(() => 0) };
+    const auto = { date, kids, naver, meta: { naver: { by: NAVER_AUTO_BY, at: "t" } } };
+    expect(naverTicketsOf(auto as any)!.slice(0, 2)).toEqual([7, 3]);
+    expect(naverTicketsOf({ ...auto, meta: { naver: { by: "직원", at: "t" } } } as any)!.slice(0, 2)).toEqual([5, 3]);
+    expect(naverTicketsOf({ ...auto, date: "2026-11-07", naver: { ...naver, date: "2026-11-07" } } as any)!.slice(0, 2)).toEqual([5, 3]);
+    // 대시보드 네이버 · 입장료: 네이버 10 = 숏타임 2 + 일반 8 (예전엔 네이버 8 − 숏타임 2 = 일반 6 으로 일반이 2장 덜 잡혔음)
+    const m = new Board([auto as any]).day(date);
+    expect(m.naver).toBe(10);
+    expect(m.fee.naver).toBe(8 * 12000 + 2 * 10000);
+  });
+});
+
 describe("'퇴장시간 + 10~19분 지연' — 연장 요금은 입장 인원이 아니라 키즈 기타 매출", () => {
   it("이름에 '퇴장'이 있어도 '지연'이면 기타", () => {
     expect(kidsKind({ name: "퇴장시간 + 10~19분 지연", qty: 1, gross: 5000, net: 5000 })).toBe("기타");
