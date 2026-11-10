@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_REVISIT, DESK_STATS, deskEventsFrom, deskRevisitOkFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_RENTAL_PREFIX, DESK_REVISIT, DESK_STATS, deskEventsFrom, deskRevisitOkFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRental, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type KidsRental, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import demoDeskLive from "./demoDeskLive.json";
 import demoRevisit from "./demoRevisit.json";
 import type { Source } from "./source";
@@ -301,4 +301,21 @@ export async function deskRevisitNow(): Promise<{ revisit: DeskRevisit | null; b
   const f = fieldsOf(await res.json());
   const revisit = parseDeskRevisit(f.json);
   return revisit ? { revisit } : { revisit: null, bad: true };
+}
+
+/** 키즈대관 — 통합데스크 [대관]이 이용일마다 덮어쓰는 deskStats/rental-{날짜} (docs/KIDS_RENTAL.md · 손님 연락처 없음)
+    기록이 없으면 빈 목록(대관 0건) · 모양이 틀리면 null · 인터넷 · 권한 오류는 throw */
+export async function deskRentalDay(day: string): Promise<KidsRental[] | null> {
+  if (__DEMO__) {
+    // 체험판: 지어낸 단체 하나 — 25일 전에 입금하고 오늘 이용
+    return [{ name: "햇살어린이집", paidOn: addDays(day, -25), amount: 200000, people: 18, time: "10:00", memo: "" }];
+  }
+  const cfg = firebaseConfig();
+  const board = boardKey();
+  if (!cfg || !board) return [];
+  const res = await fetch(`${base(cfg, board)}/${DESK_STATS}/${DESK_RENTAL_PREFIX}${day}?key=${cfg.apiKey}`, { cache: "no-store" });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`키즈대관 받기 오류 (${res.status})`);
+  const r = parseDeskRental(fieldsOf(await res.json()).json);
+  return r && r.day === day ? r.list : null;
 }

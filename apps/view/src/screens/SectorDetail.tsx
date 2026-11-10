@@ -264,12 +264,14 @@ function TrendCard({ trend }: { trend: ReturnType<typeof weeksTrend> }) {
   );
 }
 
-/** 키즈입장 계산식 한 줄 (그날) */
+/** 키즈입장 계산식 한 줄 (그날) — 키즈입장 금액과 딱 맞게: 네이버 + 현장 + 대관 + 열쇠 · 인원추가 − 사은권
+    대관 = 자금 기록의 키즈 대관 입금(어린이집 · 유치원 · '키즈 … 대관') + 키즈 POS '대관' 상품 (2026-11-10 사장님: 대관이 보이지 않아 빠진 것처럼 보였음) */
 function kidsFormula(m: Metrics, date: string): string {
   const p = kidsPrice(date);
+  const more = `${m.rental ? ` + 대관 ${won(m.rental)}` : ""}${m.kidsFees ? ` + 열쇠 · 인원추가 ${won(m.kidsFees)}` : ""}`;
   return p.charged
-    ? `${p.kind} 단가 ${won(p.price)} × 입장권 ${count(m.naver + m.walkIn, "장")}${m.kidsCoupon ? ` − 사은권 ${won(m.kidsCoupon)}` : ""} = 키즈입장 ${won(m.box.키즈입장료)}`
-    : `교환권 방식(26년 3월까지) — 네이버 ${count(Math.round(m.fee.naver / 30000), "장")} × 3만원 + 현장 ${won(m.fee.walkIn)} − 카페 교환권 사용 ${won(m.kidsCoupon)} = 키즈입장 ${won(m.box.키즈입장료)}`;
+    ? `${p.kind} 단가 ${won(p.price)} — 네이버 ${count(m.naver, "장")} ${won(m.fee.naver)} + 현장 ${count(m.walkIn, "장")} ${won(m.fee.walkIn)}${more}${m.kidsCoupon ? ` − 사은권 ${won(m.kidsCoupon)}` : ""} = 키즈입장 ${won(m.box.키즈입장료)}`
+    : `교환권 방식(26년 3월까지) — 네이버 ${count(Math.round(m.fee.naver / 30000), "장")} × 3만원 + 현장 ${won(m.fee.walkIn)}${more} − 카페 교환권 사용 ${won(m.kidsCoupon)} = 키즈입장 ${won(m.box.키즈입장료)}`;
 }
 
 /** 기타 — 그날 자판기 · 인생네컷 · 주차료 · 퇴장지연페널티 · 매장 소액 기타, 아래 회색 글씨 = 1/1 ~ 마감일 누적
