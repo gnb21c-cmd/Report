@@ -20,6 +20,7 @@ export * from "./settings";
 export * from "./forecast";
 export * from "./breadNames";
 export * from "./breadTrend";
+export * from "./breadBinary";
 export * from "./bakery";
 export * from "./planCompare";
 export * from "./live";

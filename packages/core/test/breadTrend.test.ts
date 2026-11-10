@@ -127,7 +127,10 @@ describe("주간안 (11-05 발표, 11-09 ~ 15) — 새 방식 · 하루 목표 (
   it("하루 목표 — 월 270 · 화 283 · 수 295 · 목 308 · 금 320 · 토 800 · 일 750 (평일에 낀 공휴일은 일요일처럼)", () => {
     expect(week.map((w) => dayTarget(w.date))).toEqual([270, 283, 295, 308, 320, 800, 750]);
     expect(dayTarget("2026-11-08")).toBeNull(); // 이미 발표한 주는 없음
-    expect(dayTarget("2026-12-25")).toBe(750); // 성탄절(금) — 공휴일
+    // 11-16 계획부터는 반반 규칙 — 하루 목표 없음 (2026-11-10 사장님, breadBinary.test.ts)
+    expect(dayTarget("2026-11-15")).toBe(750);
+    expect(dayTarget("2026-11-16")).toBeNull();
+    expect(dayTarget("2026-12-25")).toBeNull();
     for (const w of week) {
       const st = w.week;
       expect(st.target).toBe(dayTarget(w.date));

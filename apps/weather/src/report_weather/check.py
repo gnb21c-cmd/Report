@@ -41,3 +41,23 @@ print("── 고친 규칙으로 보면 (쓰지 않음)")
 have = relay.weather_sources()
 part = sorted(d for d, s in have.items() if s == "observed-partial")
 print("  최고/최저가 빈 관측일:", ", ".join(part) or "없음")
+
+# 중기 기온예보 (2026-11-10 시험) — 목요일 아침 주간안(다음 주 월 ~ 일 = 4 ~ 10일 뒤)에 쓸 수 있는지. 수원 11B20601, 06시 · 18시 발표
+print("── 기상청에 직접: 중기 기온예보 (수원)")
+for back in (0, 12, 24):
+    t = now - dt.timedelta(hours=back)
+    tm = t.strftime("%Y%m%d") + ("0600" if 6 <= t.hour < 18 else "1800")
+    if t.hour < 6:
+        tm = (t - dt.timedelta(days=1)).strftime("%Y%m%d") + "1800"
+    try:
+        items, total = kma._once("MidFcstInfoService/getMidTa", {"regId": "11B20601", "tmFc": tm, "numOfRows": 10, "pageNo": 1})
+        if not items:
+            print(f"  {tm}: 없음")
+            continue
+        it = items[0]
+        days = sorted({int(k[5:]) for k in it if k.startswith("taMin") and k[5:].isdigit()})
+        print(f"  {tm}: 받음 · 며칠 뒤 {days[0] if days else '-'} ~ {days[-1] if days else '-'} · " + " · ".join(f"{d}일 뒤 최저 {it.get(f'taMin{d}')} 최고 {it.get(f'taMax{d}')}" for d in days))
+        break
+    except WeatherError as e:
+        print(f"  {tm}: 실패 — {e}")
+
