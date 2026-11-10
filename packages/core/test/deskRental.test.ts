@@ -3,14 +3,14 @@ import { DESK_RENTAL_PREFIX, parseDeskRental, rentalLabel } from "../src";
 
 /** 통합데스크 [대관]이 보내는 글 — 예시 이름은 지어낸 것 */
 const doc = (o: Record<string, unknown> = {}) =>
-  JSON.stringify({ type: "astanakiz-rental", v: 1, day: "2026-11-10", sentAt: "2026-11-10 10:05", list: [{ name: "햇살어린이집", paidOn: "2026-10-16", amount: 230000, people: 18, time: "10:00", memo: "오전 단체" }], ...o });
+  JSON.stringify({ type: "astanakiz-rental", v: 1, day: "2026-11-10", sentAt: "2026-11-10 10:05", list: [{ name: "햇살어린이집", paidOn: "2026-10-16", amount: 200000, people: 18, time: "10:00", memo: "오전 단체" }], ...o });
 
 describe("키즈대관 — 통합데스크 [대관] 기록 (2026-11-10 사장님)", () => {
   it("모양이 맞으면 받음 — 이용일 · 단체 이름 · 입금일 · 금액 · 인원 · 시각 · 메모", () => {
     const r = parseDeskRental(doc())!;
     expect(r.day).toBe("2026-11-10");
     expect(r.sentAt).toBe("2026-11-10 10:05");
-    expect(r.list).toEqual([{ name: "햇살어린이집", paidOn: "2026-10-16", amount: 230000, people: 18, time: "10:00", memo: "오전 단체" }]);
+    expect(r.list).toEqual([{ name: "햇살어린이집", paidOn: "2026-10-16", amount: 200000, people: 18, time: "10:00", memo: "오전 단체" }]);
     expect(DESK_RENTAL_PREFIX + r.day).toBe("rental-2026-11-10");
   });
 

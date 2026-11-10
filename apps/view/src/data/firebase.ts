@@ -308,7 +308,7 @@ export async function deskRevisitNow(): Promise<{ revisit: DeskRevisit | null; b
 export async function deskRentalDay(day: string): Promise<KidsRental[] | null> {
   if (__DEMO__) {
     // 체험판: 지어낸 단체 하나 — 25일 전에 입금하고 오늘 이용
-    return [{ name: "햇살어린이집", paidOn: addDays(day, -25), amount: 230000, people: 18, time: "10:00", memo: "" }];
+    return [{ name: "햇살어린이집", paidOn: addDays(day, -25), amount: 200000, people: 18, time: "10:00", memo: "" }];
   }
   const cfg = firebaseConfig();
   const board = boardKey();
