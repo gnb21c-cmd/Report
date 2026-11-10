@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   # 작업 브랜치에 올리면 클라우드 날씨 · 기상청 응답을 보여 주기만 (쓰지 않음)
   push:
-    branches: ["feature/weather-temp"]
+    branches: ["feature/weather-temp", "feature/bread-temp"]
     paths: ["apps/weather/**", ".github/workflows/weather.yml"]
 jobs:
   weather:
