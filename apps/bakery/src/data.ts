@@ -4,7 +4,7 @@
    - D-1(현장 태블릿): 주소 /d1/<열쇠>/ 의 열쇠로 읽기만 (로그인 없음)
    - 체험판: 가짜 실적으로 계획을 바로 세고, 확정은 이 브라우저에만 저장
    ============================================================ */
-import { addDays, asFailInbox, asOrder, asPlan, Board, DEFAULT_LEARNED, emptyOrder, failInboxPut, floorCopy, withInbox, type FailInbox, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, isEventDonkatsu, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
+import { addDays, asFailInbox, asOrder, asPlan, BINARY_FROM, Board, hitReport, DEFAULT_LEARNED, emptyOrder, failInboxPut, floorCopy, withInbox, type FailInbox, validFloorKey, FINAL_LEAD, makeFinal, makeWeek, nowKst, sampleUntilYesterday, weekday, WEEK_PLAN_WEEKDAY, isEventDonkatsu, workSummary, type DayReport, type OrderDoc, type OrderLine, type PlanDoc, type WeatherMap, type WorkDoc, type WorkEventDoc } from "@report/core";
 
 export type Kind = "provisional" | "final";
 /** 저장 종류 — 잠정 · 최종 확정 + 생산 실패(생산한 날 상품성이 떨어져 버린 수량, 2026-11-04 사장님) */
@@ -387,7 +387,12 @@ export function demoApi(): Api {
   const weather: WeatherMap = rainDay ? { [rainDay]: { date: rainDay, key: "rain", label: "비", icon: "🌧️", tempMax: 17, tempMin: 11, rainMm: 8, source: "forecast" } } : {};
   for (const d of [...Array(21).keys()].reverse().map((k) => addDays(today, -k))) {
     const asOf = addDays(d, -1);
-    if (weekday(d) === WEEK_PLAN_WEEKDAY) for (const w of makeWeek(board, {}, DEFAULT_LEARNED, d, asOf)) plans.set(w.date, { ...(plans.get(w.date) || { v: 2, date: w.date }), week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}) });
+    if (weekday(d) === WEEK_PLAN_WEEKDAY) {
+      // 반반 규칙부터 — 목요일에 지난 7일 발표 적중률을 다음 주 월요일 문서에 (수집 plan.ts 와 같게)
+      const monday = addDays(d, 4);
+      const hit = monday >= BINARY_FROM ? hitReport(board, d, (x) => plans.get(x) ?? null) : null;
+      for (const w of makeWeek(board, {}, DEFAULT_LEARNED, d, asOf)) plans.set(w.date, { ...(plans.get(w.date) || { v: 2, date: w.date }), week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}), ...(w.date === monday && hit ? { hit } : {}) });
+    }
     const t = addDays(d, FINAL_LEAD);
     const f = makeFinal(board, weather, DEFAULT_LEARNED, d, asOf, plans.get(t) || null, orders.get(t) || null);
     if (f) plans.set(t, { ...plans.get(t)!, final: f });

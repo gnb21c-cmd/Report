@@ -14,6 +14,7 @@
    ============================================================ */
 import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, isDiscontinued, renameLast, renameSum } from "./breadNames";
 import { addDays, dayRange, weekday, WEEKDAY_KO } from "./dates";
+import { BINARY_FROM, demandOn, halfway, type HitReport } from "./breadBinary";
 import { TREND_FROM, trendDay, trendPastDays, trendTrust, type Trust } from "./breadTrend";
 import { bandRange, breadPlan, dayKind, forecastVisitors, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
@@ -118,6 +119,8 @@ export interface PlanItem {
   /** 두 가지 계획 (planCompare.ts, 2026-11-05 사장님) — 가 추세 계획 · 나 조정 계획 수량 (qty 는 그 주에 쓰는 쪽) */
   trend?: number;
   tuned?: number;
+  /** 반반 규칙 (11-16 계획부터, breadBinary.ts) — 지난 같은 요일 판매(정가 + 할인 × 0.5). 그 요일에 안 판 빵은 없음 → 추세 그대로 */
+  last?: number;
 }
 
 /** 한 번 센 계획 (주간 또는 최종) */
@@ -146,6 +149,8 @@ export interface PlanStep {
   mode?: PlanModeNote;
   /** 예측 신뢰도 (11-09 계획부터 — 지난 4주가 고른지 · 최종안 때 그날 예보 기온 급변) · 매니저가 보고 조정 */
   trust?: Trust;
+  /** 반반 규칙으로 센 주간안 (11-16 계획부터) — 지난 같은 요일 (발표 때 이미 끝난 가장 최근 같은 요일 · 없으면 null) */
+  binary?: { lastDay: string | null };
 }
 
 export interface Outlook {
@@ -165,6 +170,8 @@ export interface PlanDoc {
   final?: PlanStep;
   /** 주간 계획의 월요일 문서에만: 그 주부터 1 ~ 4주차 평일 · 휴일 하루 생산 개수 */
   outlook?: Outlook[];
+  /** 주간 계획의 월요일 문서에만 (11-16 계획부터): 발표하던 목요일에 견준 지난 7일(목 ~ 수) 발표 적중률 (breadBinary.ts hitReport) */
+  hit?: HitReport;
 }
 
 export interface OrderLine {
@@ -488,9 +495,10 @@ export const BREAD_PLUS: Readonly<Record<string, number>> = { 흑미로만든수
 export const BREAD_SET: Readonly<Record<string, { 평일: number; 휴일: number }>> = { 에그타르트: { 평일: 10, 휴일: 35 } };
 /** 포스에 올라 있지만 아직 판매 기록이 없는 빵 — 계획에 0 개 · 매니저 기입으로 (2026-11-05 사장님 포스 화면) */
 export const POS_NEW_BREADS: readonly string[] = ["클래식롤케이크"];
-/** 그날 하루 목표 (11-09 계획부터, 그 전은 null) */
+/** 그날 하루 목표 (11-09 ~ 11-15 계획만 — 그 전 · 11-16 반반 규칙부터는 null) */
 export function dayTarget(date: string): number | null {
-  if (date < TREND_FROM) return null;
+  // 11-16 계획부터는 반반 규칙 — 하루 목표 없음 (2026-11-10 사장님 '가')
+  if (date < TREND_FROM || date >= BINARY_FROM) return null;
   const w = weekday(date);
   return w >= 1 && w <= 5 && dayKind(date) === "휴일" ? DAY_TARGET[0] : DAY_TARGET[w];
 }
@@ -526,7 +534,33 @@ function newBreadEstimate(board: Board, date: string, asOf: string, name: string
   return kind == null ? 0 : Math.round(kind * ratio);
 }
 
+/** 반반 규칙 주간안 (11-16 계획부터, 2026-11-10 사장님 — breadBinary.ts)
+    빵마다 발표 = 반올림((지난 같은 요일 판매 + 추세) ÷ 2) → 만드는 단위. 하루 목표 · 빵별 더하기 · 정한 수량 · 할인 많은 빵 줄이기 · 두 계획 없음
+    새 빵 어림 · 매니저 기입 · 아직 안 팔린 포스 빵 · 단종은 예전 그대로 */
+function binaryStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string): PlanStep {
+  const v = forecastVisitors(board, weather, asOf, date, learned);
+  const t = trendDay(board, asOf, madeOn, date);
+  const lastDay = t.past[0] ?? null;
+  const last = lastDay ? demandOn(board, lastDay, date) : new Map<string, { demand: number }>();
+  const items: PlanItem[] = t.items
+    .map((i) => {
+      const trend = Math.round(i.raw);
+      const l = last.get(i.name)?.demand ?? 0;
+      const q = l > 0 ? halfway(l, trend) : trend;
+      return { name: i.name, qty: snapUnit(i.name, q, undefined, undefined, date), base: trend, trend, ...(l > 0 ? { last: l } : {}) };
+    })
+    .filter((i) => i.qty > 0);
+  for (const n of t.newBreads) {
+    const q = newBreadEstimate(board, date, asOf, n, t.ratio);
+    items.push(q > 0 ? { name: n, qty: q, base: q, est: true } : { name: n, qty: 0, manual: true });
+  }
+  const have = new Set(items.map((i) => breadKey(breadNewName(i.name))));
+  for (const n of POS_NEW_BREADS) if (!have.has(breadKey(n))) items.push({ name: n, qty: 0, manual: true });
+  return { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), binary: { lastDay }, trust: trendTrust(t) };
+}
+
 function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, slow: ReadonlySet<string> = new Set(), mode: PlanModeNote = DEFAULT_MODE): PlanStep {
+  if (date >= BINARY_FROM) return binaryStep(board, weather, learned, madeOn, asOf, date);
   const v = forecastVisitors(board, weather, asOf, date, learned);
   const t = trendDay(board, asOf, madeOn, date);
   const target = dayTarget(date);

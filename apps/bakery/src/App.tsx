@@ -52,6 +52,7 @@ import {
   visiblePlan,
   WEEK_PLAN_TIME,
   type BreadResult,
+  type HitReport,
   type OrderDoc,
   type OrderRow,
   type PlanDoc,
@@ -592,6 +593,13 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                 · 하루 목표 {step.target}개 맞춤 (추세 그대로면 {step.trendTotal}개) · 할인 · 폐기 많던 빵은 조금 줄임
               </b>
             )}
+            {/* 11-16 계획부터 — 반반 규칙 (2026-11-10 사장님, breadBinary.ts) */}
+            {step.binary && (
+              <b className="rain-up">
+                {" "}
+                · 반반 규칙 — {step.binary.lastDay ? `지난 같은 요일(${Number(step.binary.lastDay.slice(5, 7))}/${Number(step.binary.lastDay.slice(8, 10))})` : "지난 같은 요일"} 판매(정가 + 할인 반)와 추세의 가운데
+              </b>
+            )}
             {/* 두 가지 계획 중 이번 주에 쓴 쪽 — 지난 7일 견주기 결과 (2026-11-05 사장님) */}
             {step.mode && (
               <b className="rain-up" title={step.mode.why}>
@@ -654,6 +662,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                   {r.manual && <small className="manual-tag"> 새 빵 — 매니저 기입</small>}
                   {r.est && <small className="manual-tag"> 새 빵 — 판 날 실적 · 작년 추세로 (고칠 수 있음)</small>}
                   {r.slow && <small className="kitchen-tag"> 할인 · 폐기 많아 조금 줄임</small>}
+                  {kind !== "final" && step?.binary && r.trend != null && !r.est && !r.manual && <small className="unit"> {r.last != null ? `지난 ${num1(r.last)} · 추세 ${r.trend}` : `지난 같은 요일 판매 없음 · 추세 ${r.trend} 그대로`}</small>}
                   {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 시그니처 플래터용 (평일 {KITCHEN_QTY.평일} · 휴일 {KITCHEN_QTY.휴일}개 기준)</small>}
                   {kind === "final" && dayChangeAt(c, date) && <small className="day-change"> 당일 변경 {dayChangeAt(c, date)}</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}
@@ -688,6 +697,72 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
             );
           })}
         </div>
+      )}
+    </section>
+  );
+}
+
+/** 소수 한 자리까지 (지난 판매 = 정가 + 할인 × 0.5 라 7.5 처럼 나올 수 있음) */
+const num1 = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
+const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 1000) / 10}%`);
+
+/** 발표 적중률 (11-16 계획부터, 2026-11-10 사장님) — 목요일 발표 때 지난주 목 ~ 일(2주 전 발표) + 이번 주 월 ~ 수(1주 전 발표) */
+function HitView({ hit }: { hit: HitReport }) {
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  return (
+    <section className="card">
+      <h2>
+        발표 적중률 <b>{pct(hit.rate)}</b>
+      </h2>
+      <p className="muted">
+        {md(hit.from)} ~ {md(hit.to)} · 목요일에 발표한 수량 대 실제 판매 수요(정가 + 할인 반) · 적중률 = 1 − 어긋남 ÷ 수요 · 100% 에 다가가도록 매주 반반 규칙으로 고침
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>날</th>
+            <th className="num">발표</th>
+            <th className="num">수요</th>
+            <th className="num">적중</th>
+          </tr>
+        </thead>
+        <tbody>
+          {hit.days.map((d) => (
+            <tr key={d.date}>
+              <td>
+                {md(d.date)}({WEEKDAY_KO[weekday(d.date)]}) <small className="muted">{md(d.madeOn)} 발표</small>
+              </td>
+              <td className="num">{num1(d.plan)}</td>
+              <td className="num">{num1(d.demand)}</td>
+              <td className="num">{pct(d.rate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hit.breads.length > 0 && (
+        <>
+          <p className="muted">많이 어긋난 빵 (7일 합)</p>
+          <table>
+            <thead>
+              <tr>
+                <th>빵</th>
+                <th className="num">발표</th>
+                <th className="num">수요</th>
+                <th className="num">어긋남</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hit.breads.map((b) => (
+                <tr key={b.name}>
+                  <td>{b.name}</td>
+                  <td className="num">{num1(b.plan)}</td>
+                  <td className="num">{num1(b.demand)}</td>
+                  <td className="num">{num1(b.miss)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </section>
   );
@@ -731,6 +806,7 @@ function OutlookView({ api, monday }: { api: Api; monday: string }) {
           </table>
         )}
       </section>
+      {(next.plan?.hit ?? cur.plan?.hit) && <HitView hit={(next.plan?.hit ?? cur.plan?.hit)!} />}
     </main>
   );
 }

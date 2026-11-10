@@ -42,6 +42,7 @@ import {
   addDays,
   breadNewName,
   compareDay,
+  hitDay,
   weekday,
   type DayCompare,
 } from "@report/core";
@@ -164,6 +165,7 @@ function SalesDetail(props: { board: Board; box: BoxKey; weather: WeatherMap } &
         )}
 
         {box === "베이커리" && <PlanCompareCard board={board} date={date} doc={bread} />}
+        {box === "베이커리" && <HitDayCard board={board} date={date} doc={bread} />}
         {box === "베이커리" && <BreadTable board={board} date={date} doc={bread} />}
         {box === "베이커리" && <BakeryList board={board} date={date} doc={bread} />}
       </main>
@@ -702,6 +704,69 @@ function PlanCompareCard({ board, date, doc }: { board: Board; date: string; doc
                 </tbody>
               </table>
               <p className="note muted">굵은 수 = 그 빵에서 수요에 더 가까웠던 계획 · 생산 옆 −n = 생산실패 · 어긋남 차이가 큰 빵부터</p>
+            </div>
+            <button className="ghost wide" onClick={() => setSheet(false)}>
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** 발표 적중 (11-16 계획부터, 2026-11-10 사장님 — 반반 규칙 · 마감 뒤) — 그날 목요일 발표 수량 대 판매 수요(정가 + 할인 × 0.5)
+    적중률 = 1 − Σ|발표 − 수요| ÷ Σ수요 · 목요일마다 지난 7일 적중률이 주간 계획(매니저 앱 '1~4주')에 남음 */
+function HitDayCard({ board, date, doc }: { board: Board; date: string; doc: BakeryDoc | null | undefined }) {
+  const open = !!useLive()?.today;
+  const h = useMemo(() => (doc?.plan?.week?.binary ? hitDay(board, date, doc.plan) : null), [board, date, doc]);
+  const [sheet, setSheet] = useState(false);
+  if (open || !h) return null;
+  const n1 = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
+  const pct = h.rate == null ? "—" : `${Math.round(h.rate * 1000) / 10}%`;
+  return (
+    <section className="card">
+      <h2>
+        발표 적중 <small className="muted">{shortLabel(h.madeOn)} 발표 · 개수</small>
+      </h2>
+      <p className="note strong">
+        발표 {n1(h.plan)}개 · 판매 수요 {n1(h.demand)}개 · 어긋남 {n1(h.miss)}개 → 적중률 {pct}
+      </p>
+      <p className="note muted">판매 수요 = 정가 + 할인 × 0.5 (매진된 빵은 판 개수까지) · 발표 = 반올림((지난 같은 요일 판매 + 추세) ÷ 2) · 적중률 = 1 − 어긋남 ÷ 수요</p>
+      <button className="ghost wide" onClick={() => setSheet(true)}>
+        빵별 보기 ›
+      </button>
+      {sheet && (
+        <div className="sheet-bg" onClick={() => setSheet(false)}>
+          <div className="sheet list-sheet" role="dialog" aria-label="빵별 발표 적중" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-head">
+              <b>빵별 발표 적중</b>
+              <span className="muted">{shortLabel(date)}</span>
+            </div>
+            <div className="sheet-scroll">
+              <table className="bread-tbl">
+                <thead>
+                  <tr>
+                    <th>상품</th>
+                    <th className="num">발표</th>
+                    <th className="num">수요</th>
+                    <th className="num">어긋남</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...h.breads]
+                    .sort((a, b) => b.miss - a.miss || a.name.localeCompare(b.name, "ko"))
+                    .map((b) => (
+                      <tr key={b.name}>
+                        <td>{breadLabel(breadNewName(b.name), date)}</td>
+                        <td className="num">{n1(b.plan)}</td>
+                        <td className="num">{n1(b.demand)}</td>
+                        <td className="num">{n1(b.miss)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              <p className="note muted">어긋남이 큰 빵부터</p>
             </div>
             <button className="ghost wide" onClick={() => setSheet(false)}>
               닫기
