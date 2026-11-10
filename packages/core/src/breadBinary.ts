@@ -26,6 +26,54 @@ export const HALF_WEIGHT = 0.5;
 /** 적중률 빵별 목록 — 많이 어긋난 빵부터 이만큼 */
 export const HIT_TOP = 10;
 
+/* ---------- 기온 미세 조정 (2026-11-10 사장님) ----------
+   다음 주 그날 예보 최고 기온이 28도 이상(더운 날) 또는 15도 이하(추운 날)면 반반 결과 × 110% → 반올림 → 만드는 단위
+   (2025 수원: 최고 28 이상 84일 · 15 이하 136일 — 12 ~ 2월은 거의 매일). 빵 생산량은 ① 추세 반반 ② 기온 미세 조정 두 가지로만
+   예보 = 기상청 중기 기온예보(수원 11B20601, 06 · 18시 발표, 4 ~ 10일 뒤) — 목요일 새벽 계산 때는 수요일 18시 발표라 다음 주 일요일이 빠짐
+   → 그날은 반반 그대로 '기다림'(pending), 목요일 낮 계산(06:41 · 14:35 · 15:20)이 목요일 06시 발표로 채움 (매니저가 잠정 확정하기 전인 날만) */
+export const TEMP_UP = 1.1;
+/** 더운 날 — 예보 최고 기온 이만큼 이상 */
+export const TEMP_HOT = 28;
+/** 추운 날 — 예보 최고 기온 이만큼 이하 */
+export const TEMP_COLD = 15;
+/** 기상청 중기 기온예보 지역 — 수원 */
+export const MID_TA_REGION = "11B20601";
+
+/** 그날 예보 기온 (중기예보 발표 tmFc = YYYYMMDDHHMM) */
+export interface MidTemp {
+  max: number | null;
+  min: number | null;
+  tmFc: string;
+}
+
+/** 예보 최고 기온 → 기온 조정 (아니면 null) */
+export function tempUpOf(max: number | null | undefined): { up: number; why: "더움" | "추움" } | null {
+  if (max == null || !Number.isFinite(max)) return null;
+  if (max >= TEMP_HOT) return { up: TEMP_UP, why: "더움" };
+  if (max <= TEMP_COLD) return { up: TEMP_UP, why: "추움" };
+  return null;
+}
+
+/** 중기 기온예보 한 줄(getMidTa item) → 날짜마다 최저 · 최고 (발표 날 + N일, taMinN · taMaxN). 빈 칸은 뺌 */
+export function parseMidTa(item: Record<string, unknown> | null | undefined, tmFc: string): Record<string, MidTemp> {
+  const out: Record<string, MidTemp> = {};
+  if (!item || !/^\d{12}$/.test(tmFc)) return out;
+  const base = `${tmFc.slice(0, 4)}-${tmFc.slice(4, 6)}-${tmFc.slice(6, 8)}`;
+  const num = (v: unknown): number | null => {
+    const x = typeof v === "string" ? (v.trim() === "" ? NaN : Number(v)) : typeof v === "number" ? v : NaN;
+    return Number.isFinite(x) ? x : null;
+  };
+  for (const k of Object.keys(item)) {
+    const m = /^taMax(\d+)$/.exec(k);
+    if (!m) continue;
+    const n = Number(m[1]);
+    const max = num(item[k]);
+    if (max == null || n < 1 || n > 14) continue;
+    out[addDays(base, n)] = { max, min: num(item[`taMin${n}`]), tmFc };
+  }
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b)));
+}
+
 /** 지난 판매(수요) = 정가 + 할인 × 0.5 */
 export const demandOf = (full: number, half: number): number => full + half * HALF_WEIGHT;
 

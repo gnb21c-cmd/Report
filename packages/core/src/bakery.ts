@@ -14,7 +14,7 @@
    ============================================================ */
 import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, isDiscontinued, renameLast, renameSum } from "./breadNames";
 import { addDays, dayRange, weekday, WEEKDAY_KO } from "./dates";
-import { BINARY_FROM, demandOn, halfway, type HitReport } from "./breadBinary";
+import { BINARY_FROM, demandOn, halfway, tempUpOf, type HitReport, type MidTemp } from "./breadBinary";
 import { TREND_FROM, trendDay, trendPastDays, trendTrust, type Trust } from "./breadTrend";
 import { bandRange, breadPlan, dayKind, forecastVisitors, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
@@ -121,6 +121,18 @@ export interface PlanItem {
   tuned?: number;
   /** 반반 규칙 (11-16 계획부터, breadBinary.ts) — 지난 같은 요일 판매(정가 + 할인 × 0.5). 그 요일에 안 판 빵은 없음 → 추세 그대로 */
   last?: number;
+  /** 반반 결과 (기온 조정 · 만드는 단위 전) — 기온 조정은 늘 이것에서 새로 (withTemp) */
+  bin?: number;
+}
+
+/** 기온 미세 조정 (11-16 계획부터) — 그날 예보 최고 · 최저 · 중기예보 발표 · 배수(더움 · 추움이면 1.1, 아니면 null) · 예보가 아직 없으면 pending */
+export interface TempNote {
+  max: number | null;
+  min: number | null;
+  tmFc?: string;
+  up: number | null;
+  why?: "더움" | "추움";
+  pending?: boolean;
 }
 
 /** 한 번 센 계획 (주간 또는 최종) */
@@ -151,6 +163,8 @@ export interface PlanStep {
   trust?: Trust;
   /** 반반 규칙으로 센 주간안 (11-16 계획부터) — 지난 같은 요일 (발표 때 이미 끝난 가장 최근 같은 요일 · 없으면 null) */
   binary?: { lastDay: string | null };
+  /** 기온 미세 조정 (11-16 계획부터, 주간안만) */
+  temp?: TempNote;
 }
 
 export interface Outlook {
@@ -537,7 +551,7 @@ function newBreadEstimate(board: Board, date: string, asOf: string, name: string
 /** 반반 규칙 주간안 (11-16 계획부터, 2026-11-10 사장님 — breadBinary.ts)
     빵마다 발표 = 반올림((지난 같은 요일 판매 + 추세) ÷ 2) → 만드는 단위. 하루 목표 · 빵별 더하기 · 정한 수량 · 할인 많은 빵 줄이기 · 두 계획 없음
     새 빵 어림 · 매니저 기입 · 아직 안 팔린 포스 빵 · 단종은 예전 그대로 */
-function binaryStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string): PlanStep {
+function binaryStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, temps?: Readonly<Record<string, MidTemp>>): PlanStep {
   const v = forecastVisitors(board, weather, asOf, date, learned);
   const t = trendDay(board, asOf, madeOn, date);
   const lastDay = t.past[0] ?? null;
@@ -546,21 +560,32 @@ function binaryStep(board: Board, weather: WeatherMap, learned: Learned, madeOn:
     .map((i) => {
       const trend = Math.round(i.raw);
       const l = last.get(i.name)?.demand ?? 0;
-      const q = l > 0 ? halfway(l, trend) : trend;
-      return { name: i.name, qty: snapUnit(i.name, q, undefined, undefined, date), base: trend, trend, ...(l > 0 ? { last: l } : {}) };
+      const bin = l > 0 ? halfway(l, trend) : trend;
+      return { name: i.name, qty: snapUnit(i.name, bin, undefined, undefined, date), base: trend, trend, bin, ...(l > 0 ? { last: l } : {}) };
     })
-    .filter((i) => i.qty > 0);
+    .filter((i) => i.bin > 0);
   for (const n of t.newBreads) {
     const q = newBreadEstimate(board, date, asOf, n, t.ratio);
     items.push(q > 0 ? { name: n, qty: q, base: q, est: true } : { name: n, qty: 0, manual: true });
   }
   const have = new Set(items.map((i) => breadKey(breadNewName(i.name))));
   for (const n of POS_NEW_BREADS) if (!have.has(breadKey(n))) items.push({ name: n, qty: 0, manual: true });
-  return { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), binary: { lastDay }, trust: trendTrust(t) };
+  const st: PlanStep = { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), binary: { lastDay }, trust: trendTrust(t) };
+  return withTemp(st, date, temps?.[date]);
 }
 
-function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, slow: ReadonlySet<string> = new Set(), mode: PlanModeNote = DEFAULT_MODE): PlanStep {
-  if (date >= BINARY_FROM) return binaryStep(board, weather, learned, madeOn, asOf, date);
+/** 기온 미세 조정 (2026-11-10 사장님) — 그날 예보 최고 기온이 28도 이상 · 15도 이하면 반반 빵마다 반반 결과 × 110% → 반올림 → 만드는 단위
+    새 빵 어림 · 매니저 기입은 그대로 · 예보가 없으면 반반 그대로 '기다림'(목요일 낮에 다시) · 늘 반반 결과(bin)에서 새로 셈 (되풀이해도 쌓이지 않음) */
+export function withTemp(st: PlanStep, date: string, t: MidTemp | null | undefined): PlanStep {
+  const hit = t ? tempUpOf(t.max) : null;
+  const up = hit?.up ?? 1;
+  const items = st.items.map((i) => (i.bin == null ? i : { ...i, qty: snapUnit(i.name, Math.round(i.bin * up + 1e-9), undefined, undefined, date) }));
+  const temp: TempNote = t ? { max: t.max, min: t.min, tmFc: t.tmFc, up: hit?.up ?? null, ...(hit ? { why: hit.why } : {}) } : { max: null, min: null, up: null, pending: true };
+  return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0), temp };
+}
+
+function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, slow: ReadonlySet<string> = new Set(), mode: PlanModeNote = DEFAULT_MODE, temps?: Readonly<Record<string, MidTemp>>): PlanStep {
+  if (date >= BINARY_FROM) return binaryStep(board, weather, learned, madeOn, asOf, date, temps);
   const v = forecastVisitors(board, weather, asOf, date, learned);
   const t = trendDay(board, asOf, madeOn, date);
   const target = dayTarget(date);
@@ -622,8 +647,8 @@ function trendStep(board: Board, weather: WeatherMap, learned: Learned, madeOn: 
   return { madeOn, asOf, kind: v.kind, visitors: v.value, weather: v.weather.cls, items, total: items.reduce((a, b) => a + b.qty, 0), ...(target != null ? { target, trendTotal, mode } : {}), trust: trendTrust(t) };
 }
 
-function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>, slow?: ReadonlySet<string>, mode?: PlanModeNote): PlanStep {
-  if (date >= TREND_FROM) return trendStep(board, weather, learned, madeOn, asOf, date, slow, mode);
+function step(board: Board, weather: WeatherMap, learned: Learned, madeOn: string, asOf: string, date: string, steps: Record<string, number>, slow?: ReadonlySet<string>, mode?: PlanModeNote, temps?: Readonly<Record<string, MidTemp>>): PlanStep {
+  if (date >= TREND_FROM) return trendStep(board, weather, learned, madeOn, asOf, date, slow, mode, temps);
   const p = breadPlan(board, weather, asOf, date, learned);
   const boost = breadBoostOf(date);
   const band = breadBandOf(date);
@@ -668,11 +693,11 @@ export function trendOutlook(board: Board, asOf: string, today: string, start: s
 }
 
 /** 목요일 아침 — 다음 주 월 ~ 일 주간 잠정안 (있던 최종안은 그대로 두도록 week 만 돌려줌). steps = 날짜 → 빵별 같은 요일 칸 (11-09 계획부터는 안 씀) */
-export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}, slow?: ReadonlySet<string>, mode?: PlanModeNote): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
+export function makeWeek(board: Board, weather: WeatherMap, learned: Learned, thursday: string, asOf: string, steps: Record<string, Record<string, number>> = {}, slow?: ReadonlySet<string>, mode?: PlanModeNote, temps?: Readonly<Record<string, MidTemp>>): { date: string; week: PlanStep; outlook?: Outlook[] }[] {
   const dates = weekDates(thursday);
   return dates.map((date, i) => ({
     date,
-    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}, slow, mode),
+    week: step(board, weather, learned, thursday, asOf, date, steps[date] || {}, slow, mode, temps),
     ...(i === 0 ? { outlook: date >= TREND_FROM ? trendOutlook(board, asOf, thursday, date) : boostOutlook(weeklyOutlook(board, asOf, date, learned)) } : {}),
   }));
 }

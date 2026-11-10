@@ -19,7 +19,8 @@
      매니저가 계획 수량 그대로 확정했으면 올림, 매니저가 고친 수량이면 그대로 (core roundUnitOrder)
    PLAN_TODAY=YYYY-MM-DD 로 날을 정해 시험할 수 있음 · PLAN_DRY=1 이면 쓰지 않음
    ============================================================ */
-import { addDays, applySettings, asOrder, asPlan, BINARY_FROM, Board, BREAD_PLUS, hitReport, hitWeekDays, type HitReport, BREAD_SET, breadVerdictOf, compareDay, dayRange, DEFAULT_MODE, FINAL_LEAD, slowBreads, SLOW_DAYS, TREND_FROM, verdictOf, type DayCompare, type PlanModeNote, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { addDays, applySettings, asOrder, asPlan, BINARY_FROM, Board, withTemp, BREAD_PLUS, hitReport, hitWeekDays, type HitReport, BREAD_SET, breadVerdictOf, compareDay, dayRange, DEFAULT_MODE, FINAL_LEAD, slowBreads, SLOW_DAYS, TREND_FROM, verdictOf, type DayCompare, type PlanModeNote, floorCopy, withLiveCafe, learnWeather, makeFinal, makeWeek, nextSteps, nowKst, restep, reround, roundUnitOnly, roundUnitOrder, sameGroupBefore, weekDates, weekday, WEEK_PLAN_WEEKDAY, type OrderDoc, type PlanDoc } from "@report/core";
+import { midTemps } from "./midTemp";
 import { fbLogin, readFloorKey, readLive, readOrder, readPlan, writeFloor, writeOrders, writePlans } from "./firebase";
 import { readAll } from "./reports";
 
@@ -139,8 +140,32 @@ async function main() {
     //   매니저 잠정 확정(orders)은 그대로 — 계획 수량만 새로
     const reweek = env("PLAN_REWEEK") === "1";
     const already = !reweek && (await load(monday)).week?.madeOn === today;
-    if (already) console.log("주간 잠정안: 오늘 이미 셈 — 그대로 둠");
-    else {
+    if (already) {
+      console.log("주간 잠정안: 오늘 이미 셈 — 그대로 둠");
+      // 기온 미세 조정 채움 (2026-11-10 사장님) — 새벽 계산 땐 수요일 18시 중기예보라 다음 주 일요일 기온이 없음
+      //   → 목요일 낮 계산(06:41 · 14:35 · 15:20)이 목요일 06시 발표로 채움. 매니저가 그날을 잠정 확정하기 전일 때만
+      if (monday >= BINARY_FROM) {
+        const wait: string[] = [];
+        for (const d of weekDates(today)) if ((await load(d)).week?.temp?.pending) wait.push(d);
+        if (wait.length) {
+          const temps = await midTemps(today, nowKst().time);
+          for (const d of wait) {
+            if (!temps[d]) {
+              console.log(`기온 채움: ${d} — 예보가 아직 없음`);
+              continue;
+            }
+            if (Object.keys((await docsOf(d)).order?.provisional || {}).length) {
+              console.log(`기온 채움: ${d} — 이미 잠정 확정한 날이라 그대로`);
+              continue;
+            }
+            const doc = await load(d);
+            const week = withTemp(doc.week!, d, temps[d]);
+            out.set(d, { ...doc, week });
+            console.log(`기온 채움: ${d} · ${week.temp?.up ? "110%" : "조정 없음"}`);
+          }
+        }
+      }
+    } else {
       // 수요일(어제) 확정 카페가 아직 없으면(새벽 — 확정 수집은 09:12) 밤 마지막 마감 전 카페 숫자로 셈 (withLiveCafe, 클라우드 live/{어제})
       // 없거나 검사에 걸리면 화요일까지로. 날씨 배움 · 보정 배수는 확정 자료로
       const yesterday = addDays(today, -1);
@@ -197,7 +222,14 @@ async function main() {
         // 공개 기록에는 % · 날 수만
         console.log(hit ? `발표 적중률: ${hit.rate == null ? "—" : `${Math.round(hit.rate * 1000) / 10}%`} (${hit.days.length}일)` : "발표 적중률: 견줄 날 없음");
       }
-      for (const w of makeWeek(wBoard, weather, learned, today, wAsOf, steps, slow, mode)) {
+      // 기온 미세 조정 (반반 규칙부터, 2026-11-10 사장님) — 기상청 중기 기온예보로 다음 주 그날 최고 28도 이상 · 15도 이하면 × 110%
+      const temps = binary ? await midTemps(today, nowKst().time) : undefined;
+      const made = makeWeek(wBoard, weather, learned, today, wAsOf, steps, slow, mode, temps);
+      if (binary) {
+        const t = made.map((w) => w.week.temp);
+        console.log(`기온 조정: 110% ${t.filter((x) => x?.up).length}일 · 그대로 ${t.filter((x) => x && !x.up && !x.pending).length}일 · 예보 기다림 ${t.filter((x) => x?.pending).length}일`);
+      }
+      for (const w of made) {
         const doc = await load(w.date);
         out.set(w.date, { ...doc, week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}), ...(w.date === monday && hit ? { hit } : {}) });
       }

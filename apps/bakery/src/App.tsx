@@ -600,6 +600,18 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                 · 반반 규칙 — {step.binary.lastDay ? `지난 같은 요일(${Number(step.binary.lastDay.slice(5, 7))}/${Number(step.binary.lastDay.slice(8, 10))})` : "지난 같은 요일"} 판매(정가 + 할인 반)와 추세의 가운데
               </b>
             )}
+            {/* 기온 미세 조정 — 예보 최고 28도 이상 · 15도 이하면 반반 결과 × 110% (2026-11-10 사장님) */}
+            {kind !== "final" && step.temp && (
+              <b className="rain-up">
+                {" "}
+                ·{" "}
+                {step.temp.pending
+                  ? "기온 예보 기다림 (목요일 낮에 채움)"
+                  : step.temp.up
+                    ? `기온 조정 × 110% — 예보 최고 ${step.temp.max}도 (${step.temp.why === "더움" ? "더운 날" : "추운 날"})`
+                    : `기온 조정 없음 — 예보 최고 ${step.temp.max}도`}
+              </b>
+            )}
             {/* 두 가지 계획 중 이번 주에 쓴 쪽 — 지난 7일 견주기 결과 (2026-11-05 사장님) */}
             {step.mode && (
               <b className="rain-up" title={step.mode.why}>
@@ -662,7 +674,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
                   {r.manual && <small className="manual-tag"> 새 빵 — 매니저 기입</small>}
                   {r.est && <small className="manual-tag"> 새 빵 — 판 날 실적 · 작년 추세로 (고칠 수 있음)</small>}
                   {r.slow && <small className="kitchen-tag"> 할인 · 폐기 많아 조금 줄임</small>}
-                  {kind !== "final" && step?.binary && r.trend != null && !r.est && !r.manual && <small className="unit"> {r.last != null ? `지난 ${num1(r.last)} · 추세 ${r.trend}` : `지난 같은 요일 판매 없음 · 추세 ${r.trend} 그대로`}</small>}
+                  {kind !== "final" && step?.binary && r.trend != null && !r.est && !r.manual && <small className="unit"> {r.last != null ? `지난 ${num1(r.last)} · 추세 ${r.trend}` : `지난 같은 요일 판매 없음 · 추세 ${r.trend} 그대로`}{step.temp?.up && r.bin != null ? ` · 반반 ${r.bin} × 110%` : ""}</small>}
                   {isKitchenBread(r.name) && <small className="kitchen-tag"> 판매용 아님 · 시그니처 플래터용 (평일 {KITCHEN_QTY.평일} · 휴일 {KITCHEN_QTY.휴일}개 기준)</small>}
                   {kind === "final" && dayChangeAt(c, date) && <small className="day-change"> 당일 변경 {dayChangeAt(c, date)}</small>}
                   {planUnit(r.name, date) > 1 && <small className="unit"> {planUnit(r.name, date)}개 단위</small>}

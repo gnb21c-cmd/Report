@@ -391,7 +391,10 @@ export function demoApi(): Api {
       // 반반 규칙부터 — 목요일에 지난 7일 발표 적중률을 다음 주 월요일 문서에 (수집 plan.ts 와 같게)
       const monday = addDays(d, 4);
       const hit = monday >= BINARY_FROM ? hitReport(board, d, (x) => plans.get(x) ?? null) : null;
-      for (const w of makeWeek(board, {}, DEFAULT_LEARNED, d, asOf)) plans.set(w.date, { ...(plans.get(w.date) || { v: 2, date: w.date }), week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}), ...(w.date === monday && hit ? { hit } : {}) });
+      // 체험판 기온 — 다음 주 날마다 지어낸 예보 최고 기온 (추운 날 · 보통 날 · 더운 날이 섞이게, 마지막 날은 '기다림')
+      const demoMax = [16, 15, 13, 9, 6, 29];
+      const temps = Object.fromEntries(demoMax.map((max, i) => [addDays(monday, i), { max, min: max - 8, tmFc: `${d.replace(/-/g, "")}0600` }]));
+      for (const w of makeWeek(board, {}, DEFAULT_LEARNED, d, asOf, {}, undefined, undefined, temps)) plans.set(w.date, { ...(plans.get(w.date) || { v: 2, date: w.date }), week: w.week, ...(w.outlook ? { outlook: w.outlook } : {}), ...(w.date === monday && hit ? { hit } : {}) });
     }
     const t = addDays(d, FINAL_LEAD);
     const f = makeFinal(board, weather, DEFAULT_LEARNED, d, asOf, plans.get(t) || null, orders.get(t) || null);

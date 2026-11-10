@@ -13,8 +13,12 @@ import {
   hitReport,
   hitWeekDays,
   makeWeek,
+  parseMidTa,
   snapUnit,
+  TEMP_UP,
+  tempUpOf,
   trendDay,
+  withTemp,
   type DayReport,
   type PlanDoc,
   type StorePart,
@@ -201,6 +205,76 @@ describe("적중률 — 발표 수량 대 실제 판매 수요", () => {
     expect(r).toMatchObject({ plan: 112, demand: 98, miss: 14 });
     expect(r.rate).toBeCloseTo(1 - 14 / 98, 6);
     expect(r.breads[0]).toEqual({ name: "소금빵", plan: 84, demand: 70, miss: 14 });
+  });
+});
+
+/* 2026-11-10 사장님 — 기온 미세 조정: 다음 주 그날 예보 최고 기온이 28도 이상(더운 날) 또는 15도 이하(추운 날)면 반반 결과 × 110%
+   빵 생산량은 두 가지로만 — ① 추세 반반 ② 기온 미세 조정. 예보 = 기상청 중기 기온예보(수원, 4 ~ 10일 뒤) */
+describe("기온 미세 조정 — 최고 28도 이상 · 15도 이하면 반반 결과 × 110%", () => {
+  it("기준 — 최고 기온만 봄 (28 이상 더운 날 · 15 이하 추운 날)", () => {
+    expect(TEMP_UP).toBe(1.1);
+    expect(tempUpOf(28)).toEqual({ up: 1.1, why: "더움" });
+    expect(tempUpOf(33)).toEqual({ up: 1.1, why: "더움" });
+    expect(tempUpOf(27.9)).toBeNull();
+    expect(tempUpOf(15)).toEqual({ up: 1.1, why: "추움" });
+    expect(tempUpOf(-3)).toEqual({ up: 1.1, why: "추움" });
+    expect(tempUpOf(15.1)).toBeNull();
+    expect(tempUpOf(null)).toBeNull();
+  });
+
+  it("중기 기온예보 한 줄 → 날짜마다 최저 · 최고 (발표 날 + N일)", () => {
+    const t = parseMidTa({ regId: "11B20601", taMin5: 10, taMax5: 16, taMin6: "8", taMax6: "15", taMin10: -1, taMax10: 7, taMin7: null, taMax7: "" }, "202611101800");
+    expect(t).toEqual({
+      "2026-11-15": { max: 16, min: 10, tmFc: "202611101800" },
+      "2026-11-16": { max: 15, min: 8, tmFc: "202611101800" },
+      "2026-11-20": { max: 7, min: -1, tmFc: "202611101800" },
+    });
+    expect(parseMidTa(null, "202611101800")).toEqual({});
+  });
+
+  const week = makeWeek(board, {}, DEFAULT_LEARNED, THU, ASOF, {}, undefined, undefined, {
+    "2026-11-18": { max: 9, min: 0, tmFc: "202611111800" },
+    "2026-11-20": { max: 16, min: 7, tmFc: "202611111800" },
+    "2026-11-21": { max: 30, min: 22, tmFc: "202611111800" },
+  });
+  const day = (d: string) => week.find((w) => w.date === d)!.week;
+
+  it("추운 날(최고 9도) — 반반 빵마다 반반 결과 × 110% → 반올림 → 만드는 단위", () => {
+    const st = day("2026-11-18");
+    expect(st.temp).toEqual({ max: 9, min: 0, tmFc: "202611111800", up: 1.1, why: "추움" });
+    for (const it of st.items.filter((i) => i.bin != null)) expect(it.qty).toBe(snapUnit(it.name, Math.round(it.bin! * 1.1), undefined, undefined, "2026-11-18"));
+    const salt = st.items.find((i) => i.name === "소금빵")!;
+    expect(salt.bin).toBe(halfway(salt.last!, salt.trend!));
+    expect(salt.qty).toBe(Math.round(salt.bin! * 1.1));
+    expect(salt.qty).toBeGreaterThan(salt.bin!);
+  });
+
+  it("더운 날(최고 30도)도 × 110% · 보통 날(최고 16도)은 반반 그대로", () => {
+    expect(day("2026-11-21").temp).toMatchObject({ up: 1.1, why: "더움" });
+    const mild = day("2026-11-20");
+    expect(mild.temp).toEqual({ max: 16, min: 7, tmFc: "202611111800", up: null });
+    for (const it of mild.items.filter((i) => i.bin != null)) expect(it.qty).toBe(snapUnit(it.name, it.bin!, undefined, undefined, "2026-11-20"));
+  });
+
+  it("새 빵 어림 · 매니저 기입은 기온 조정 없음 · 합계는 다시", () => {
+    const st = day("2026-11-18");
+    const plain = makeWeek(board, {}, DEFAULT_LEARNED, THU, ASOF).find((w) => w.date === "2026-11-18")!.week;
+    expect(st.items.find((i) => i.est)!.qty).toBe(plain.items.find((i) => i.est)!.qty);
+    expect(st.total).toBe(st.items.reduce((a, b) => a + b.qty, 0));
+    expect(st.total).toBeGreaterThan(plain.total);
+  });
+
+  it("그날 예보가 아직 없으면(목요일 새벽엔 일요일이 빠짐) 반반 그대로 · '기다림' → 목요일 낮에 채움", () => {
+    const sun = day("2026-11-22");
+    expect(sun.temp).toEqual({ max: null, min: null, up: null, pending: true });
+    for (const it of sun.items.filter((i) => i.bin != null)) expect(it.qty).toBe(snapUnit(it.name, it.bin!, undefined, undefined, "2026-11-22"));
+    // 목요일 아침 6시 발표로 채움 — 추운 날이면 × 110%
+    const filled = withTemp(sun, "2026-11-22", { max: 5, min: -2, tmFc: "202611120600" });
+    expect(filled.temp).toEqual({ max: 5, min: -2, tmFc: "202611120600", up: 1.1, why: "추움" });
+    for (const it of filled.items.filter((i) => i.bin != null)) expect(it.qty).toBe(snapUnit(it.name, Math.round(it.bin! * 1.1), undefined, undefined, "2026-11-22"));
+    expect(filled.total).toBe(filled.items.reduce((a, b) => a + b.qty, 0));
+    // 다시 해도 쌓이지 않음 (반반 결과에서 늘 새로)
+    expect(withTemp(filled, "2026-11-22", { max: 5, min: -2, tmFc: "202611120600" })).toEqual(filled);
   });
 });
 

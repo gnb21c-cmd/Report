@@ -85,3 +85,5 @@ jobs:
           REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
           WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
           WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
+          # 빵 주간안 기온 미세 조정 — 기상청 중기 기온예보 (2026-11-10 사장님, apps/collector/src/midTemp.ts)
+          KMA_SERVICE_KEY: ${{ secrets.KMA_SERVICE_KEY }}
