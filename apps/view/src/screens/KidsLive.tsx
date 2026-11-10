@@ -7,8 +7,8 @@
      번호를 누르면 손님 이름 · 전화번호 그대로 (열쇠 미반납 때 관리자가 전화 — 사장님 지시)
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, deskNaverCheck, DESK_LIVE_STALE_MIN, kidsOverPaid, todayKst, won, type Board, type DeskHolder, type DeskLive, type DeskNaverCheck } from "@report/core";
-import { deskLiveNow } from "../data/firebase";
+import { count, deskLiveAgeMin, deskLiveSales, deskLiveSlotNow, deskNaverCheck, DESK_LIVE_STALE_MIN, kidsOverPaid, rentalLabel, todayKst, won, type Board, type DeskHolder, type DeskLive, type DeskNaverCheck, type KidsRental } from "@report/core";
+import { deskLiveNow, deskRentalDay } from "../data/firebase";
 
 const KIND: Record<DeskHolder["kind"], string> = { n: "네이버", w: "현장", s: "서비스 키" };
 const COLOR = { in: "이용 중", pink: "반납 시간 (10분 안)", red: "반납 시간 넘음" } as const;
@@ -29,12 +29,16 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
   const [all, setAll] = useState(false);
   const [pick, setPick] = useState<number | null>(null);
   const [revisitOpen, setRevisitOpen] = useState(false);
+  // 키즈대관 (2026-11-10 사장님) — 현황 글의 날 대관 기록 · null = 받지 못함('—')
+  const [rent, setRent] = useState<KidsRental[] | null>(null);
+  const [rentOpen, setRentOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
     setBusy(true);
     try {
       const r = await deskLiveNow();
+      setRent(r.live ? await deskRentalDay(r.live.day).catch(() => null) : null);
       setLive(r.live);
       setState(r.live ? "ok" : r.bad ? "bad" : "none");
       setErr("");
@@ -139,16 +143,17 @@ export function KidsLive({ board, onBack }: { board: Board; onBack: () => void }
             <p className="sub">틀린 숫자를 보여 드리지 않으려고 숨겼어요. 키즈 POS 통합데스크를 새 판으로 바꿔 주세요.</p>
           </section>
         )}
-        {live && chk && <Body live={live} chk={chk} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} onRevisit={() => setRevisitOpen(true)} />}
+        {live && chk && <Body live={live} chk={chk} pos={kidsOverPaid(board.report(live.day))} now={now} all={all} onAll={() => setAll(!all)} onPick={setPick} onRevisit={() => setRevisitOpen(true)} rent={rent} onRent={() => setRentOpen(true)} />}
       </main>
       {live && pick != null && live.keys.map[pick] && <KeySheet live={live} no={pick} onClose={() => setPick(null)} />}
       {live?.revisit && revisitOpen && <RevisitSheet live={live} onClose={() => setRevisitOpen(false)} />}
+      {live && rent && rent.length > 0 && rentOpen && <RentalSheet day={live.day} list={rent} onClose={() => setRentOpen(false)} />}
     </>
   );
 }
 
 /** chk.ok = false 면 통합데스크 네이버 숫자(오늘 입장 네이버 · 총 판매수 · 입장료 장수 · 네이버 예약 칸)를 쓰지 않음 — 틀린 숫자 대신 '—' · 포스 수집 */
-function Body({ live, chk, pos, now, all, onAll, onPick, onRevisit }: { live: DeskLive; chk: DeskNaverCheck; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void; onRevisit: () => void }) {
+function Body({ live, chk, pos, now, all, onAll, onPick, onRevisit, rent, onRent }: { live: DeskLive; chk: DeskNaverCheck; pos: { count: number; amount: number } | null; now: Date; all: boolean; onAll: () => void; onPick: (k: number) => void; onRevisit: () => void; rent: KidsRental[] | null; onRent: () => void }) {
   const { people: p, naver: n, keys: k } = live;
   const s = deskLiveSales(live, pos);
   const off = !chk.ok;
@@ -167,7 +172,8 @@ function Body({ live, chk, pos, now, all, onAll, onPick, onRevisit }: { live: De
           <small>장</small>
           <span className="note">{off ? "네이버 이용완료를 확인하는 중 — 통합데스크가 네이버를 다시 불러오면 보여요" : "총 판매수 = 네이버 이용완료 + 현장"}</span>
         </div>
-        {/* 네 칸 (2026-10-27 사장님): 네이버 = 오늘 팔린 네이버 입장권 · 현장입장 = 현장에서 판 입장권 · 재방문성공 = 이벤트 시작일 뒤 다시 와서 돈까스를 받은 수 오늘(누적) · 이벤트 = 입장료 없이 들어온 이벤트 입장 */}
+        {/* 네 칸 (2026-10-27 사장님): 네이버 = 오늘 팔린 네이버 입장권 · 현장입장 = 현장에서 판 입장권 · 재방문성공 = 이벤트 시작일 뒤 다시 와서 돈까스를 받은 수 오늘(누적)
+            · 키즈대관 = 오늘 대관 건수, 누르면 '단체 이름 (입금 10/16)' (2026-11-10 사장님 — 이벤트 입장 수 칸을 바꿈: 이벤트는 11월 말에 끝나고 매출과 이어지지 않음) */}
         <div className="klive-split four">
           <div>
             <span>네이버</span>
@@ -192,13 +198,21 @@ function Body({ live, chk, pos, now, all, onAll, onPick, onRevisit }: { live: De
               <b className="num">—</b>
             </div>
           )}
-          <div>
-            <span>이벤트</span>
-            <b className="num">{count(live.walk.event)}</b>
-          </div>
+          {rent && rent.length > 0 ? (
+            <button className="tap" onClick={onRent} aria-haspopup="dialog" aria-label={`키즈대관 ${rent.length}건 — 단체 · 입금일 보기`}>
+              <span>키즈대관</span>
+              <b className="num">{count(rent.length)}</b>
+            </button>
+          ) : (
+            <div>
+              <span>키즈대관</span>
+              <b className="num">{rent ? "0" : "—"}</b>
+            </div>
+          )}
         </div>
         <p className="note">
           {live.revisit ? `(수) = ${Number(live.revisit.from.slice(5, 7))}월 ${Number(live.revisit.from.slice(8))}일 이후 재방문 누적 · 재방문성공을 누르면 오늘 손님` : "재방문성공은 통합데스크를 새 판으로 올리면 보여요"}
+          {rent && rent.length > 0 ? " · 키즈대관을 누르면 단체 · 입금일 (대관료는 입금한 날 매출)" : ""}
           {live.walk.service ? ` · 서비스 키 ${live.walk.service}개는 판매가 아니라 총 판매수에 안 들어가요` : ""}
           {n.test ? ` · 시험 기록 ${n.test}장 뺌` : ""}
         </p>
@@ -376,6 +390,36 @@ function PosNaver({ chk, cur, all, onAll }: { chk: DeskNaverCheck; cur: string |
       )}
       <p className="note">포스 컴퓨터가 15분마다 네이버 예약현황에서 읽은 숫자예요 (19:30 뒤 예약은 19:30 칸에). 완료 · 미입장 · 잔여는 통합데스크가 다시 불러오면 보여요.</p>
     </section>
+  );
+}
+
+/** 오늘 키즈대관 — '단체 이름 (입금 10/16)' 한 줄씩 · 적혀 있으면 시각 · 인원 · 대관료 · 메모 (대관료는 입금한 날 매출에 이미 들어감) */
+function RentalSheet({ day, list, onClose }: { day: string; list: KidsRental[]; onClose: () => void }) {
+  return (
+    <div className="sheet-bg" onClick={onClose}>
+      <div className="sheet klive-sheet" role="dialog" aria-label="오늘 키즈대관" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <b>
+            {md(day)} 키즈대관 {count(list.length)}건
+          </b>
+          <button className="icon-btn" onClick={onClose} aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <ul className="klive-rent">
+          {list.map((r, i) => {
+            const more = [r.time, r.people != null ? `${count(r.people)}명` : "", r.amount != null ? won(r.amount) : "", r.memo].filter(Boolean).join(" · ");
+            return (
+              <li key={`${r.name}|${i}`}>
+                <b>{rentalLabel(r, day)}</b>
+                {more && <span className="note">{more}</span>}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="note">대관료는 입금한 날 키즈입장 매출에 들어가 있어요 (자금 기록과 맞춤). 여기는 실제로 이용한 날의 기록이에요.</p>
+      </div>
+    </div>
   );
 }
 

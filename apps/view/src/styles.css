@@ -1789,6 +1789,20 @@ button.quad-box {
   text-align: right;
   white-space: nowrap;
 }
+/* 키즈대관 (2026-11-10) — '단체 이름 (입금 10/16)' 한 줄씩, 밑에 시각 · 인원 · 대관료 */
+.klive-rent {
+  list-style: none;
+  margin: 6px 0 4px;
+  padding: 0;
+}
+.klive-rent li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 16px;
+}
 .klive-split.four b small {
   font-size: 14px;
   font-weight: 700;
