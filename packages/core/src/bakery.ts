@@ -208,11 +208,20 @@ export interface OrderDoc {
 /** 베이커리 생산품이 아닌 상품(NOT_BREAD — 딸기잼 · 블루베리잼)과 그날 단종된 빵(isDiscontinued)을 뺀 계획 단계 (합계도 다시) — 이미 만든 계획을 읽을 때 */
 function breadOnly(st: PlanStep | undefined, date: string): PlanStep | undefined {
   const out = (n: string) => NOT_BREAD.has(n) || isDiscontinued(n, date);
-  if (!st || !st.items?.some((i) => out(i.name))) return st;
-  const items = st.items.filter((i) => !out(i.name));
+  // 이름이 바뀐 빵은 그날 이름으로 (저당팥빵 → 단팥빵 11-12 부터 — 이미 발표한 계획도, 2026-11-12 사장님 · breadNames.ts)
+  const ren = (n: string) => breadNameOn(n, date);
+  if (!st || !st.items?.some((i) => out(i.name) || ren(i.name) !== i.name)) return st;
+  const have = new Set(st.items.map((i) => i.name));
+  // 이미 새 이름 줄이 있으면 그 줄이 이김 (두 줄이 되지 않게)
+  const items = st.items.filter((i) => !out(i.name) && (ren(i.name) === i.name || !have.has(ren(i.name)))).map((i) => (ren(i.name) === i.name ? i : { ...i, name: ren(i.name) }));
   return { ...st, items, total: items.reduce((a, b) => a + b.qty, 0) };
 }
-const breadLines = (m: Record<string, OrderLine> | undefined, date: string) => Object.fromEntries(Object.entries(m || {}).filter(([n]) => !NOT_BREAD.has(n) && !isDiscontinued(n, date)));
+const breadLines = (m: Record<string, OrderLine> | undefined, date: string) => {
+  const e = Object.entries(m || {}).filter(([n]) => !NOT_BREAD.has(n) && !isDiscontinued(n, date));
+  const have = new Set(e.map(([n]) => n));
+  const ren = (n: string) => breadNameOn(n, date);
+  return Object.fromEntries(e.filter(([n]) => ren(n) === n || !have.has(ren(n))).map(([n, l]) => [ren(n), l]));
+};
 
 /** 클라우드 문서 → 계획 (예전 모양 v1 은 버림). 생산품이 아닌 상품 · 그날 단종된 빵은 여기서 뺌 — 매니저 앱 · 현장 태블릿 · 보고 앱 · 계획 작업이 모두 이렇게 읽음 */
 export function asPlan(x: unknown): PlanDoc | null {
@@ -318,7 +327,7 @@ export const BREAD_ORDER: readonly string[] = [
   "먹물트리플치즈",
   "구수한만능감자빵",
   "흑미로만든수수부꾸미", // 표: 수수부꾸미
-  "저당팥빵", // 옛 인절미팥빵 (2026-10-25 이름 바꿈)
+  "단팥빵", // 옛 인절미팥빵 → 저당팥빵(2026-10-25 이름 바꿈) → 단팥빵(11-12 부터, 2026-11-12)
   "감자파니니",
   "쫀득크림빵",
   "소금빵",
@@ -343,7 +352,8 @@ export const BREAD_ORDER: readonly string[] = [
   "티라미두유볼(소)",
   "후르츠생크림케이크", // 표: 복숭아생크림케이크 — 계절 과일에 따라 이름만 바뀜, '…생크림케이크'는 모두 이 자리 (2026-10-22 사장님)
 ];
-const ORDER_INDEX = new Map(BREAD_ORDER.map((n, i) => [breadKey(n), i]));
+// 이름이 바뀐 빵은 가장 새 이름으로도 같은 자리 (표에 저당팥빵으로 적혀 있어도 단팥빵이 그 자리 — 2026-11-12)
+const ORDER_INDEX = new Map(BREAD_ORDER.map((n, i) => [breadKey(breadNewName(n)), i]));
 const CAKE_AT = BREAD_ORDER.length - 1;
 /** 표에서 몇 번째 (없으면 맨 뒤) — 이름에 '생크림케이크'가 들어가면 과일이 바뀌어도 생크림케이크 자리 · 이름이 바뀐 빵은 옛 이름도 같은 자리 */
 export function breadOrderAt(name: string): number {
