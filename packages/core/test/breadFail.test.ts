@@ -54,7 +54,7 @@ describe("생산 실패 — 문서 · 현장 복사본", () => {
   it("빵마다 실패 수 — 0 은 빼고, 새 이름으로 묶을 수 있음", () => {
     const o = orderOf("2026-11-01", { 인절미팥빵: 2, 소금빵: 0 });
     expect([...failQty(o)]).toEqual([["인절미팥빵", 2]]);
-    expect([...failQty(o, true)]).toEqual([["저당팥빵", 2]]);
+    expect([...failQty(o, true)]).toEqual([["단팥빵", 2]]); // 가장 새 이름 (저당팥빵 → 단팥빵 2026-11-12)
     expect(failQty(null).size).toBe(0);
   });
 });
