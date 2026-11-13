@@ -15,7 +15,7 @@ const cafe = (date: string): StorePart => ({
 });
 
 describe("키즈 포스 판매 없음 (오케이포스 영수증 0건)", () => {
-  const p = emptySalesPart("kids", "2026-11-11", "OKPOS 자동 2026-11-11 키즈.xls", () => null).part;
+  const p = emptySalesPart("kids", "2026-11-11", "OKPOS 자동 2026-11-11 키즈.xls", () => "기타").part;
 
   it("빈 키즈 칸 — 판매 없음 표시 · 매출 0 · 현장 0 · 검산 통과", () => {
     expect(p.none).toBe(true);
