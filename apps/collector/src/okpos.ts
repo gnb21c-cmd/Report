@@ -95,7 +95,8 @@ export class Okpos {
       await this.page.waitForTimeout(1500);
     }
     const mf = this.page.frame({ name: "MainFrm" });
-    if (!mf || !(await until(mf, `!!document.getElementById("ss_SHOP_NM") && typeof doAction === "function"`, 20000))) throw new Error("영수증별매출상세현황 화면이 안 열림");
+    // 60초까지 기다림 — 오케이포스가 느린 저녁엔 20초 안에 안 열려 19:30 ~ 20:30 마감 전 수집이 모두 멈춘 적 있음 (2026-11-13)
+    if (!mf || !(await until(mf, `!!document.getElementById("ss_SHOP_NM") && typeof doAction === "function"`, 60000))) throw new Error("영수증별매출상세현황 화면이 안 열림");
     say("영수증별매출상세현황 열림");
     return mf;
   }

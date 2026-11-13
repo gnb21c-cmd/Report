@@ -71,7 +71,11 @@ async function main() {
   const problems: string[] = [];
   let sent = 0;
   try {
-    await start();
+    // 로그인 · 영수증 화면이 안 되면 새 브라우저로 한 번 더 (오케이포스가 느릴 때 — 2026-11-13)
+    await start().catch(async (e) => {
+      say(`${mask((e as Error).message)} → 다시 로그인해서 한 번 더`);
+      await restart();
+    });
     for (const date of dates) {
       // 50% 할인 개수만 채우기 — 카페 엑셀을 다시 받아 이미 올린 칸에 bakeryHalf · bakeryHalfBy 만 더함 (매출 값은 그대로)
       if (halfOnly && fb) {
