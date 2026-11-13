@@ -105,6 +105,19 @@ service cloud.firestore {
         allow delete: if isSender(board);
       }
 
+      // 두 PC 연결 (통합데스크 현장 POS ↔ 사무실 PC · 2026-11-06) — astanakiz docs/SYNC.md
+      //   문서 둘(pos · office)만 계속 덮어씀 · json = 잠긴 글(astanakiz-sync · 연결 코드 없이는 못 읽음) · 보고 앱은 읽지 않음
+      match /deskSync/{doc} {
+        allow read: if true;
+        allow create, update: if (doc == "pos" || doc == "office")
+          && exists(/databases/$(database)/documents/boards/$(board)/settings/main)
+          && request.resource.data.keys().hasOnly(["json", "at"])
+          && request.resource.data.json is string && request.resource.data.json.size() < 900000
+          && request.resource.data.json.matches("(?s)^[{].*astanakiz-sync.*$")
+          && request.resource.data.at is string && request.resource.data.at.size() < 40;
+        allow delete: if isSender(board);
+      }
+
       // 베이커리 작업지시 — 계획(plans: 매일 16시 GitHub 가 씀) · 확정(orders: 매니저 D 가 씀). 현장 태블릿 D-1 · 보고 앱 B 는 읽기만
       match /plans/{date} {
         allow read: if true;
