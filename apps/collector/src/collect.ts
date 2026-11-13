@@ -5,9 +5,12 @@
    - COLLECT_DRY=1 이면 올리지 않고 확인만
    - 사람이 영수증별 엑셀로 이미 올린 칸은 덮지 않음 (사람이 나중에 올리면 사람 것이 이김). 상품별 정리표로 넣은 지난 자료는 영수증별로 바꿈
    - 엑셀 합계 줄과 계산이 다르면 올리지 않고 실패로 끝냄 (GitHub 가 알림 메일을 보냄)
+   - 키즈 포스 판매가 없던 날 (2026-11-13 사장님 — 11-11): 오케이포스가 조회를 끝내고 영수증 0건('엑셀 출력할 자료가 없습니다')이면
+     '판매 없음' 칸(none)을 올림 → 보고 앱 경고 대신 '키즈 포스 판매 없음'. 키즈 포스가 매출을 늦게 보낼 수 있어
+     하루 수집 때 이틀 전 · 사흘 전의 '판매 없음' 키즈 칸을 다시 받아 영수증이 생겼으면 그 숫자로 바꿈 (카페는 0건이면 그대로 실패)
    공개 저장소라 기록(로그)에는 줄 수 · 일치 여부만 남김 (매출 숫자 · 매장 이름 없음)
    ============================================================ */
-import { buildStorePart, dayRange, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
+import { addDays, buildStorePart, dayRange, emptySalesPart, parseReceiptSheet, partCheck, sectorLookup } from "@report/core";
 import { fbLogin, readCafePiece, readProducts, readStores, writeCafePiece, writeLines, writeStores } from "./firebase";
 import type { Frame } from "playwright";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
@@ -59,7 +62,8 @@ async function main() {
     timeout(
       (async () => {
         await ok.pickShop(mf, store);
-        return ok.download(mf, date);
+        // 키즈는 판매 없는 날이 있음 — 조회가 끝나고 0건이면 파일 없이 rows 0
+        return ok.download(mf, date, { allowEmpty: store === "kids" });
       })(),
       120_000,
     );
@@ -115,9 +119,16 @@ async function main() {
             await restart();
             d = await fetchDay(store, date);
           }
+          const file = `OKPOS 자동 ${date} ${LABEL[store]}.xls`;
+          if (d.rows === 0) {
+            // 키즈 포스 판매 없음 — 오케이포스 영수증 0건
+            const r = emptySalesPart(store, date, file, sectorLookup(table));
+            say(`${date} ${LABEL[store]}: 판매 없음 (오케이포스 영수증 0건)`);
+            out.push({ kind: store, part: r.part, file, lines: r.lines });
+            continue;
+          }
           const sheet = parseReceiptSheet(readRows(d.buf));
           if (sheet.from && (sheet.from !== date || sheet.to !== date)) throw new Error(`엑셀 조회일자가 ${sheet.from} ~ ${sheet.to} (요청 ${date})`);
-          const file = `OKPOS 자동 ${date} ${LABEL[store]}.xls`;
           const r = buildStorePart({ store, date, file, sheet, sectorOf: sectorLookup(table) });
           const check = partCheck(r.part);
           say(`${date} ${LABEL[store]}: 판매 줄 ${sheet.lines.length}개 · 반품 짝 ${r.matches.length}건 · 짝 없는 반품 ${r.unmatched.length}건 · ${check.ok ? "엑셀 합계와 일치" : "엑셀 합계와 다름"}`);
@@ -139,6 +150,37 @@ async function main() {
       if (fb && !dry && out.length) {
         await writeStores(fb, AUTO_BY, date, out);
         sent += out.length;
+      }
+    }
+    // 판매 없음으로 올린 키즈 칸 다시 확인 (하루 수집 때만 — 키즈 포스가 매출을 늦게 보냈을 수 있음)
+    if (fb && !range && !halfOnly) {
+      for (const back of [1, 2]) {
+        const date = addDays(from, -back);
+        const old = (await readStores(fb, date)).kids;
+        if (!old || old.by !== AUTO_BY || !old.p?.none) continue;
+        try {
+          const d = await fetchDay("kids", date).catch(async () => {
+            await restart();
+            return fetchDay("kids", date);
+          });
+          if (d.rows === 0) {
+            say(`${date} 키즈: 다시 봐도 판매 없음`);
+            continue;
+          }
+          const sheet = parseReceiptSheet(readRows(d.buf));
+          if (sheet.from && (sheet.from !== date || sheet.to !== date)) throw new Error(`엑셀 조회일자가 ${sheet.from} ~ ${sheet.to} (요청 ${date})`);
+          const file = `OKPOS 자동 ${date} 키즈.xls`;
+          const r = buildStorePart({ store: "kids", date, file, sheet, sectorOf: sectorLookup(table) });
+          const check = partCheck(r.part);
+          say(`${date} 키즈: 다시 보니 판매 줄 ${sheet.lines.length}개 · ${check.ok ? "엑셀 합계와 일치" : "엑셀 합계와 다름"}`);
+          if (!check.ok) throw new Error("엑셀 합계와 계산이 다름 — 입력 화면에서 직접 확인해 주세요");
+          if (!dry) {
+            await writeStores(fb, AUTO_BY, date, [{ kind: "kids", part: r.part, file, lines: r.lines }]);
+            sent++;
+          }
+        } catch (e) {
+          problems.push(`${date} 키즈 다시 확인: ${mask((e as Error).message)}`);
+        }
       }
     }
   } finally {

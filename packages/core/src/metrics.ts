@@ -65,6 +65,8 @@ export interface Metrics {
   to: string;
   /** 자료가 있는 날 수 (조각별) */
   has: { cafe: number; kids: number; naver: number };
+  /** 키즈 포스 판매 없는 날 수 (오케이포스 영수증 0건 — 키즈 칸은 있음, 2026-11-13) */
+  kidsNone?: number;
   /** 시간대 자료(영수증별 엑셀)가 있는 카페 날 수 */
   hourlyDays: number;
   box: Record<BoxKey, number>;
@@ -262,6 +264,7 @@ export class Board {
     let sWalk = 0;
     if (kids) {
       m.has.kids = 1;
+      if (kids.none) m.kidsNone = 1;
       const k = kids.kids;
       m.posNet += kids.posNet;
       m.voucher += kids.voucher;
@@ -352,6 +355,7 @@ export class Board {
       m.has.cafe += x.has.cafe;
       m.has.kids += x.has.kids;
       m.has.naver += x.has.naver;
+      if (x.kidsNone) m.kidsNone = (m.kidsNone || 0) + x.kidsNone;
       m.hourlyDays += x.hourlyDays;
       for (const b of BOXES) m.box[b] += x.box[b];
       m.total += x.total;
