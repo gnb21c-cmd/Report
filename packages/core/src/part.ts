@@ -91,6 +91,8 @@ export interface StorePart {
   products: ProductTuple[];
   refunds: { receipts: number; lines: number; unmatched: number; amount: number };
   kids: KidsNumbers | null;
+  /** 그날 포스 영수증 0건 — 판매 없음 (오케이포스가 '엑셀 출력할 자료가 없습니다'만 띄움, 2026-11-13 사장님: 11-11 키즈 포스 판매 없던 날) */
+  none?: boolean;
 }
 
 export interface NaverPart {
@@ -323,6 +325,14 @@ export function buildNaverPart(date: string, tickets: (number | string | null)[]
 }
 
 /** 분류별 합이 맞는지 등 — A 가 보내기 전에 보여 줄 확인 */
+/** 판매 없는 날 칸 — 오케이포스가 그날 영수증 0건이라고 답했을 때 (매출 0 · 현장 0 · none 표시, 2026-11-13 사장님)
+    수집은 키즈 포스가 매출을 늦게 보낼 수 있어 다음 이틀 아침 수집 때 다시 확인함 (apps/collector/src/collect.ts) */
+export function emptySalesPart(store: StoreId, date: string, file: string, sectorOf: SectorOf): BuildResult {
+  const r = buildStorePart({ store, date, file, sheet: { from: date, to: date, lines: [], sheetNet: 0, sheetQty: 0 }, sectorOf });
+  r.part.none = true;
+  return r;
+}
+
 export function partCheck(part: StorePart): { ok: boolean; text: string } {
   if (part.sheetNet == null) return { ok: true, text: "엑셀 합계 줄 없음" };
   const diff = Math.round(part.posNet - part.sheetNet);

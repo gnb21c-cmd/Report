@@ -94,11 +94,15 @@ export function Home({ d, open, weather, cash, cashFrom, settle, surveys, revisi
             : `${shortLabel(d.date)} 자료가 없습니다 — 휴무이거나 아직 사무실에서 입력 전입니다.`}
         </div>
       ) : (
-        (day.has.cafe === 0 || day.has.kids === 0) && (
-          <div className="banner" role="alert">
-            <span aria-hidden>⚠</span> {day.has.cafe === 0 ? STORE_LABEL.cafe : STORE_LABEL.kids} 엑셀이 아직 입력되지 않았습니다.
-          </div>
-        )
+        <>
+          {(day.has.cafe === 0 || day.has.kids === 0) && (
+            <div className="banner" role="alert">
+              <span aria-hidden>⚠</span> {day.has.cafe === 0 ? STORE_LABEL.cafe : STORE_LABEL.kids} 엑셀이 아직 입력되지 않았습니다.
+            </div>
+          )}
+          {/* 키즈 포스 판매 없는 날 — 오케이포스 영수증 0건 (경고 아님, 2026-11-13 사장님) */}
+          {day.has.kids > 0 && !!day.kidsNone && day.kidsNone >= day.has.kids && <div className="banner">{STORE_LABEL.kids} 포스 판매 없음 — 그날 오케이포스 영수증 0건 (현장 판매 0)</div>}
+        </>
       )}
 
       <div className="day-top">
