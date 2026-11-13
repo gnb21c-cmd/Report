@@ -69,8 +69,21 @@ async function main() {
   const parts: { kind: Store; part: unknown }[] = [];
   const problems: string[] = [];
   try {
-    await login();
-    for (const store of ["cafe", "kids"] as Store[]) {
+    // 로그인 · 영수증 화면이 안 되면 새 브라우저로 한 번 더 — 그래도 안 되면 이 칸의 카페 · 키즈는 건너뛰고 네이버는 그대로 (2026-11-13: 오케이포스가 느려 화면이 안 열린 채 네이버까지 멈췄음)
+    let ready = false;
+    try {
+      await login();
+      ready = true;
+    } catch (e) {
+      say(`OKPOS: ${mask((e as Error).message)} → 새로 로그인해서 한 번 더`);
+      try {
+        await relogin();
+        ready = true;
+      } catch (e2) {
+        problems.push(`OKPOS: ${mask((e2 as Error).message)}`);
+      }
+    }
+    for (const store of (ready ? ["cafe", "kids"] : []) as Store[]) {
       try {
         let d: Awaited<ReturnType<typeof fetchDay>>;
         try {
