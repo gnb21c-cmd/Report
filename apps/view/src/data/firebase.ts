@@ -7,7 +7,7 @@
    - weather/<날짜>: GitHub 가 1시간마다 기상청에서 받아 올린 날씨 (apps/weather)
    A 가 쓰는 모양: apps/entry/src/cloud.ts writePieces
    ============================================================ */
-import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_RENTAL_PREFIX, DESK_REVISIT, DESK_STATS, deskEventsFrom, deskRevisitOkFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRental, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type KidsRental, type LiveDoc, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
+import { addDays, asOrder, asPlan, cleanSettings, cleanSurveys, DESK_EVENT_PREFIX, DESK_LIVE, DESK_RENTAL_PREFIX, DESK_REVISIT, DESK_STATS, deskEventsFrom, deskRevisitOkFrom, mergeSurveyDocs, parseDeskEvent, parseDeskLive, parseDeskRental, parseRevisitStudy, parseDeskRevisit, SURVEY_INBOX, surveysFromInbox, todayKst, type DayReport, type DayWeather, type DeskLive, type DeskRevisit, type KidsRental, type LiveDoc, type RevisitStudy, type OrderDoc, type PlanDoc, type WeatherKey } from "@report/core";
 import demoDeskLive from "./demoDeskLive.json";
 import demoRevisit from "./demoRevisit.json";
 import type { Source } from "./source";
@@ -318,4 +318,35 @@ export async function deskRentalDay(day: string): Promise<KidsRental[] | null> {
   if (!res.ok) throw new Error(`키즈대관 받기 오류 (${res.status})`);
   const r = parseDeskRental(fieldsOf(await res.json()).json);
   return r && r.day === day ? r.list : null;
+}
+
+/** 마지막으로 받거나 계산한 분석 요약 — 홈 '재방문 분석' 칸이 화면을 오갈 때마다 다시 받지 않게 (undefined = 아직 안 받음) */
+export const studyMemo: { v?: RevisitStudy | null } = {};
+
+/** 재방문 자세히 분석 요약 (2026-11-14 사장님) — 키즈 포스 PC 에서 방문 기록 파일로 계산한 요약 (손님 해시 없음 · packages/core/src/revisitStudy.ts)
+    deskStats/study-revisit 하나에 덮어씀 · 없으면 null */
+export async function studyRead(): Promise<RevisitStudy | null> {
+  if (__DEMO__) return studyMemo.v ?? null;
+  const cfg = firebaseConfig();
+  const board = boardKey();
+  if (!cfg || !board) return null;
+  const res = await fetch(`${base(cfg, board)}/${DESK_STATS}/study-revisit?key=${cfg.apiKey}`, { cache: "no-store" });
+  if (res.status === 404) return (studyMemo.v = null);
+  if (!res.ok) throw new Error(`분석 결과 받기 오류 (${res.status})`);
+  return (studyMemo.v = parseRevisitStudy(fieldsOf(await res.json()).json));
+}
+/** 요약 저장 — 보안 규칙에 study-revisit 이 있어야 함 (없으면 403) */
+export async function studySave(s: RevisitStudy): Promise<void> {
+  studyMemo.v = s;
+  if (__DEMO__) return;
+  const cfg = firebaseConfig();
+  const board = boardKey();
+  if (!cfg || !board) throw new Error("설치 주소(…/b/열쇠/)로 열어 주세요");
+  const res = await fetch(`${base(cfg, board)}/${DESK_STATS}/study-revisit?key=${cfg.apiKey}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { json: { stringValue: JSON.stringify(s) }, at: { stringValue: new Date().toISOString() } } }),
+  });
+  if (res.status === 403) throw new Error("저장이 막혔어요 (403) — 클라우드 보안 규칙에 study-revisit 을 붙여 넣어야 해요");
+  if (!res.ok) throw new Error(`저장 오류 (${res.status})`);
 }

@@ -7,16 +7,17 @@
    ④ 키즈 입장 4칸 한 줄 (가운데 정렬): 입장권 판매 총 수량 · 네이버판매 (中 신규 n장) · 현장판매 · 이벤트 무료입장 (→ 각 상세)
       오늘(마감 전)만 첫 칸이 '오늘 현재 팔린 수량 (업데이트 시간기준)' → 누르면 키즈 실시간 (2026-10-16 — 키즈 POS 통합데스크의 지금 현황: 네이버 · 열쇠 · 입장료)
       지난 날(마감된 실적)은 '입장권 판매 총 수량' 숫자만 — 누를 수 없고 아래 글 없음 (근무자 오해 막음, 2026-10-25 사장님)
-   ⑤ 카페 소비 인원 · 1인 평균소비 · 설문조사 세 칸 (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
+   ⑤ 카페 소비 인원 · 1인 평균소비 · 재방문 분석 세 칸 (설문조사 칸 자리, 2026-11-14 사장님) (소비 인원 → 상세) — 이름은 2026-10-13 사장님 지시 (예전 '카페아스타나 방문인원')
       설문조사(2026-10-14): 통합데스크가 20시에 남기는 설문 보고 — '현재 진행중 N건', 누르면 설문마다 항목을 순위 순(1위가 맨 위) · 응답 수 · %, 진행 중 · 최근 설문이 맨 위
    ⑥ 당월 · 전년 동기간 줄 다음에 자금 현황 — 잔액 합계 · 대출 제외 자금 (→ 자금 상세), 그 아래 OO년 총 매출 · 정산완료 줄
    ⑦ OO년 (현금/신용) 정산완료 합계 (1/1~마감일 통장에 들어온 카드 · 네이버페이 · 배달앱 · 현금매출) — 누계 줄 오른쪽 아래
    ============================================================ */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WeatherPanel } from "../ui/WeatherPanel";
+import { studyMemo, studyRead } from "../data/firebase";
 import { LiveWarn, useLive } from "../ui/Live";
 import { useFit } from "../ui/fit";
-import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, revisitOkLine, type DeskRevisitOk, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyRanked, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type SettleKind, type SurveyDoc } from "@report/core";
+import { addDays, BOXES, changePct, comparable, count, hasData, holidayName, kidsTickets, money, revisitOkLine, type DeskRevisitOk, todayKst, pct, SETTLE_LABEL, shortLabel, STORE_LABEL, surveyList, surveyRanked, won, type BoxKey, type CashSummary, type Dashboard, type DayKinds, type DayWeather, type Metrics, type RevisitStudy, type SettleKind, type SurveyDoc } from "@report/core";
 
 export type View =
   | { name: "home" }
@@ -30,7 +31,8 @@ export type View =
   | { name: "settle" }
   | { name: "visitors" }
   | { name: "settings" }
-  | { name: "kidsLive" };
+  | { name: "kidsLive" }
+  | { name: "revisitStudy" };
 export type Open = (v: View) => void;
 
 export function Delta({ now, before, label, money = true, missing }: { now: number | null; before: number | null; label: string; money?: boolean; missing?: string }) {
@@ -167,7 +169,8 @@ export function Home({ d, open, weather, cash, cashFrom, settle, surveys, revisi
           <div className="stat-value">{day.avgSpend == null ? "—" : won(day.avgSpend)}</div>
           <span className="note">총 매출 ÷ 카페 소비 인원</span>
         </div>
-        <SurveyBox doc={surveys ?? null} />
+        {/* 설문조사 칸 자리 → 재방문 분석 (2026-11-14 사장님 "이제 설문조사 하지 않으니") — 설문을 다시 하면 <SurveyBox doc={surveys ?? null} /> 로 되살림 */}
+        <StudyBox open={open} />
       </div>
 
       {/* 1. 당월 매출 합계 · 2. 전년 동기간 매출 합계 (좌우 비교) — 카페 소비 인원 줄 아래 */}
@@ -356,7 +359,40 @@ function SectorBars({ d, open }: { d: Dashboard; open: Open }) {
   );
 }
 
-/** 설문조사 칸 — 통합데스크가 20시에 남기는 설문 집계. '현재 진행중 N건', 누르면 아래에서 올라오는 목록 */
+/** 재방문 분석 칸 (2026-11-14 사장님 · 설문조사 칸 자리) — 키즈 포스에서 계산해 저장한 돈까스 이벤트 분석 한 줄, 누르면 자세히 (screens/RevisitStudy.tsx)
+    N일 안 재방문 = 이벤트 기간 손님이 기한(19일) 안에 다시 온 비율 · 아래 = 직전 같은 기간 */
+function StudyBox({ open }: { open: Open }) {
+  const [s, setS] = useState<RevisitStudy | null | undefined>(studyMemo.v);
+  useEffect(() => {
+    if (studyMemo.v !== undefined) return;
+    let alive = true;
+    studyRead().then(
+      (x) => alive && setS(x),
+      () => alive && setS(null),
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const D = s?.event.deadline ?? 19;
+  const ev = s?.cohorts.find((c) => c.key === "event");
+  const near = s?.cohorts.find((c) => c.key === "near");
+  const p1 = (x: number) => `${(x * 100).toFixed(1)}%`;
+  return (
+    <button className="stat tap" onClick={() => open({ name: "revisitStudy" })}>
+      <div className="stat-label">
+        재방문 분석 <Chevron />
+      </div>
+      <div className="stat-value survey-value">
+        <span className="sv-sub">{D}일 안 재방문</span>
+        {ev ? p1(ev.at[D].p) : "—"}
+      </div>
+      <span className="note">{near ? `직전 같은 기간 ${p1(near.at[D].p)}` : s === undefined ? "받는 중…" : "키즈 포스에서 실행"}</span>
+    </button>
+  );
+}
+
+/** 설문조사 칸 (2026-11-14 부터 홈에 안 둠 — 설문을 다시 하면 되살림) — 통합데스크가 20시에 남기는 설문 집계. '현재 진행중 N건', 누르면 아래에서 올라오는 목록 */
 function SurveyBox({ doc }: { doc: SurveyDoc | null }) {
   const [show, setShow] = useState(false);
   const today = todayKst();
