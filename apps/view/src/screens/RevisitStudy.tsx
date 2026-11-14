@@ -14,7 +14,10 @@ import {
 } from "@report/core";
 import { studyRead, studySave } from "../data/firebase";
 
-const FOLDER = "%APPDATA%\\아스타나키즈 입장 데스크";
+/* 통합데스크 앱 폴더 = Electron userData = %APPDATA%\<package.json 의 productName 또는 name>
+   astanakiz apps/desk/package.json 은 productName 이 build 설정 안에만 있어 설치본 이름이 name(astanakiz-desk) — 한글 '아스타나키즈 입장 데스크' 폴더가 아님
+   (2026-11-14 키즈 포스에서 한글 폴더가 "없다"고 나와 확인) */
+const FOLDER = "%APPDATA%\\astanakiz-desk";
 /** 파일 고르는 창 '파일 이름' 칸에 그대로 붙여 넣으면 바로 그 파일 (폴더를 찾아 들어가지 않아도 됨 — 2026-11-14 사장님 "폴더를 못 찾는 것 같은데") */
 const FILE = `${FOLDER}\\visit-history.json`;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
