@@ -27,6 +27,8 @@ export const TREND_WEEKS = 4;
 export const TREND_LY_DAYS = 28;
 /** 처음 판 날부터 이만큼(일)이 안 된 빵은 새 빵 — 매니저 기입 */
 export const NEW_BREAD_DAYS = 28;
+/** 새 빵 중 처음 판 날부터 이만큼(일)이 안 된 빵은 판매 기록이 있어도 어림하지 않고 매니저 기입 — 2주가 쌓인 뒤 발표부터 그 기록으로 어림 (2026-11-14 사장님) */
+export const NEW_BREAD_MANUAL_DAYS = 14;
 /** 최근 이만큼(일) 안에 팔린 빵만 계획에 */
 export const TREND_ACTIVE_DAYS = 14;
 /** 새 빵을 가릴 때 거슬러 보는 날 수 (그 전에 팔았다 다시 나온 빵도 새 빵으로) */
@@ -108,6 +110,8 @@ export interface TrendDay {
   items: { name: string; raw: number }[];
   /** 판매 4주가 안 된 새 빵 — 매니저 기입 */
   newBreads: string[];
+  /** 새 빵마다 처음 판 날 (2주가 안 됐으면 매니저 기입 — NEW_BREAD_MANUAL_DAYS) */
+  firstSold: Record<string, string>;
 }
 
 /** 그날(date) 빵마다 예측 — asOf 까지 실적, today = 발표하는 날 (작년 '오늘') */
@@ -134,7 +138,8 @@ export function trendDay(board: Board, asOf: string, today: string, date: string
   const items = names
     .filter((n) => !isNew(n))
     .map((name) => ({ name, raw: past.length ? (past.reduce((a, p) => a + (soldOn(board, p, date).get(name) || 0), 0) / past.length) * ratio : 0 }));
-  return { date, past, ratio, lyPoints: line?.n ?? 0, weekRatios, items, newBreads: names.filter(isNew) };
+  const newBreads = names.filter(isNew);
+  return { date, past, ratio, lyPoints: line?.n ?? 0, weekRatios, items, newBreads, firstSold: Object.fromEntries(newBreads.map((n) => [n, first.get(n) ?? asOf])) };
 }
 
 export type TrustLevel = "높음" | "보통" | "낮음";
