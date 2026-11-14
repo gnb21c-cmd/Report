@@ -628,7 +628,7 @@ function Confirm({ api, date, kind, who, weekDays, inner }: { api: Api; date: st
             {step.trust.level !== "높음" && " · 수량을 살펴 조정해 주세요"}
           </div>
         )}
-        {needInput > 0 && <div className="need-input">새 빵 {needInput}가지 — 판매 실적이 4주가 안 돼 예측하지 않습니다. 매니저 회의에서 정한 수량을 적어 주세요.</div>}
+        {needInput > 0 && <div className="need-input">새 빵 {needInput}가지 — 처음 판 지 2주가 안 돼 예측하지 않습니다 (판매가 2주 쌓인 뒤 발표부터 판매 기록으로 어림). 매니저 회의에서 정한 수량을 적어 주세요.</div>}
         <button className="primary big" disabled={!rows.length || !!busy || locked} onClick={() => save(Object.fromEntries(rows.filter((r) => !r.manual || done[r.name] || filled(r.name)).map((r) => [r.name, valueOf(r.name, r.qty)])), "all")}>
           {busy === "all" ? "확정 중…" : kind === "final" ? "이 날 일괄 최종 확정" : "이 날 일괄 잠정 확정"}
         </button>

@@ -15,7 +15,7 @@
 import { breadKey, breadLabel, breadNameOn, breadNewName, breadSold, isDiscontinued, renameLast, renameSum } from "./breadNames";
 import { addDays, dayRange, weekday, WEEKDAY_KO } from "./dates";
 import { BINARY_FROM, demandOn, halfway, tempUpOf, type HitReport, type MidTemp } from "./breadBinary";
-import { TREND_FROM, trendDay, trendPastDays, trendTrust, type Trust } from "./breadTrend";
+import { NEW_BREAD_MANUAL_DAYS, TREND_FROM, trendDay, trendPastDays, trendTrust, type Trust } from "./breadTrend";
 import { bandRange, breadPlan, dayKind, forecastVisitors, weeklyOutlook, withinBand, type DayKind, type Learned } from "./forecast";
 import type { Board } from "./metrics";
 import { NOT_BREAD } from "./rules";
@@ -574,8 +574,10 @@ function binaryStep(board: Board, weather: WeatherMap, learned: Learned, madeOn:
       return { name: i.name, qty: snapUnit(i.name, bin, undefined, undefined, date), base: trend, trend, bin, ...(l > 0 ? { last: l } : {}) };
     })
     .filter((i) => i.bin > 0);
+  // 새 빵 — 처음 판 날부터 2주가 안 됐으면 매니저 기입, 2주가 쌓인 뒤 발표부터 판 날 실적으로 어림 (2026-11-14 사장님)
   for (const n of t.newBreads) {
-    const q = newBreadEstimate(board, date, asOf, n, t.ratio);
+    const days = (Date.parse(asOf) - Date.parse(t.firstSold[n] ?? asOf)) / 864e5 + 1;
+    const q = days >= NEW_BREAD_MANUAL_DAYS ? newBreadEstimate(board, date, asOf, n, t.ratio) : 0;
     items.push(q > 0 ? { name: n, qty: q, base: q, est: true } : { name: n, qty: 0, manual: true });
   }
   const have = new Set(items.map((i) => breadKey(breadNewName(i.name))));

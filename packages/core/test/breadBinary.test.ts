@@ -13,6 +13,7 @@ import {
   hitReport,
   hitWeekDays,
   makeWeek,
+  NEW_BREAD_MANUAL_DAYS,
   parseMidTa,
   snapUnit,
   TEMP_UP,
@@ -138,9 +139,25 @@ describe("반반 규칙 — 11-12 목 발표 주간안 (11-16 ~ 22)", () => {
     }
   });
 
-  it("새 빵(판매 28일이 안 됨)은 지금처럼 판 날 실적 · 작년 추세로 어림", () => {
+  it("새 빵(판매 28일이 안 됨)은 판 날 실적 · 작년 추세로 어림 — 판매가 2주 넘게 쌓인 빵 (명란소금빵 10-20 부터 · 발표 때 23일째)", () => {
+    expect(NEW_BREAD_MANUAL_DAYS).toBe(14);
     for (const w of week) {
       const n = w.week.items.find((i) => i.name === "명란소금빵")!;
+      expect(n.est).toBe(true);
+      expect(n.qty).toBeGreaterThan(0);
+    }
+  });
+
+  /* 2026-11-14 사장님 — 새 빵은 처음 판 날부터 2주 동안 매니저 기입, 판매가 2주 쌓인 뒤 발표부터 그 기록으로 어림 (클래식롤케이크 11-14 첫 판매) */
+  it("처음 판 지 2주가 안 된 새 빵은 팔린 기록이 있어도 매니저 기입(0) — 2주가 쌓인 뒤 발표부터 어림", () => {
+    // 롤케이크: 11-02 첫 판매 → 11-12 발표(실적 11-11 까지) 때 10일째 = 매니저 기입
+    const roll = (from: string) => new Board(reports.map((r) => (r.date >= from && r.date <= ASOF ? day(r.date, [...thisYear(r.date), ["클래식롤케이크", 4]]) : r)));
+    const early = makeWeek(roll("2026-11-02"), {}, DEFAULT_LEARNED, THU, ASOF);
+    for (const w of early) expect(w.week.items.find((i) => i.name === "클래식롤케이크")).toMatchObject({ qty: 0, manual: true });
+    // 10-29 첫 판매 → 14일째 = 어림 (판 날 같은 요일 평균 × 작년 추세 비율)
+    const later = makeWeek(roll("2026-10-29"), {}, DEFAULT_LEARNED, THU, ASOF);
+    for (const w of later) {
+      const n = w.week.items.find((i) => i.name === "클래식롤케이크")!;
       expect(n.est).toBe(true);
       expect(n.qty).toBeGreaterThan(0);
     }
