@@ -195,7 +195,7 @@ export interface DeskNaverCheck {
   ok: boolean;
   /** 통합데스크 완료 + 미입장 */
   desk: number;
-  /** 포스 수집 이용완료 + 입장예정 (없으면 null — 견줄 수 없어 그대로) */
+  /** 포스 수집 이용완료 (2026-11-14 전엔 + 입장예정 · 없으면 null — 견줄 수 없어 그대로) */
   pos: number | null;
   /** 포스 수집 시각 ISO */
   at: string | null;

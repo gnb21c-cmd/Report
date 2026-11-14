@@ -32,17 +32,17 @@ const now = new Date("2026-10-19T19:20:00+09:00");
 const part = (tickets: Record<string, number>): NaverPart => ({ v: 1, date: "2026-10-19", tickets: NAVER_SLOTS.map((t) => tickets[t] || 0), newVisitors: NAVER_SLOTS.map(() => 0), noNew: true });
 
 describe("통합데스크 현황 → 마감 전 네이버 칸", () => {
-  it("시간 칸마다 이용완료 + 확정(입장예정) — 보고 앱이 네이버에서 직접 읽은 것과 같은 모양 · 신규는 모름", () => {
+  it("시간 칸마다 이용완료(완료)만 — 미입장(conf)은 빼고 (2026-11-14) · 보고 앱이 네이버에서 직접 읽은 것과 같은 모양 · 신규는 모름", () => {
     const r = deskNaverPart(desk(), "2026-10-19", now);
     expect(r.why).toBe("");
-    expect(r.part).toEqual(part({ "10:00": 2, "19:00": 5 }));
+    expect(r.part).toEqual(part({ "10:00": 2, "19:00": 3 }));
     expect(checkLiveNaver(r.part!, "2026-10-19")).toEqual([]);
   });
 
   it("19:30 뒤 칸(통합데스크 2.12 ~ 20:00 예약)은 19:30 칸에 더함 — 예전엔 '보고 칸에 없는 시각'으로 통째로 안 씀 (2026-10-29 사장님)", () => {
-    const r = deskNaverPart(desk({ slots: [{ t: "19:00", done: 3, conf: 2, left: 5, cap: 10 }, { t: "20:00", done: 0, conf: 1, left: 0, cap: 1 }] }), "2026-10-19", now);
+    const r = deskNaverPart(desk({ slots: [{ t: "19:00", done: 3, conf: 2, left: 5, cap: 10 }, { t: "20:00", done: 1, conf: 1, left: 0, cap: 1 }] }), "2026-10-19", now);
     expect(r.why).toBe("");
-    expect(r.part).toEqual(part({ "19:00": 5, "19:30": 1 }));
+    expect(r.part).toEqual(part({ "19:00": 3, "19:30": 1 }));
   });
 
   it("현황이 없거나 모양이 틀리면 안 씀", () => {
@@ -77,8 +77,8 @@ describe("통합데스크 현황 → 마감 전 네이버 칸", () => {
   });
 
   it("먼저 받은 네이버(직접 읽은 것)보다 합이 작으면 덮지 않음 — 통합데스크가 아직 다시 안 읽은 옛 숫자일 수 있어서", () => {
-    expect(deskNaverPart(desk(), "2026-10-19", now, part({ "10:00": 2, "19:00": 6 })).part).toBe(null);
-    expect(deskNaverPart(desk(), "2026-10-19", now, part({ "10:00": 2, "19:00": 5 })).part).not.toBe(null);
+    expect(deskNaverPart(desk(), "2026-10-19", now, part({ "10:00": 2, "19:00": 4 })).part).toBe(null);
+    expect(deskNaverPart(desk(), "2026-10-19", now, part({ "10:00": 2, "19:00": 3 })).part).not.toBe(null);
     expect(deskNaverPart(desk(), "2026-10-19", now, part({ "10:00": 2 })).part).not.toBe(null);
   });
 });

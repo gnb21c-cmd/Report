@@ -352,7 +352,7 @@ function Body({ live, chk, pos, now, all, onAll, onPick, onRevisit, rent, onRent
   );
 }
 
-/** 통합데스크가 네이버를 덜 읽은 순간 — 포스 15분 수집의 시간 칸 (이용완료 + 입장예정 한 칸 · 완료 · 미입장으로는 못 나눔) */
+/** 통합데스크가 네이버를 덜 읽은 순간 — 포스 15분 수집의 시간 칸 (이용완료 한 칸 — 2026-11-14 부터 입장예정 빼고 · 완료 · 미입장으로는 못 나눔) */
 function PosNaver({ chk, cur, all, onAll }: { chk: DeskNaverCheck; cur: string | null; all: boolean; onAll: () => void }) {
   const busy = chk.slots.filter((x) => x.n || x.t === cur);
   const rows = all ? chk.slots : busy;
