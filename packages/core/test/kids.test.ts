@@ -288,7 +288,7 @@ describe("네이버 숏타임 — 10시 예약 수에 들어감 (2026-11-07 사�
     const r = naverPartFrom("2026-11-07", cells);
     expect(r.part.tickets.slice(0, 2)).toEqual([18, 10]);
     expect(r.overlap).toEqual(["10:00"]); // 숏타임은 늘 10시 칸에서 겹침 (기록용)
-    expect(liveNaverPart("2026-11-07", cells, []).tickets.slice(0, 2)).toEqual([18, 10]);
+    expect(liveNaverPart("2026-11-07", cells).tickets.slice(0, 2)).toEqual([18, 10]);
     // 통합데스크 — 숏타임 상품이 있어도 받음 (예전엔 '보고 기준과 다른 상품'이라 통째로 안 받았음)
     const desk = { day: "2026-11-07", at: "2026-11-07 14:15:27", naver: { ready: true, products: [{ name: SHORT, done: 8 }, { name: MAIN, done: 90 }], slots: [{ t: "10:00", done: 18, conf: 0 }] } } as any;
     const d = deskNaverPart(desk, "2026-11-07", new Date("2026-11-07T05:16:00Z"));
