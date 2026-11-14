@@ -2232,3 +2232,12 @@ button.quad-box {
 .study-table td:first-child {
   min-width: 64px;
 }
+.study-path-line {
+  display: block;
+  margin: 6px 0 10px;
+  font-size: 12.5px;
+}
+.study .card.study-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}

@@ -15,6 +15,8 @@ import {
 import { studyRead, studySave } from "../data/firebase";
 
 const FOLDER = "%APPDATA%\\아스타나키즈 입장 데스크";
+/** 파일 고르는 창 '파일 이름' 칸에 그대로 붙여 넣으면 바로 그 파일 (폴더를 찾아 들어가지 않아도 됨 — 2026-11-14 사장님 "폴더를 못 찾는 것 같은데") */
+const FILE = `${FOLDER}\\visit-history.json`;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 /** 비율 포인트 (+3.2%p) */
 const pp = (x: number) => `${x > 0 ? "+" : ""}${(x * 100).toFixed(1)}%p`;
@@ -55,6 +57,30 @@ export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
   const [state, setState] = useState<"loading" | "idle" | "busy">("loading");
   const [msg, setMsg] = useState("");
   const [save, setSave] = useState("");
+  const [copied, setCopied] = useState("");
+  const [over, setOver] = useState(false);
+  // 복사 — 클립보드가 막히면(오래된 브라우저 · 권한) 숨긴 글상자로 한 번 더
+  const copy = (text: string, what: string) => {
+    const fallback = () => {
+      const t = document.createElement("textarea");
+      t.value = text;
+      t.style.position = "fixed";
+      t.style.opacity = "0";
+      document.body.appendChild(t);
+      t.select();
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      t.remove();
+      setCopied(ok ? what : "fail");
+    };
+    if (navigator.clipboard?.writeText)
+      navigator.clipboard.writeText(text).then(() => setCopied(what), fallback);
+    else fallback();
+  };
 
   useEffect(() => {
     let alive = true;
@@ -122,37 +148,62 @@ export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
         <span />
       </header>
       <main className="content study">
-        <section className="card">
+        <section
+          className={`card${over ? " study-over" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            pick(e.dataTransfer.files?.[0]);
+          }}
+        >
           <h2>키즈 포스에서 새로 계산하기</h2>
           <ol className="study-steps">
             <li>
-              키즈 포스 PC 에서 이 화면을 엽니다 (보고 앱 주소 끝에 <b>#study</b>).
+              키즈 포스 PC 에서 이 화면을 열고 <b>[① 파일 위치 복사]</b>를 누릅니다.
             </li>
             <li>
-              아래 [방문 기록 파일 고르기] → 파일 고르는 창 위 주소 칸에{" "}
-              <code className="study-path">{FOLDER}</code> 를 붙여 넣고 Enter → <b>visit-history.json</b> 을
-              고릅니다.
+              <b>[② 방문 기록 파일 고르기]</b> → 열린 창 <b>맨 아래 '파일 이름' 칸</b>에 붙여 넣기(Ctrl+V) →{" "}
+              <b>[열기]</b>. 폴더를 찾아 들어가지 않아도 바로 그 파일이 골라져요.
             </li>
             <li>
               계산은 이 PC 브라우저 안에서만 해요. 손님 기호(해시)는 밖으로 나가지 않고, 요약 숫자만
               클라우드에 저장됩니다.
             </li>
           </ol>
+          <button className="ghost study-copy" onClick={() => copy(FILE, "file")}>
+            {copied === "file" ? "복사했어요 ✓ — 이제 ② 를 누르세요" : "① 파일 위치 복사"}
+          </button>
+          <code className="study-path study-path-line">{FILE}</code>
+          {copied === "fail" && (
+            <p className="note">복사가 안 돼요 — 위 글을 마우스로 끌어 골라 Ctrl+C 로 복사해 주세요.</p>
+          )}
           <label className={`study-pick${state === "busy" ? " busy" : ""}`}>
             <input
               type="file"
-              accept=".json,application/json"
-              onChange={(e) => pick(e.target.files?.[0])}
+              onChange={(e) => {
+                pick(e.target.files?.[0]);
+                e.target.value = ""; // 같은 파일을 다시 골라도 다시 계산
+              }}
               disabled={state === "busy"}
             />
-            {state === "busy" ? "계산하는 중…" : "방문 기록 파일 고르기"}
+            {state === "busy" ? "계산하는 중…" : "② 방문 기록 파일 고르기"}
           </label>
-          <button
-            className="ghost small study-copy"
-            onClick={() => navigator.clipboard?.writeText(FOLDER).catch(() => undefined)}
-          >
-            폴더 주소 복사
-          </button>
+          <p className="note">
+            다른 방법: 키보드 <b>Windows 키 + R</b> → [폴더 위치 복사]한 것을 붙여 넣고 [확인] → 열린 폴더의{" "}
+            <b>visit-history</b> 파일을 이 칸으로 끌어다 놓기.{" "}
+            <button className="ghost small" onClick={() => copy(FOLDER, "folder")}>
+              {copied === "folder" ? "복사했어요 ✓" : "폴더 위치 복사"}
+            </button>
+          </p>
+          <p className="note">
+            Windows 키 + R 로 열었는데 "찾을 수 없습니다"가 나오면 이 PC 가 통합데스크(방문 기록)를 쓰는 PC 가
+            아니에요 — 네이버 이용완료를 읽는 키즈 포스 PC 에서 해 주세요.
+          </p>
           {msg && <p className="bad">{msg}</p>}
           {save && <p className="note">{save}</p>}
         </section>
