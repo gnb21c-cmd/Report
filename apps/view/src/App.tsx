@@ -16,6 +16,7 @@ import { SettleDetail } from "./screens/SettleDetail";
 import { VisitorsDetail } from "./screens/VisitorsDetail";
 import { DayDetail } from "./screens/DayDetail";
 import { KidsLive } from "./screens/KidsLive";
+import { RevisitStudyScreen } from "./screens/RevisitStudy";
 
 function Notice({ title, text }: { title: string; text: string }) {
   return (
@@ -81,7 +82,8 @@ export function App() {
   const liveTop = [today, addDays(today, -1)].find((k) => k > closed && (k === today ? liveShowToday(new Date(now)) || !!lives.get(k)?.report : !!lives.get(k)?.report || !!board.report(k)));
   const top = liveTop || latest;
   const [date, setDate] = useState<string>(top || closed);
-  const [view, setView] = useState<View>({ name: "home" });
+  // 주소 끝 #study = 재방문 자세히 분석 화면으로 바로 (키즈 포스 PC 에서 링크 하나로 열게, 2026-11-14 사장님)
+  const [view, setView] = useState<View>(() => (location.hash === "#study" ? { name: "revisitStudy" } : { name: "home" }));
   const homeScroll = useRef(0);
 
   // 새 마감 자료 · 오늘 마감 전 영업정보가 오면 기준일을 그날로
@@ -140,7 +142,8 @@ export function App() {
   // 누계 상세는 마감 전인 오늘을 빼고 어제까지 확정분으로
   else if (view.name === "month") body = <MonthDetail board={board} {...nav} date={liveState?.today ? addDays(date, -1) : date} />;
   else if (view.name === "year") body = <YearDetail board={board} {...nav} date={liveState?.today ? addDays(date, -1) : date} />;
-  else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
+  else if (view.name === "naver") body = <NaverDetail board={board} {...nav} onStudy={() => open({ name: "revisitStudy" })} />;
+  else if (view.name === "revisitStudy") body = <RevisitStudyScreen onBack={back} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
   else if (view.name === "visitors") body = <VisitorsDetail board={board} {...nav} />;
   else if (view.name === "kidsLive") body = <KidsLive board={board} onBack={back} />;

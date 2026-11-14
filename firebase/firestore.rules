@@ -101,7 +101,9 @@ service cloud.firestore {
           && request.resource.data.at is string && request.resource.data.at.size() < 40
           && ((doc == "revisit" && request.resource.data.json.size() < 20000 && request.resource.data.json.matches("(?s)^[{].*astanakiz-revisit.*$"))
             || (doc.matches("^event-[0-9]{4}-[0-9]{2}-[0-9]{2}$") && request.resource.data.json.size() < 5000 && request.resource.data.json.matches("(?s)^[{].*astanakiz-event.*$"))
-            || (doc.matches("^rental-[0-9]{4}-[0-9]{2}-[0-9]{2}$") && request.resource.data.json.size() < 10000 && request.resource.data.json.matches("(?s)^[{].*astanakiz-rental.*$")));
+            || (doc.matches("^rental-[0-9]{4}-[0-9]{2}-[0-9]{2}$") && request.resource.data.json.size() < 10000 && request.resource.data.json.matches("(?s)^[{].*astanakiz-rental.*$"))
+            // 돈까스 재방문 자세히 분석 요약 (2026-11-14) — 키즈 포스 PC 보고 앱이 방문 기록 파일로 계산해 덮어씀 · 손님 해시 없음 (packages/core/src/revisitStudy.ts)
+            || (doc == "study-revisit" && request.resource.data.json.size() < 60000 && request.resource.data.json.matches("(?s)^[{].*report-revisit-study.*$")));
         allow delete: if isSender(board);
       }
 

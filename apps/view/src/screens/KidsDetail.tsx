@@ -89,7 +89,7 @@ function CompareCard({ rows, unit, title = "작년 같은 기간과 비교" }: {
     맨 위 한 줄 = 지난 30일 재방문 · 아래 반반 = 왼쪽 과거 · 오른쪽 이벤트, 많은 10개를 빨리 온 순(일수 짧은 순)으로 (2026-10-31 사장님 7 → 10)
     처음에는 많은 순 5개만 보이고 [모두 보기]를 누르면 10위까지 (2026-10-31 사장님)
     [전체 · 신규 · 기존] — 통합데스크가 무리를 보내면 (2026-10-31 사장님, 신규 = 4/1 이후 처음 온 유료 손님 · 기존 = 4/1 전부터 오던 손님) */
-function RevisitCard({ board }: { board: Board }) {
+function RevisitCard({ board, onStudy }: { board: Board; onStudy?: () => void }) {
   const [r, setR] = useState<DeskRevisit | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none" | "bad" | "error">("loading");
   const [err, setErr] = useState("");
@@ -180,6 +180,12 @@ function RevisitCard({ board }: { board: Board }) {
           )}
         </>
       )}
+      {/* 키즈 포스 PC 에서 방문 기록 파일로 돈까스 이벤트 효과를 통계로 (2026-11-14 사장님) */}
+      {onStudy && (
+        <button className="ghost small revisit-study-btn" onClick={onStudy}>
+          돈까스 이벤트 효과 자세히 분석 ›
+        </button>
+      )}
     </section>
   );
 }
@@ -236,7 +242,7 @@ function RevisitCol({ title, range, end, top, all, stats, share, empty, cur }: {
 const slotTick = (i: number) => (i % 4 === 0 ? `${10 + i / 2}시` : null);
 const slotTip = (i: number) => `${NAVER_SLOTS[i]} ~ ${NAVER_SLOTS[i + 1] || "20:00"}`;
 
-export function NaverDetail(props: { board: Board } & Nav) {
+export function NaverDetail(props: { board: Board; onStudy?: () => void } & Nav) {
   const { board, date } = props;
   // 작년 = 364일 전 (같은 주 · 같은 요일)
   const ly = lyOf(date);
@@ -267,7 +273,7 @@ export function NaverDetail(props: { board: Board } & Nav) {
     <>
       <DetailHeader title="네이버 판매 수" {...props} />
       <main className="content">
-        <RevisitCard board={board} />
+        <RevisitCard board={board} onStudy={props.onStudy} />
         {!day.naverInput && (
           <div className="banner">{day.has.kids ? `${shortLabel(date)} 네이버 표가 아직 입력되지 않아 키즈 POS(입장 발행 − 현장)로 추정한 값입니다.` : `${shortLabel(date)} 네이버 표가 아직 입력되지 않았습니다.`}</div>
         )}
