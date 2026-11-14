@@ -111,7 +111,7 @@ describe("마감 전 날의 누계 — 오늘(하루가 안 끝난 숫자)은 �
   });
 });
 
-describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 + 입장예정)", () => {
+describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 — 2026-11-14 부터 입장예정은 빼고)", () => {
   const z = () => NAVER_SLOTS.map(() => 0);
   const nv = (): NaverPart => {
     const t = z();
@@ -119,26 +119,23 @@ describe("오늘 네이버 (POS 메인 PC 가 예약현황에서 이용완료 + 
     t[4] = 2;
     return { v: 1, date: "2026-10-08", tickets: t, newVisitors: z(), noNew: true };
   };
-  it("이용완료 칸 + 확정(입장예정) 칸 → 30분 칸별 판매입장권 (입장권 상품만, 신규는 모름)", () => {
-    const p = liveNaverPart(
-      "2026-10-08",
-      [
-        { product: "평일 무제한 입장권", time: "오전10:00", done: 3 },
-        { product: "단체 예약", time: "오전10:00", done: 9 },
-      ],
-      [
-        { product: "평일 무제한 입장권", time: "오전10:00", done: 1 },
-        { product: "야간자유 입장권", time: "오후6:00", done: 4 },
-      ],
-    );
-    expect(p.tickets[0]).toBe(4);
+  it("이용완료 칸 → 30분 칸별 판매입장권 (입장권 상품만, 신규는 모름 · 입장예정은 세지 않음)", () => {
+    const p = liveNaverPart("2026-10-08", [
+      { product: "평일 무제한 입장권", time: "오전10:00", done: 3 },
+      { product: "단체 예약", time: "오전10:00", done: 9 },
+      { product: "야간자유 입장권", time: "오후6:00", done: 4 },
+    ]);
+    expect(p.tickets[0]).toBe(3);
     expect(p.tickets[NAVER_SLOTS.indexOf("18:00")]).toBe(4);
-    expect(p.tickets.reduce((a, b) => a + b, 0)).toBe(8);
+    expect(p.tickets.reduce((a, b) => a + b, 0)).toBe(7);
     expect(p.noNew).toBe(true);
     expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
   });
   it("19:30 뒤 예약(20:00 — 2026-10-29 사장님 이벤트 때)은 19:30 칸에 더함 (예전엔 빠짐)", () => {
-    const p = liveNaverPart("2026-10-08", [{ product: "야간자유 입장권", time: "오후7:30", done: 2 }], [{ product: "야간자유 입장권", time: "오후8:00", done: 1 }]);
+    const p = liveNaverPart("2026-10-08", [
+      { product: "야간자유 입장권", time: "오후7:30", done: 2 },
+      { product: "야간자유 입장권", time: "오후8:00", done: 1 },
+    ]);
     expect(p.tickets[NAVER_SLOTS.indexOf("19:30")]).toBe(3);
     expect(checkLiveNaver(p, "2026-10-08")).toEqual([]);
   });

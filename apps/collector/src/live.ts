@@ -19,8 +19,8 @@ import { NaverBook } from "./naverBook";
 import { mask, Okpos, readRows, say, type Store } from "./okpos";
 
 export const LIVE_BY = "자동 수집 (OKPOS, 마감 전)";
-export const LIVE_BY_NAVER = "자동 수집 (네이버 예약현황, 마감 전 — 이용완료 + 입장예정)";
-export const LIVE_BY_DESK = "자동 수집 (통합데스크 키즈 실시간의 네이버, 마감 전 — 이용완료 + 입장예정)";
+export const LIVE_BY_NAVER = "자동 수집 (네이버 예약현황, 마감 전 — 입장한 것(이용완료)만)";
+export const LIVE_BY_DESK = "자동 수집 (통합데스크 키즈 실시간의 네이버, 마감 전 — 입장한 것(이용완료)만)";
 /** 네이버를 한 번 읽는 데 이만큼 넘게 걸리면 그만두고 통합데스크로 (보통 10초 남짓) */
 const NAVER_LIMIT_MS = 60_000;
 const env = (k: string) => process.env[k] || "";
@@ -142,10 +142,11 @@ async function main() {
         const booked = await nb.readCells("확정");
         await nb.showStatus("전체").catch(() => {});
         await nb.saveState(statePath);
-        const p = liveNaverPart(date, done.cells, booked.cells);
+        // 입장한 것(이용완료)만 셈 — 입장예정은 기록에 칸 수만 (2026-11-14 사장님: 오후 예약은 취소될 수 있음)
+        const p = liveNaverPart(date, done.cells);
         const bad = checkLiveNaver(p, date);
         const used = (cs: { product: string }[]) => cs.filter((c) => isNaverTicketProduct(c.product)).length;
-        say(`네이버: 이용완료 칸 ${used(done.cells)}개 · 입장예정 칸 ${used(booked.cells)}개 (입장권 상품) · 검사 ${bad.length ? `걸림 ${bad.length}` : "통과"}`);
+        say(`네이버: 이용완료 칸 ${used(done.cells)}개 (셈) · 입장예정 칸 ${used(booked.cells)}개 (안 셈) · 입장권 상품 · 검사 ${bad.length ? `걸림 ${bad.length}` : "통과"}`);
         if (bad.length) throw new Error("검사에 걸려 올리지 않음");
         return p;
       } finally {

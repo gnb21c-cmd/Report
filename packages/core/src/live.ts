@@ -3,7 +3,8 @@
    - POS 메인 PC(GitHub 실행기 nice-pos)의 하루 수집이 15분마다 매시 0 · 15 · 30 · 45분(10:00 ~ 21:30 · 마지막 21:40 · 21:45 — 2026-10-27 전엔 22:45, 2026-10-19 — 예전 15 · 45분, 아래 liveLoopStep)에 OKPOS 점주 웹에서 오늘 카페 · 키즈 영수증별 엑셀을 받아
      확정 보고와 같은 계산(buildStorePart)으로 만든 StorePart 를 live/{오늘} 의 cafe · kids 칸에 올림 (apps/collector/src/live.ts)
      → B 의 숫자 · 통계 계산이 확정 날과 같은 길
-   - 같은 때 네이버 예약현황(오늘)에서 30분 칸별 이용완료 + 확정(입장예정) 장수 → naver 칸 (liveNaverPart, 입장권 상품만 · 신규는 모름)
+   - 같은 때 네이버 예약현황(오늘)에서 30분 칸별 이용완료(입장한 것) 장수 → naver 칸 (liveNaverPart, 입장권 상품만 · 신규는 모름)
+     입장예정(확정)은 세지 않음 (2026-11-14 사장님 — 오후 예약은 취소될 수 있어, 시간 칸은 그 시간에 들어온 것만 · 합계도 그 순간까지 입장한 것만)
      → B 키즈 입장료 = (네이버 + 현장) × 그날 단가 (확정 날과 같은 식). 다음 날 아침 확정 네이버(이용완료만)가 오면 그것이 이김
    - B 는 받은 조각을 검사해 틀리면 보이지 않고 '확인 필요'로 (틀린 숫자를 보여 주지 않음)
    - 다음 날 아침 09:12 확정 수집(reports)이 들어오면 칸마다 확정이 이김
@@ -64,10 +65,10 @@ export function checkLivePiece(p: StorePart, store: StoreId, date: string): stri
 
 const isCount = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0;
 
-/** 오늘 네이버 — 예약현황 칸(상품 · 회차 시각 · 장수)을 이용완료 · 확정(입장예정) 따로 읽은 것을 30분 칸으로 합침 (입장권 상품만) */
-export function liveNaverPart(date: string, done: { product: string; time: string; done: number }[], booked: { product: string; time: string; done: number }[]): NaverPart {
+/** 오늘 네이버 — 예약현황 이용완료 칸(상품 · 회차 시각 · 장수)을 30분 칸으로 합침 (입장권 상품만 · 입장예정은 빼고 — 2026-11-14 사장님) */
+export function liveNaverPart(date: string, done: { product: string; time: string; done: number }[]): NaverPart {
   const tickets = NAVER_SLOTS.map(() => 0);
-  for (const c of [...done, ...booked]) {
+  for (const c of done) {
     if (!isNaverTicketProduct(c.product)) continue;
     const i = naverSlotIndex(naverTime(c.time)); // 19:30 뒤 예약은 19:30 칸에 (2026-10-29)
     if (i >= 0 && isCount(c.done)) tickets[i] += c.done;
@@ -90,7 +91,7 @@ export function checkLiveNaver(p: NaverPart, date: string): string[] {
 
 /* ---------- 통합데스크로 대신 받기 (2026-10-19 사장님 — 네이버를 직접 못 읽거나 오래 걸리면) ----------
    키즈 POS 통합데스크도 같은 네이버 예약현황(입장권 칸 이용완료 · 확정)을 읽어 1분마다 deskLive/now 로 보냄 (docs/KIDS_LIVE.md)
-   → 시간 칸마다 이용완료 + 확정 = 보고 앱이 직접 읽는 것과 같은 값 (2026-10-19 19:18 견줌 — 20칸 모두 같음)
+   → 시간 칸마다 이용완료 = 보고 앱이 직접 읽는 것과 같은 값 (2026-10-19 19:18 견줌 — 20칸 모두 같음 · 2026-11-14 부터 입장예정은 빼고 이용완료만)
    통합데스크는 네이버를 30분마다(:20 · :50, 19:20 까지) · 입장 처리 때 다시 읽어 조금 늦을 수 있음 → 먼저 받은 것보다 합이 작으면 덮지 않음 */
 /** 통합데스크 소식이 이만큼(분) 넘게 없으면 쓰지 않음 (키즈 POS 꺼짐 등) */
 export const DESK_NAVER_MAX_MIN = 10;
@@ -107,10 +108,10 @@ export function deskNaverPart(desk: DeskLive | null, date: string, now: Date = n
   for (const s of desk.naver.slots) {
     const i = naverSlotIndex(s.t.padStart(5, "0")); // 통합데스크 20:00 칸(2.12 ~)은 19:30 칸에 (2026-10-29)
     if (i < 0) {
-      if (s.done + s.conf > 0) return no(`보고 칸에 없는 시각 ${s.t}`);
+      if (s.done > 0) return no(`보고 칸에 없는 시각 ${s.t}`);
       continue;
     }
-    tickets[i] += s.done + s.conf;
+    tickets[i] += s.done;
   }
   if (prev && Array.isArray(prev.tickets) && sum(prev.tickets) > sum(tickets)) return no("통합데스크 숫자가 먼저 받은 것보다 작음 (아직 다시 안 읽었을 수 있음)");
   return { part: { v: 1, date, tickets, newVisitors: NAVER_SLOTS.map(() => 0), noNew: true }, why: "" };
