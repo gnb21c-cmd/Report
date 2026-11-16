@@ -105,6 +105,12 @@ export function isVoucherPayment(line: Pick<SaleLine, "name" | "net">): boolean 
   return line.net < 0 && (/종이쿠폰|상품권|교환권|금액권|퍼피\s*정산/.test(line.name || "") || OLD_KIDS_COUPON.test(line.name || ""));
 }
 
+/** 재방문 이벤트 사은품 돈까스 상품 — 이름에 '이벤트'(또는 '재방문')와 '돈까스'가 함께 (0원으로 찍어도 셈 · 2026-10-26 ~) */
+export function isEventDonkatsu(name: string): boolean {
+  const n = (name || "").replace(/\s+/g, "");
+  return /돈까스|돈가스/.test(n) && /이벤트|재방문/.test(n);
+}
+
 /** 2025-01 초(~1/18) 카페 POS 의 카페 교환권 이름 — 1/19 부터 '[아키 2만원] 교환권' 으로 바뀜 (분류 서비스.쿠폰 › 선결제 › 네이버 결제) */
 const OLD_KIDS_COUPON = /^\s*\[키즈\]\s*$/;
 

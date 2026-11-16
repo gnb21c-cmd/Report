@@ -1,0 +1,52 @@
+# 재방문 이벤트 매일 아침 (2026-11-16 사장님) — POS 자동 수집(main)이 끝나면 apps/collector/src/eventDaily.ts
+#   ① 돈까스 결제 건: 이벤트 시작일 ~ 어제 카페 칸 eventMeal 채우기 (정리한 영수증 줄로 · 이미 같으면 그대로)
+#   ② 재방문 분석: 통합데스크가 매일 20:00 보내는 방문 기록(deskVisits/latest)으로 다시 계산 → deskStats/study-revisit
+# 공개 저장소라 기록에는 날 수 · 처리 여부만 (금액 · 건수 · 손님 수 없음)
+name: 재방문 이벤트 매일 아침
+on:
+  workflow_run:
+    workflows: ["POS 자동 수집"]
+    types: [completed]
+    branches: [main]
+  # 작업 브랜치에 올리면 확인만 (쓰지 않음)
+  push:
+    branches: ["feature/revisit-auto"]
+    paths: ["apps/collector/src/eventDaily.ts", ".github/workflows/event-daily.yml"]
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "시작 (YYYY-MM-DD, 비우면 이벤트 시작일 2026-10-26)"
+        required: false
+      to:
+        description: "끝 (YYYY-MM-DD, 비우면 어제)"
+        required: false
+      dry:
+        description: "확인만 (쓰지 않음)"
+        type: boolean
+        default: false
+concurrency:
+  group: event-daily
+  cancel-in-progress: false
+jobs:
+  run:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @report/collector event-daily
+        env:
+          EVENT_FROM: ${{ inputs.from }}
+          EVENT_TO: ${{ inputs.to }}
+          EVENT_DRY: ${{ (github.event_name == 'push' || inputs.dry == true) && '1' || '' }}
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          REPORT_BOARD_KEY: ${{ secrets.REPORT_BOARD_KEY }}
+          WEATHER_EMAIL: ${{ secrets.WEATHER_EMAIL }}
+          WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}

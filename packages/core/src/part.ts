@@ -11,6 +11,7 @@ import { removeRefunds, type ReceiptLine, type ReceiptSheet, type RefundMatch } 
 import type { SaleLine, StoreId } from "./types";
 import type { CashPart } from "./cash";
 import type { ExtraPart } from "./extra";
+import { eventMealOf, type EventMeal } from "./eventMeal";
 
 export const HOURS = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 export const hourLabel = (h: number) => `${h}시`;
@@ -91,6 +92,8 @@ export interface StorePart {
   products: ProductTuple[];
   refunds: { receipts: number; lines: number; unmatched: number; amount: number };
   kids: KidsNumbers | null;
+  /** 재방문 이벤트 돈까스가 든 결제 건 소비 (2026-11-16 사장님, eventMeal.ts) — 카페만 · 이 칸이 생기기 전 날은 없음(다시 셈 전) */
+  eventMeal?: EventMeal;
   /** 그날 포스 영수증 0건 — 판매 없음 (오케이포스가 '엑셀 출력할 자료가 없습니다'만 띄움, 2026-11-13 사장님: 11-11 키즈 포스 판매 없던 날) */
   none?: boolean;
 }
@@ -217,6 +220,7 @@ export function buildStorePart(input: { store: StoreId; date: string; file: stri
     if (t.hour != null) hourly.teams[t.hour]++;
   }
   part.products = finishProducts(products);
+  if (store === "cafe") part.eventMeal = eventMealOf(lines);
   part.refunds = {
     receipts: matches.length,
     lines: matches.reduce((s, m) => s + m.lines, 0),

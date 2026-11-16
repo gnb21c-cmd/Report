@@ -152,7 +152,15 @@ function cafePart(date: string): StorePart {
     refunds: { receipts: 0, lines: 0, unmatched: 0, amount: 0 },
     kids: null,
     bakeryLastBy,
+    ...(date >= "2026-10-26" ? { eventMeal: sampleEventMeal(date, teams, posNet) } : {}),
   };
+}
+
+/** 체험판 돈까스 결제 건 (지어낸 금액 — 하루 0 ~ 7건, 넷 중 하나쯤은 돈까스만 0원) */
+function sampleEventMeal(date: string, teams: number, posNet: number): NonNullable<StorePart["eventMeal"]> {
+  const n = Math.round(rand(date + "dk") * 7);
+  const amounts = Array.from({ length: n }, (_, i) => (rand(date + "dk" + i) < 0.25 ? 0 : Math.round((12000 + rand(date + "dka" + i) * 48000) / 100) * 100)).sort((a, b) => a - b);
+  return { amounts, qty: n + (n > 3 ? 1 : 0), all: [Math.max(teams, n), posNet] };
 }
 
 const NAVER_PROFILE = [3, 5, 7, 8, 9, 9, 8, 9, 10, 9, 8, 7, 6, 6, 5, 4, 3, 3, 2, 1];

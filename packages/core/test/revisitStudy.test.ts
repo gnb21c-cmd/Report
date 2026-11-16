@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   describe as desc,
+  deskVisitsFrom,
   kaplanMeier,
   logRank,
   mannWhitney,
@@ -10,6 +11,7 @@ import {
   personalOE,
   revisitStudy,
   STUDY_DEADLINE,
+  VISITS_TYPE,
   STUDY_TYPE,
   type Obs,
 } from "../src";
@@ -131,6 +133,45 @@ describe("한데 모은 분석 — 효과가 있을 때 · 없을 때", () => {
     expect(on.paired.h14!.p).toBeLessThan(0.05);
   });
 
+  it("손님 구성 · 그대로 견준 속도 (맞춘 것과 함께)", () => {
+    const ev = on.cohorts[0];
+    expect(ev.mix!.new + ev.mix!.old + ev.mix!.unknown).toBe(ev.n);
+    expect(ev.mix!.holiday).toBeLessThanOrEqual(ev.n);
+    const c = on.compare.find((x) => x.base === "autumn")!;
+    expect(c.raw!.hr).toBeGreaterThan(1);
+    expect(c.raw!.p).toBeLessThan(0.05);
+  });
+
+  it("구성만 다르면 — 그대로 견주면 차이, 신규/기존을 맞추면 차이 없음 (심슨의 역설)", () => {
+    // 기존(빨리 옴 10일) · 신규(늦게 옴 30일) — 이벤트 때 기존 손님만 많이 옴, 효과는 없음
+    const days: Record<string, { k: string[]; c: Record<string, [number, number, string]> }> = {};
+    const add = (h: string, d: string, first: boolean, old: boolean) => {
+      const e = (days[d] ??= { k: [], c: {} });
+      e.k.push(h);
+      if (first) e.c[h] = [old ? 4 : 1, 1, d];
+    };
+    for (let i = 0; i < 400; i++) {
+      const old = i % 2 === 0;
+      const h = `m${String(i).padStart(6, "0")}`;
+      // 이벤트 전: 신규 · 기존 반반 / 이벤트 때 첫 방문: 기존 손님 넷 중 셋
+      const start = i < 200 ? addDays("2026-10-04", i % 20) : addDays("2026-10-26", i % 18);
+      const isOld = i < 200 ? old : i % 4 !== 0;
+      let d = start,
+        first = true;
+      while (d <= "2026-11-14") {
+        add(h, d, first, isOld);
+        first = false;
+        d = addDays(d, isOld ? 10 : 30);
+      }
+    }
+    const st = revisitStudy(parseVisitHistory({ v: 1, days })!, "2026-11-14T12:00:00Z");
+    const near = st.compare.find((x) => x.base === "near")!;
+    expect(near.raw!.hr).toBeGreaterThan(1.3);
+    expect(near.hr).toBeGreaterThan(0.8);
+    expect(near.hr).toBeLessThan(1.25);
+    expect(st.cohorts[0].mix!.old).toBeGreaterThan(st.cohorts[1].mix!.old);
+  });
+
   it("효과가 없으면 — 같은 손님 평소와 비슷 (관측 ÷ 기대 ≈ 1)", () => {
     expect(off.paired.h14!.ratio).toBeGreaterThan(0.8);
     expect(off.paired.h14!.ratio).toBeLessThan(1.2);
@@ -148,5 +189,55 @@ describe("한데 모은 분석 — 효과가 있을 때 · 없을 때", () => {
     // 효과가 있으면 이벤트 간격이 짧고 순위 견줌도 차이
     expect(on.gaps.event.mean).toBeLessThan(on.gaps.near.mean);
     expect(on.gaps.mw.p).toBeLessThan(0.05);
+  });
+});
+
+describe("통합데스크가 매일 보내는 방문 기록 (2026-11-16 — 재방문 분석 매일 자동)", () => {
+  const raw = history(true);
+  const sent = deskVisitsFrom(raw, "2026-11-14 20:00:00", (xs) => [...xs].reverse())!;
+  const json = JSON.stringify(sent);
+
+  it("손님 해시 · 번호 없이 방문 날 번호만 · 파일보다 작음", () => {
+    expect(sent.type).toBe(VISITS_TYPE);
+    expect(json).not.toMatch(/h0000/);
+    expect(sent.p.length).toBe(240);
+    expect(json.length).toBeLessThan(JSON.stringify(raw).length / 2);
+  });
+
+  it("받아서 읽으면 파일과 같은 방문 · 같은 신규/기존 → 같은 분석", () => {
+    const a = parseVisitHistory(raw)!;
+    const b = parseVisitHistory(json)!;
+    expect([b.from, b.to, b.days]).toEqual([a.from, a.to, a.days]);
+    const sorted = (d: typeof a) => [...d.visits.values()].map((v) => v.join(",")).sort();
+    expect(sorted(b)).toEqual(sorted(a));
+    const kinds = (d: typeof a) => [...d.kind.values()].sort().join(",");
+    expect(kinds(b)).toEqual(kinds(a));
+    const sa = revisitStudy(a, "2026-11-14T12:00:00Z"),
+      sb = revisitStudy(b, "2026-11-14T12:00:00Z");
+    expect(sb.cohorts).toEqual(sa.cohorts);
+    expect(sb.compare).toEqual(sa.compare);
+    expect(sb.paired).toEqual(sa.paired);
+    expect(sb.gaps).toEqual(sa.gaps);
+  });
+
+  it("이상한 칸은 버림 · 모양이 틀리면 null", () => {
+    expect(
+      parseVisitHistory({
+        type: VISITS_TYPE,
+        v: 1,
+        from: "2026-11-01",
+        days: [0, 1],
+        p: [
+          [
+            [0, 1, -3, "x"],
+            [0, 2, 1, 0],
+          ],
+          "깨짐",
+          [[]],
+        ],
+      })!.visits.size,
+    ).toBe(1);
+    expect(parseVisitHistory({ type: VISITS_TYPE, v: 1, from: "어제", days: [0], p: [] })).toBeNull();
+    expect(parseVisitHistory({ type: VISITS_TYPE, v: 1, from: "2026-11-01", days: [0], p: [] })).toBeNull();
   });
 });

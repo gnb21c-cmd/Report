@@ -12,6 +12,7 @@ import { addDays, dayRange } from "./dates";
 import type { DeskLive } from "./deskLive";
 import { dayKind } from "./forecast";
 import type { Board } from "./metrics";
+import { isEventDonkatsu } from "./rules";
 
 /** 평균을 내는 날 수 (오늘 빼고 지난 28일 — 4주) */
 export const WORK_AVG_DAYS = 28;
@@ -51,11 +52,6 @@ export interface WorkEventDoc {
   event: WorkEvent | null;
 }
 
-/** 재방문 이벤트 사은품 돈까스 상품 — 이름에 '이벤트'(또는 '재방문')와 '돈까스'가 함께 (0원으로 찍어도 셈 · 2026-10-26 ~) */
-export function isEventDonkatsu(name: string): boolean {
-  const n = (name || "").replace(/\s+/g, "");
-  return /돈까스|돈가스/.test(n) && /이벤트|재방문/.test(n);
-}
 
 /** 키친 목록에 넣는 상품인지 — 판 값이 있는 줄만(0원 서비스 · 반품 남은 줄 빼고), 이벤트 돈까스는 0원이어도 */
 const inList = (name: string, qty: number, net: number) => qty > 0 && (net > 0 || isEventDonkatsu(name));

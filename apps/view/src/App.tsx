@@ -142,8 +142,8 @@ export function App() {
   // 누계 상세는 마감 전인 오늘을 빼고 어제까지 확정분으로
   else if (view.name === "month") body = <MonthDetail board={board} {...nav} date={liveState?.today ? addDays(date, -1) : date} />;
   else if (view.name === "year") body = <YearDetail board={board} {...nav} date={liveState?.today ? addDays(date, -1) : date} />;
-  else if (view.name === "naver") body = <NaverDetail board={board} {...nav} onStudy={() => open({ name: "revisitStudy" })} />;
-  else if (view.name === "revisitStudy") body = <RevisitStudyScreen onBack={back} />;
+  else if (view.name === "naver") body = <NaverDetail board={board} {...nav} />;
+  else if (view.name === "revisitStudy") body = <RevisitStudyScreen board={board} revisitOk={d.deskOk} onBack={back} />;
   else if (view.name === "kids") body = <KidsBarsDetail board={board} k={view.key} {...nav} />;
   else if (view.name === "visitors") body = <VisitorsDetail board={board} {...nav} />;
   else if (view.name === "kidsLive") body = <KidsLive board={board} onBack={back} />;

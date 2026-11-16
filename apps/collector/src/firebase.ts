@@ -342,3 +342,24 @@ export async function writeSettingsJson(fb: Fb, doc: string, json: string): Prom
     body: JSON.stringify({ fields: { json: str(json), at: { timestampValue: new Date().toISOString() } } }),
   });
 }
+
+/** 통합데스크 글 (path = 'deskVisits/latest' 처럼 모음/문서) — { json, at } · 없으면 null (2026-11-16 재방문 분석 자동) */
+export async function readDeskDoc(fb: Fb, path: string): Promise<{ json: string; at: string } | null> {
+  try {
+    const d = await http(`${base(fb)}/boards/${fb.board}/${path}`, { headers: { Authorization: `Bearer ${fb.id}` } });
+    const json = d.fields?.json?.stringValue;
+    return typeof json === "string" ? { json, at: String(d.fields?.at?.stringValue || "") } : null;
+  } catch (e) {
+    if (/클라우드 오류 404/.test(String((e as Error).message))) return null;
+    throw e;
+  }
+}
+
+/** deskStats/{id} 덮어쓰기 (보안 규칙이 문서 이름 · 표시 · 크기를 봄) */
+export async function writeDeskStat(fb: Fb, id: string, json: string): Promise<void> {
+  await http(`${base(fb)}/boards/${fb.board}/deskStats/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${fb.id}` },
+    body: JSON.stringify({ fields: { json: str(json), at: str(new Date().toISOString()) } }),
+  });
+}
