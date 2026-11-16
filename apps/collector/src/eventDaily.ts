@@ -55,7 +55,17 @@ async function main() {
   );
 
   // ② 재방문 분석
-  const v = await readDeskDoc(fb, DESK_VISITS);
+  let v: Awaited<ReturnType<typeof readDeskDoc>>;
+  try {
+    v = await readDeskDoc(fb, DESK_VISITS);
+  } catch (e) {
+    // 보안 규칙(deskVisits)을 콘솔에 아직 안 붙여 넣었으면 읽기가 막힘 — 돈까스 결제 건은 끝났으니 실패로 멈추지 않음
+    if (/클라우드 오류 403/.test(String((e as Error).message))) {
+      console.log("재방문 분석: 방문 기록을 읽을 수 없음(403) — 보안 규칙 deskVisits 를 Firebase 콘솔에 붙여 넣어야 함 · 건너뜀");
+      return;
+    }
+    throw e;
+  }
   if (!v) {
     console.log(
       "재방문 분석: 통합데스크가 방문 기록(deskVisits/latest)을 아직 보내지 않음 — 건너뜀 (키즈 포스에서 파일로 계산한 것은 그대로)",
