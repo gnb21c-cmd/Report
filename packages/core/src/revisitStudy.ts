@@ -14,6 +14,12 @@ import { addDays, dayRange } from "./dates";
 import { dayKind } from "./forecast";
 
 export const STUDY_TYPE = "report-revisit-study";
+/** 통합데스크가 매일 20:00 보내는 방문 기록 — visit-history.json 과 같은 모양 + type, 손님 해시 대신 보낼 때마다 새로 섞은 번호
+    (deskVisits/latest · 입력 계정만 읽음 · docs/KIDS_REVISIT.md) → 매일 아침 GitHub 가 분석해 deskStats/study-revisit 에 (apps/collector/src/eventDaily.ts) */
+export const DESK_VISITS = "deskVisits/latest";
+export const VISITS_TYPE = "astanakiz-visits";
+/** 분석 요약 문서 이름 (deskStats) */
+export const DESK_STUDY = "study-revisit";
 /** 재방문 이벤트 시작일 */
 export const STUDY_EVENT_FROM = "2026-10-26";
 /** 돈까스 기한 — 방문 뒤 20일(그날 포함) = 다음 방문까지 19일 안 */
@@ -52,6 +58,10 @@ export function parseVisitHistory(raw: unknown): VisitData | null {
   const visits = new Map<string, Set<string>>();
   const cards = new Map<string, Map<string, [number, number, string]>>();
   const days: string[] = [];
+  if (x.type === VISITS_TYPE) {
+    if (!readDeskVisits(x, visits, cards, days)) return null;
+    return finishVisits(visits, cards, days);
+  }
   for (const [d, e] of Object.entries<any>(x.days)) {
     if (!DAY.test(d) || !e || !Array.isArray(e.k)) continue;
     days.push(d);
@@ -72,7 +82,15 @@ export function parseVisitHistory(raw: unknown): VisitData | null {
       }
     }
   }
-  if (!days.length) return null;
+  return finishVisits(visits, cards, days);
+}
+
+function finishVisits(
+  visits: Map<string, Set<string>>,
+  cards: Map<string, Map<string, [number, number, string]>>,
+  days: string[],
+): VisitData | null {
+  if (!days.length || !visits.size) return null;
   days.sort();
   const out = new Map<string, string[]>();
   const kind = new Map<string, CustKind>();
@@ -82,6 +100,100 @@ export function parseVisitHistory(raw: unknown): VisitData | null {
     kind.set(h, kindOf(v, cards.get(h)));
   }
   return { from: days[0], to: days[days.length - 1], days: days.length, visits: out, kind };
+}
+
+/* ---------- 통합데스크가 매일 보내는 방문 기록 (2026-11-16 사장님 — 재방문 분석 매일 자동) ----------
+   손님 번호 · 해시 없이 손님마다 방문한 날 번호만 (보낼 때마다 순서를 섞음) — 이름 · 전화 · 해시 · 비밀값 없음
+   { type: "astanakiz-visits", v: 1, at: "YYYY-MM-DD HH:MM:SS", from: "YYYY-MM-DD"(날 번호 0),
+     days: [기록이 있는(읽은) 날 번호 …],
+     p: [ [ [방문 날 번호 …], [카드 날 번호, 완료 n, 그날 건수, 읽은 날 번호, (다음 카드) …] ], … ] }  — 손님 하나 = p 한 칸 */
+export interface DeskVisits {
+  type: typeof VISITS_TYPE;
+  v: 1;
+  at: string;
+  from: string;
+  days: number[];
+  p: [number[], number[]][];
+}
+const MAX_DAY = 4000;
+const nat = (x: unknown, max = MAX_DAY) => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= max;
+function readDeskVisits(
+  x: any,
+  visits: Map<string, Set<string>>,
+  cards: Map<string, Map<string, [number, number, string]>>,
+  days: string[],
+): boolean {
+  if (typeof x.from !== "string" || !DAY.test(x.from) || !Array.isArray(x.days) || !Array.isArray(x.p))
+    return false;
+  const day = (n: number) => addDays(x.from, n);
+  for (const n of x.days) if (nat(n)) days.push(day(n));
+  x.p.forEach((row: unknown, i: number) => {
+    if (!Array.isArray(row) || !Array.isArray(row[0])) return;
+    const h = `p${i}`;
+    const vs = new Set<string>();
+    for (const n of row[0]) if (nat(n)) vs.add(day(n));
+    if (!vs.size) return;
+    visits.set(h, vs);
+    const cs = Array.isArray(row[1]) ? row[1] : [];
+    const m = new Map<string, [number, number, string]>();
+    for (let j = 0; j + 3 < cs.length; j += 4) {
+      const [d, n, cnt, rd] = cs.slice(j, j + 4);
+      if (!nat(d) || !nat(n, 100000)) continue;
+      m.set(day(d), [n, nat(cnt, 1000) && cnt > 0 ? cnt : 1, nat(rd) ? day(rd) : day(d)]);
+    }
+    if (m.size) cards.set(h, m);
+  });
+  return true;
+}
+
+/** 방문 기록 파일(visit-history.json) → 통합데스크가 보낼 모양 (통합데스크 쪽 본보기 · 시험용). shuffle = 손님 순서 섞기 (기본 무작위) */
+export function deskVisitsFrom(
+  raw: unknown,
+  at: string,
+  shuffle: <T>(xs: T[]) => T[] = shuffleRandom,
+): DeskVisits | null {
+  const x: any = typeof raw === "string" ? JSON.parse(raw) : raw;
+  if (!x || x.v !== 1 || !x.days || typeof x.days !== "object") return null;
+  const ds = Object.keys(x.days)
+    .filter((d) => DAY.test(d) && x.days[d] && Array.isArray(x.days[d].k))
+    .sort();
+  if (!ds.length) return null;
+  const from = ds[0];
+  const num = (d: string) => diff(from, d);
+  const per = new Map<string, { v: number[]; c: number[] }>();
+  for (const d of ds) {
+    const e = x.days[d];
+    if (!e || !Array.isArray(e.k)) continue;
+    for (const h of e.k) {
+      if (typeof h !== "string" || !HASH.test(h)) continue;
+      const r = per.get(h) ?? per.set(h, { v: [], c: [] }).get(h)!;
+      if (!r.v.includes(num(d))) r.v.push(num(d));
+      const c = e.c?.[h];
+      if (Array.isArray(c) && Number.isInteger(c[0]) && c[0] >= 0)
+        r.c.push(
+          num(d),
+          c[0],
+          Number.isInteger(c[1]) && c[1] > 0 ? c[1] : 1,
+          typeof c[2] === "string" && DAY.test(c[2]) ? num(c[2]) : num(d),
+        );
+    }
+  }
+  return {
+    type: VISITS_TYPE,
+    v: 1,
+    at,
+    from,
+    days: ds.map(num),
+    p: shuffle([...per.values()].map((r) => [r.v, r.c] as [number[], number[]])),
+  };
+}
+function shuffleRandom<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 /** 신규 · 기존 — 카드 '완료 n'(읽은 날까지 센 수)에서 첫 방문 앞 이용 수를 셈 (astanakiz docs/REVISIT.md 와 같은 셈) */
@@ -476,6 +588,10 @@ export interface RevisitStudy {
   type: typeof STUDY_TYPE;
   v: 1;
   madeAt: string;
+  /** 어디서 계산했나 — desk = 통합데스크가 보낸 방문 기록으로 매일 아침 자동 · file = 키즈 포스 PC 에서 파일을 골라 (옛 요약은 없음) */
+  src?: "desk" | "file";
+  /** 방문 기록을 보낸(파일이면 고른) 때 — 통합데스크 글의 at */
+  dataAt?: string;
   data: {
     from: string;
     to: string;

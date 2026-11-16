@@ -32,3 +32,4 @@ export * from "./deskEvent";
 export * from "./deskRental";
 export * from "./work";
 export * from "./revisitStudy";
+export * from "./eventMeal";

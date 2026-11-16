@@ -2241,3 +2241,28 @@ button.quad-box {
   outline: 2px dashed var(--accent);
   outline-offset: -4px;
 }
+.study-big {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+.study-big > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.study-big b {
+  font-size: 22px;
+  font-weight: 700;
+}
+.study-big .sub {
+  font-size: 12.5px;
+}
+.study-hol {
+  color: var(--sun);
+}

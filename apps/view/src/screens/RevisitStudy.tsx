@@ -1,18 +1,29 @@
-/* 돈까스 재방문 이벤트 — 자세히 분석 (2026-11-14 사장님)
-   키즈 포스 PC 에서 이 화면을 열고 통합데스크 방문 기록 파일(visit-history.json)을 고르면
-   그 PC 브라우저 안에서만 계산 → 손님 기호가 없는 요약 숫자만 클라우드(deskStats/study-revisit)에 저장 → 폰에서도 보임
+/* 돈까스 재방문 이벤트 — 재방문 분석 (2026-11-14 사장님)
+   순서 (2026-11-16 사장님): ① 재방문 간격 순위표('네이버 판매 수' 화면에서 옮김) ② 돈까스 받은 손님 결제 건 평균 ③ 통계 분석 ④ 자료 넣는 법(맨 밑)
+   - 통계 분석: 통합데스크가 매일 20:00 방문 기록(deskVisits/latest)을 보내면 매일 아침 GitHub 가 다시 계산(apps/collector/src/eventDaily.ts)
+     그 전에는 키즈 포스 PC 에서 방문 기록 파일(visit-history.json)을 골라 그 브라우저 안에서만 계산 → 손님 기호가 없는 요약만 deskStats/study-revisit
+   - 돈까스 결제 건: 매일 아침 OKPOS 영수증별 자료를 받을 때 카페 칸 eventMeal (packages/core/src/eventMeal.ts)
    계산 · 통계 방법: packages/core/src/revisitStudy.ts */
 import { useEffect, useState } from "react";
 import {
+  addDays,
+  eventMealSummary,
   parseVisitHistory,
   revisitStudy,
   shortLabel,
+  STUDY_EVENT_FROM,
+  todayKst,
+  won,
+  type Board,
   type Cohort,
   type Desc,
+  type DeskRevisitOk,
+  type EventMealGroup,
   type OE,
   type RevisitStudy,
 } from "@report/core";
 import { studyRead, studySave } from "../data/firebase";
+import { RevisitCard } from "./KidsDetail";
 
 /* 통합데스크 앱 폴더 = Electron userData = %APPDATA%\<package.json 의 productName 또는 name>
    astanakiz apps/desk/package.json 은 productName 이 build 설정 안에만 있어 설치본 이름이 name(astanakiz-desk) — 한글 '아스타나키즈 입장 데스크' 폴더가 아님
@@ -54,7 +65,15 @@ const dt = (iso: string) => {
       });
 };
 
-export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
+export function RevisitStudyScreen({
+  board,
+  revisitOk,
+  onBack,
+}: {
+  board: Board;
+  revisitOk: DeskRevisitOk | null;
+  onBack: () => void;
+}) {
   const [s, setS] = useState<RevisitStudy | null>(null);
   const [from, setFrom] = useState<"cloud" | "file" | null>(null);
   const [state, setState] = useState<"loading" | "idle" | "busy">("loading");
@@ -114,7 +133,11 @@ export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
         setMsg("방문 기록 파일이 아니에요 — 폴더 안의 visit-history.json 을 골라 주세요.");
         return;
       }
-      const r = revisitStudy(data);
+      const r: RevisitStudy = {
+        ...revisitStudy(data),
+        src: "file",
+        dataAt: new Date(f.lastModified || Date.now()).toISOString(),
+      };
       setS(r);
       setFrom("file");
       setSave("클라우드에 요약을 저장하는 중…");
@@ -147,10 +170,17 @@ export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
             />
           </svg>
         </button>
-        <h1>돈까스 재방문 분석</h1>
+        <h1>재방문 분석</h1>
         <span />
       </header>
       <main className="content study">
+        <RevisitCard board={board} />
+        <EventMealCard board={board} revisitOk={revisitOk} />
+        {state === "loading" && <p className="sub">저장된 분석을 받는 중입니다…</p>}
+        {state !== "loading" && !s && (
+          <p className="sub">아직 통계 분석이 없어요 — 맨 아래 '분석 자료 넣기'로 한 번 계산해 주세요.</p>
+        )}
+        {s && <Result s={s} from={from} />}
         <section
           className={`card${over ? " study-over" : ""}`}
           onDragOver={(e) => {
@@ -164,7 +194,14 @@ export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
             pick(e.dataTransfer.files?.[0]);
           }}
         >
-          <h2>키즈 포스에서 새로 계산하기</h2>
+          <h2>
+            분석 자료 넣기 <span className="sub">통계 분석에 쓰는 방문 기록</span>
+          </h2>
+          <p className="note strong">
+            {s?.src === "desk"
+              ? `매일 자동 — 통합데스크가 매일 20:00 방문 기록을 보내면 다음 날 아침(9시 반쯤) 다시 계산해요. 마지막 자동 계산 ${dt(s.madeAt)}.`
+              : "매일 자동은 통합데스크가 방문 기록을 매일 보내기 시작하면 돼요(통합데스크 새 판) — 그러면 다음 날 아침마다 저절로 다시 계산해요. 그 전에는 아래처럼 키즈 포스 PC 에서 파일로 계산해 주세요."}
+          </p>
           <ol className="study-steps">
             <li>
               키즈 포스 PC 에서 이 화면을 열고 <b>[① 파일 위치 복사]</b>를 누릅니다.
@@ -210,12 +247,6 @@ export function RevisitStudyScreen({ onBack }: { onBack: () => void }) {
           {msg && <p className="bad">{msg}</p>}
           {save && <p className="note">{save}</p>}
         </section>
-
-        {state === "loading" && <p className="sub">저장된 분석을 받는 중입니다…</p>}
-        {state !== "loading" && !s && (
-          <p className="sub">아직 저장된 분석이 없어요 — 키즈 포스 PC 에서 위 단추로 한 번 계산해 주세요.</p>
-        )}
-        {s && <Result s={s} from={from} />}
       </main>
     </>
   );
@@ -232,7 +263,12 @@ function Result({ s, from }: { s: RevisitStudy; from: "cloud" | "file" | null })
   return (
     <>
       <p className="sub study-made">
-        {from === "file" ? "방금 이 PC 에서 계산" : "클라우드에 저장된 분석"} · 만든 때 {dt(s.madeAt)}
+        {from === "file"
+          ? "방금 이 PC 에서 계산"
+          : s.src === "desk"
+            ? "통합데스크 방문 기록으로 아침 자동 계산"
+            : "키즈 포스에서 파일로 계산한 분석"}{" "}
+        · 만든 때 {dt(s.madeAt)}
       </p>
 
       <section className="card">
@@ -701,6 +737,125 @@ function ItsCard({ s }: { s: RevisitStudy }) {
       <p className="note">
         단절 시계열: 원래 오르내리던 흐름(추세)과 휴일 여부를 빼고, 이벤트 시작 뒤 '다시 온 손님 비율'이 따로
         얼마나 바뀌었는지 봅니다 (그날 손님 수로 무게).
+      </p>
+    </section>
+  );
+}
+
+/** 돈까스 받은 손님 결제 (2026-11-16 사장님) — [이벤트] 돈까스가 찍힌 결제 건마다 그 영수증 소비 금액의 평균 (어제까지 마감 보고)
+    돈까스만 받아 간 건 = 0원 · 쿠폰을 다음에 와서 써도 돈까스가 찍힌 날로 셈 · 발행(통합데스크 재방문 성공)과 사용은 따로 */
+function EventMealCard({ board, revisitOk }: { board: Board; revisitOk: DeskRevisitOk | null }) {
+  const [days, setDays] = useState(false);
+  const to = addDays(todayKst(), -1);
+  const m = eventMealSummary((d) => board.report(d), STUDY_EVENT_FROM, to, revisitOk?.days ?? null);
+  const a = m.all;
+  const w = (x: number | null) => (x == null ? "—" : won(x));
+  const row = (label: string, g: EventMealGroup) => (
+    <tr key={label}>
+      <td>{label}</td>
+      <td className="num">{g.receipts.toLocaleString()}</td>
+      <td className="num">
+        <b>{w(g.avg)}</b>
+      </td>
+      <td className="num">{w(g.avgWithBuy)}</td>
+      <td className="num">{w(g.median)}</td>
+    </tr>
+  );
+  return (
+    <section className="card">
+      <h2>
+        돈까스 받은 손님 결제{" "}
+        <span className="sub">
+          [이벤트] 돈까스가 찍힌 결제 건 · {md(STUDY_EVENT_FROM)} ~ {md(to)}
+        </span>
+      </h2>
+      {a.receipts ? (
+        <>
+          <div className="study-big">
+            <div>
+              <span className="sub">결제 건 평균</span>
+              <b className="num">{w(a.avg)}</b>
+              <span className="sub">돈까스만 0원 포함 · {a.receipts.toLocaleString()}건</span>
+            </div>
+            <div>
+              <span className="sub">함께 산 건 평균</span>
+              <b className="num">{w(a.avgWithBuy)}</b>
+              <span className="sub">
+                {a.withBuy.toLocaleString()}건 · 돈까스만 {a.zero.toLocaleString()}건
+              </span>
+            </div>
+          </div>
+          <table className="study-table">
+            <thead>
+              <tr>
+                <th />
+                <th className="num">건</th>
+                <th className="num">평균</th>
+                <th className="num">함께 산 건</th>
+                <th className="num">가운데</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row("모두", a)}
+              {row("평일", m.weekday)}
+              {row("휴일", m.holiday)}
+            </tbody>
+          </table>
+          <p className="note">
+            견줌: 같은 날들 카페 결제 1건 평균 <b>{w(a.cafeAvg)}</b> (모든 결제 건 · 같은 방법)
+          </p>
+          {m.issued != null && (
+            <p className="note">
+              쿠폰 발행(재방문 성공) 누적 <b>{m.issued.toLocaleString()}장</b> · 돈까스 사용{" "}
+              <b>{a.qty.toLocaleString()}개</b>
+              {m.issued >= a.qty ? ` → 아직 안 쓴 쿠폰 ${(m.issued - a.qty).toLocaleString()}장` : ""} — 받은
+              날 안 쓰고 다음에 와서 써도 쓴 날로 셈
+            </p>
+          )}
+          <button className="ghost small revisit-more" onClick={() => setDays(!days)} aria-expanded={days}>
+            {days ? "날마다 접기" : "날마다 보기"}
+          </button>
+          {days && (
+            <table className="study-table">
+              <thead>
+                <tr>
+                  <th>날</th>
+                  {m.issued != null && <th className="num">발행</th>}
+                  <th className="num">돈까스</th>
+                  <th className="num">결제 건</th>
+                  <th className="num">0원</th>
+                  <th className="num">평균</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...m.days].reverse().map((x) => (
+                  <tr key={x.d}>
+                    <td className={x.holiday ? "study-hol" : ""}>{shortLabel(x.d)}</td>
+                    {m.issued != null && <td className="num">{x.issued ?? "—"}</td>}
+                    <td className="num">{x.qty}</td>
+                    <td className="num">{x.receipts}</td>
+                    <td className="num">{x.zero}</td>
+                    <td className="num">{w(x.avg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      ) : (
+        <p className="sub">
+          아직 계산된 결제 건이 없어요{m.missing.length ? "" : " — 돈까스가 찍힌 결제가 없었어요"}.
+        </p>
+      )}
+      {m.missing.length > 0 && (
+        <p className="note">
+          아직 계산 전인 날 {m.missing.length}일 — 매일 아침 자동 수집 뒤 채워요 (이 칸이 생기기 전에 받은
+          날).
+        </p>
+      )}
+      <p className="note">
+        결제 건 = 같은 포스 · 같은 영수증. 소비 금액 = 그 영수증 상품 실매출 합(할인 뒤 · 상품권 · 쿠폰으로 낸
+        몫도 소비로 셈). 가족이 따로 계산했으면 다른 건이에요.
       </p>
     </section>
   );

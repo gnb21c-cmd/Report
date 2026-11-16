@@ -107,6 +107,20 @@ service cloud.firestore {
         allow delete: if isSender(board);
       }
 
+      // 통합데스크 방문 기록 (2026-11-16 사장님 · 재방문 분석 자동) — docs/KIDS_REVISIT.md
+      //   문서 하나(latest)만 매일 20:00 덮어씀 · json = visit-history 모양(astanakiz-visits) · 손님 해시 대신 보낼 때마다 새로 섞은 번호 · 이름 · 전화 없음
+      //   읽기는 입력 계정만 (매일 아침 GitHub 가 재방문 분석 → deskStats/study-revisit) — 폰 보고 앱은 안 읽음 (크고 필요 없음)
+      match /deskVisits/{doc} {
+        allow read: if isSender(board);
+        allow create, update: if doc == "latest"
+          && exists(/databases/$(database)/documents/boards/$(board)/settings/main)
+          && request.resource.data.keys().hasOnly(["json", "at"])
+          && request.resource.data.json is string && request.resource.data.json.size() < 900000
+          && request.resource.data.json.matches("(?s)^[{].*astanakiz-visits.*$")
+          && request.resource.data.at is string && request.resource.data.at.size() < 40;
+        allow delete: if isSender(board);
+      }
+
       // 두 PC 연결 (통합데스크 현장 POS ↔ 사무실 PC · 2026-11-06) — astanakiz docs/SYNC.md
       //   문서 둘(pos · office)만 계속 덮어씀 · json = 잠긴 글(astanakiz-sync · 연결 코드 없이는 못 읽음) · 보고 앱은 읽지 않음
       match /deskSync/{doc} {

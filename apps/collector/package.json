@@ -22,6 +22,7 @@
     "live-loop": "tsx src/liveLoop.ts",
     "work": "tsx src/work.ts",
     "survey": "tsx src/survey.ts",
+    "event-daily": "tsx src/eventDaily.ts",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run --passWithNoTests"
   },
