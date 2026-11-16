@@ -400,6 +400,8 @@ export interface Cohort {
   /** 7 · 14 · 19일 — 비율 · 95% 범위 */
   at: Record<string, { p: number; lo: number; hi: number }>;
   hazard: number[];
+  /** 손님 구성 (2026-11-16) — 기준 방문이 신규 · 기존 · 모름 · 휴일인 손님 수 (구성이 다르면 그대로 견준 비율과 맞춰 견준 속도가 갈림). 옛 요약은 없음 */
+  mix?: { new: number; old: number; unknown: number; holiday: number };
 }
 const AT = [7, 14, STUDY_DEADLINE];
 function cohortOf(
@@ -419,8 +421,14 @@ function cohortOf(
       se = Math.sqrt(km.varS[t - 1] ?? 0);
     at[t] = { p: r3(p), lo: r3(Math.max(0, p - 1.96 * se)), hi: r3(Math.min(1, p + 1.96 * se)) };
   }
+  const mix = { new: 0, old: 0, unknown: 0, holiday: 0 };
+  for (const o of obs) {
+    const [k, w] = o.s.split("|");
+    mix[k as CustKind]++;
+    if (w === "휴일") mix.holiday++;
+  }
   return {
-    c: { key, label, from, to, censor, n: obs.length, F: km.F.map(r3), at, hazard: km.hazard.map(r3) },
+    c: { key, label, from, to, censor, n: obs.length, F: km.F.map(r3), at, hazard: km.hazard.map(r3), mix },
     obs,
     varS: km.varS,
   };
@@ -612,6 +620,8 @@ export interface RevisitStudy {
     chi2: number;
     p: number;
     diff: Record<string, { d: number; lo: number; hi: number }>;
+    /** 신규/기존 · 평일/휴일을 맞추지 않고 그대로 견준 속도 (2026-11-16 — 맞춘 것과 다르면 손님 구성 차이) · 옛 요약은 없음 */
+    raw?: { hr: number; lo: number; hi: number; p: number };
   }[];
   /** 같은 손님 — 평소 대비 실제 (7 · 14 · 19일, 지켜본 날이 모자라면 null) */
   paired: { both: number; h7: OE | null; h14: OE | null; h19: OE | null };
@@ -652,7 +662,9 @@ export function revisitStudy(
       const se = Math.sqrt((ev.varS[t - 1] ?? 0) + (b.varS[t - 1] ?? 0));
       diffs[t] = { d: r3(d), lo: r3(d - 1.96 * se), hi: r3(d + 1.96 * se) };
     }
-    return { base: b.c.key, ...lr, diff: diffs };
+    const one = (o: Obs[]) => o.map((x) => ({ ...x, s: "" }));
+    const r = logRank(one(ev.obs), one(b.obs), T);
+    return { base: b.c.key, ...lr, diff: diffs, raw: { hr: r.hr, lo: r.lo, hi: r.hi, p: r.p } };
   });
   // 재방문 간격 — 두 방문 모두 그 기간 안
   const nearFrom = addDays(eventFrom, -evLen);

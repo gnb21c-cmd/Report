@@ -36,8 +36,7 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const pp = (x: number) => `${x > 0 ? "+" : ""}${(x * 100).toFixed(1)}%p`;
 /** 표 안 95% 범위 — 단위 없이 짧게 (폰 폭) */
 const rng = (lo: number, hi: number) => `${(lo * 100).toFixed(1)}~${(hi * 100).toFixed(1)}`;
-const rngP = (lo: number, hi: number) =>
-  `${lo > 0 ? "+" : ""}${(lo * 100).toFixed(1)}~${hi > 0 ? "+" : ""}${(hi * 100).toFixed(1)}`;
+const rngP = (lo: number, hi: number) => `${(lo * 100).toFixed(1)}~${(hi * 100).toFixed(1)}`;
 const md = (d: string) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
 const pv = (p: number) => (p < 0.001 ? "<0.001" : p.toFixed(3));
 const sig = (p: number) => (p < 0.05 ? "우연으로 보기 어려운 차이" : "아직 우연과 구분되지 않음");
@@ -509,8 +508,8 @@ function CompareCard({ s }: { s: RevisitStudy }) {
             <th>견준 기간</th>
             <th className="num">속도(배)</th>
             <th className="num">p</th>
-            <th className="num">14일 차이</th>
-            <th className="num">{D}일</th>
+            <th className="num">14일 차</th>
+            <th className="num">{D}일 차</th>
           </tr>
         </thead>
         <tbody>
@@ -522,8 +521,12 @@ function CompareCard({ s }: { s: RevisitStudy }) {
                 <div className="sub">
                   {c.lo.toFixed(2)}~{c.hi.toFixed(2)}
                 </div>
+                {c.raw && <div className="sub">그대로 {c.raw.hr.toFixed(2)}</div>}
               </td>
-              <td className={`num${c.p < 0.05 ? " up-text" : ""}`}>{pv(c.p)}</td>
+              <td className={`num${c.p < 0.05 ? " up-text" : ""}`}>
+                {pv(c.p)}
+                {c.raw && <div className="sub">{pv(c.raw.p)}</div>}
+              </td>
               <td className="num">
                 {pp(c.diff[14].d)}
                 <div className="sub">{rngP(c.diff[14].lo, c.diff[14].hi)}</div>
@@ -537,9 +540,45 @@ function CompareCard({ s }: { s: RevisitStudy }) {
         </tbody>
       </table>
       <p className="note">
-        속도(위험비) = 층화 로그순위 검정. 범위가 1 을 넘지 않고 걸치면 아직 확실하지 않아요. 차이 = 이벤트
-        비율 − 그 기간 비율 (%p).
+        속도(위험비) = 신규/기존 · 평일/휴일이 같은 손님끼리 견준 층화 로그순위 검정. 범위가 1 에 걸치면 아직
+        확실하지 않아요. '그대로' = 손님 종류를 맞추지 않고 견준 속도 · p. 차이 = 이벤트 비율 − 그 기간 비율
+        (%p).
       </p>
+      {s.cohorts.every((c) => c.mix) && (
+        <>
+          <h3 className="study-h3">손님 구성 — 기준 방문</h3>
+          <table className="study-table">
+            <thead>
+              <tr>
+                <th>기간</th>
+                <th className="num">신규</th>
+                <th className="num">기존</th>
+                <th className="num">모름</th>
+                <th className="num">휴일</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.cohorts.map((c) => {
+                const m = c.mix!;
+                const sh = (x: number) => (c.n ? `${Math.round((x / c.n) * 100)}%` : "—");
+                return (
+                  <tr key={c.key} className={c.key === "event" ? "cur" : ""}>
+                    <td>{c.label}</td>
+                    <td className="num">{sh(m.new)}</td>
+                    <td className="num">{sh(m.old)}</td>
+                    <td className="num">{sh(m.unknown)}</td>
+                    <td className="num">{sh(m.holiday)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="note">
+            '그대로'와 '맞춘' 속도가 크게 다르면 기간마다 손님 구성(기존 손님 · 휴일 비중)이 달라서예요 —
+            그때는 맞춘 속도가 이벤트 효과에 더 가까워요.
+          </p>
+        </>
+      )}
     </section>
   );
 }
