@@ -45,9 +45,13 @@ export function App() {
   }, [d.live, d.reports]);
   const reports = useMemo(() => {
     // 키즈 이벤트 무료입장 = max(POS 0원 상품, 통합데스크 이벤트 입장 수) — 통합데스크 2.1~ 매일 20:00 (2026-10-21 사장님)
-    if (!lives.size) return withDeskEvents(d.reports, d.deskEvents);
     const m = new Map(d.reports.map((r) => [r.date, r]));
     for (const [date, l] of lives) if (l.provisional.length) m.set(date, l.merged);
+    // 오늘(마감 전)은 자판기 · 네컷 · 주차를 넣지 않음 — 화면 위 안내처럼 다음 날 아침 그날 하루치로 (2026-11-18 사장님: 손으로 돌린
+    // 나이스 수집이 오늘 새벽 매출을 오늘 칸에 넣어 '기타'에 잡혔음)
+    const today = todayKst();
+    const t = m.get(today);
+    if (t?.extra) m.set(today, { ...t, extra: undefined });
     return withDeskEvents([...m.values()], d.deskEvents);
   }, [d.reports, lives, d.deskEvents]);
   // 설정(기간 스티커 · 휴일)을 넣은 뒤 계산 — 설정이 바뀌면 다시
