@@ -1,0 +1,46 @@
+# 하루 수집이 실패하면 다시 시작 (2026-11-19 사장님)
+#   POS 메인 PC 가 08:37 켜지자마자 밤새 기다리던 하루 수집이 돌았는데, 준비 단계에서 GitHub 작업 서버 연결이 4분 동안 안 돼
+#   (기록: 'Failed to resolve action download info' · 요청 시간 초과) 실패 → 다시 시작해 줄 GitHub 예약 실행이 몇 시간씩 늦어
+#   12시까지 오늘 마감 전 숫자 · 아침 확정 수집이 모두 멈춤 (포스 영업 · 인터넷은 그대로)
+# → '오늘 마감 전 영업정보'(live-collect.yml, main)가 실패로 끝나면 GitHub 클라우드에서 2분 기다렸다 하루 수집을 다시 시작시킴
+#   (예약 실행과 달리 끝난 바로 뒤에 옴). 08:00 ~ 21:30 에만 · 하루 수집 작업이 실패한 때만 · 이미 돌거나 기다리는 하루 수집이 있으면 건너뜀
+#   · 오늘 실패가 6번 넘으면 그만 (고장이 계속되면 사람이 보게)
+# 하루 수집이 다시 돌면 놓친 칸(15분 안)을 바로 받고, 기다리던 아침 수집은 칸 사이에 비켜 줘서 돎
+# 공개 저장소라 기록에는 시각 · 건너뛴 까닭만
+name: 하루 수집 다시 시작
+on:
+  workflow_run:
+    workflows: ["오늘 마감 전 영업정보"]
+    types: [completed]
+    branches: [main]
+permissions:
+  actions: write
+concurrency:
+  group: live-rescue
+  cancel-in-progress: false
+jobs:
+  rescue:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const kst = () => new Date(Date.now() + 9 * 3600e3);
+            const hm = kst().getUTCHours() * 60 + kst().getUTCMinutes();
+            if (hm < 8 * 60 || hm > 21 * 60 + 30) return core.info("하루 수집 시간(08:00 ~ 21:30)이 아님 — 건너뜀");
+            const failed = context.payload.workflow_run.id;
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({ ...context.repo, run_id: failed });
+            if (!jobs.data.jobs.some((j) => j.name === "하루 수집" && j.conclusion === "failure")) return core.info("하루 수집 작업이 실패한 것이 아님 — 건너뜀");
+            const day = kst().toISOString().slice(0, 10);
+            const fails = await github.rest.actions.listWorkflowRuns({ ...context.repo, workflow_id: "live-collect.yml", status: "failure", created: `>=${day}T00:00:00+09:00`, per_page: 1 });
+            if (fails.data.total_count > 6) return core.info(`오늘 하루 수집 실패 ${fails.data.total_count}번 — 그만 (사람이 확인)`);
+            // 켜진 직후면 연결이 잡히게 2분 기다림
+            await new Promise((r) => setTimeout(r, 120000));
+            for (const status of ["in_progress", "queued", "waiting", "pending", "requested"]) {
+              const r = await github.rest.actions.listWorkflowRuns({ ...context.repo, workflow_id: "live-collect.yml", status, per_page: 1 });
+              if (r.data.total_count > 0) return core.info(`하루 수집이 이미 있음(${status}) — 건너뜀`);
+            }
+            await github.rest.actions.createWorkflowDispatch({ ...context.repo, workflow_id: "live-collect.yml", ref: "main", inputs: {} });
+            core.info(`${String(kst().getUTCHours()).padStart(2, "0")}:${String(kst().getUTCMinutes()).padStart(2, "0")} 하루 수집 다시 시작시킴 (오늘 실패 ${fails.data.total_count}번째)`);
