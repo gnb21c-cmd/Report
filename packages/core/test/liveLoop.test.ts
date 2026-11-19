@@ -131,9 +131,10 @@ describe("스스로 이어 가기 (2026-10-27) — 깃허브 예약이 몇 시�
     expect(liveHoldOver(m("09:26"))).toBe(true);
   });
 
-  it("아침에 시작시킬 일 — 오늘 아직 한 번도 안 돈 것만 (자판기 · 네컷 · 주차 / POS 확정은 어제 날짜 / 네이버)", () => {
+  it("아침에 시작시킬 일 — 오늘 아직 한 번도 안 돈 것만 (자판기 · 네컷 · 주차는 지난 7일 ~ 어제 / POS 확정은 어제 날짜 / 네이버)", () => {
+    // 2026-11-18: 자판기 · 네컷 · 주차를 날짜 없이 시작시키면 '손으로' 범위(어제 ~ 오늘)라 오늘 새벽 매출이 오늘 칸에 들어갔음 → 아침 예약과 같은 지난 7일 ~ 어제
     expect(morningJobs("2026-10-27")).toEqual([
-      { file: "extra-collect.yml", inputs: {} },
+      { file: "extra-collect.yml", inputs: { date: "2026-10-20", to: "2026-10-26" } },
       { file: "pos-collect.yml", inputs: { date: "2026-10-26" } },
       { file: "naver-collect.yml", inputs: {} },
     ]);

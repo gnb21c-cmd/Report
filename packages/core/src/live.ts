@@ -11,6 +11,7 @@
    ============================================================ */
 import { addDays } from "./dates";
 import { deskLiveAgeMin, type DeskLive } from "./deskLive";
+import { niceRange } from "./extra";
 import { isNaverTicketProduct, naverTime } from "./naverAuto";
 import { NAVER_SLOTS, naverSlotIndex, sum, type DayReport, type NaverPart, type StorePart } from "./part";
 import type { StoreId } from "./types";
@@ -271,10 +272,12 @@ export function liveLoopMode(now: number, end: number): "night" | "day" {
   return now >= end || now < minutes(LIVE_MORNING_KICK) ? "night" : "day";
 }
 
-/** 아침에 시작시킬 일 (오늘 아직 한 번도 안 돈 것만 — liveLoop.ts) · POS 확정은 어제 날짜를 정해서 (손으로 시작하면 비운 날짜가 오늘이라) */
+/** 아침에 시작시킬 일 (오늘 아직 한 번도 안 돈 것만 — liveLoop.ts) · POS 확정은 어제 날짜를 정해서 (손으로 시작하면 비운 날짜가 오늘이라)
+ *  자판기 · 네컷 · 주차도 아침 예약과 같은 지난 7일 ~ 어제 (2026-11-18 — 날짜 없이 시작시키면 '손으로' 범위 어제 ~ 오늘이라 오늘 새벽 매출이 오늘 칸에 들어감, extra.ts niceRange) */
 export function morningJobs(today: string): { file: string; inputs: Record<string, string> }[] {
+  const r = niceRange(today, 9, "morning") as { from: string; to: string };
   return [
-    { file: "extra-collect.yml", inputs: {} },
+    { file: "extra-collect.yml", inputs: { date: r.from, to: r.to } },
     { file: "pos-collect.yml", inputs: { date: addDays(today, -1) } },
     { file: "naver-collect.yml", inputs: {} },
   ];
