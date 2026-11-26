@@ -133,7 +133,7 @@ export function trendDay(board: Board, asOf: string, today: string, date: string
   const first = new Map<string, string>();
   for (const d of dayRange(addDays(asOf, -(FIRST_LOOKBACK - 1)), asOf)) for (const n of soldOn(board, d, date).keys()) if (!first.has(n)) first.set(n, d);
   const isNew = (n: string) => (first.get(n) ?? asOf) > addDays(asOf, -NEW_BREAD_DAYS);
-  // 그날 단종된 빵은 뺌 (초코바게트 11-05 · 감계무량샌드위치 11-08 까지 — breadNames.ts DISCONTINUED) → 하루 목표로 다른 빵이 채움
+  // 그날 단종된 빵은 뺌 (초코바게트 11-05 · 감계무량샌드위치 11-08 · 초코파삭 11-26 까지 — breadNames.ts DISCONTINUED) → 하루 목표로 다른 빵이 채움
   const names = [...active].filter((n) => !isDiscontinued(n, date)).sort((a, b) => a.localeCompare(b, "ko"));
   const items = names
     .filter((n) => !isNew(n))

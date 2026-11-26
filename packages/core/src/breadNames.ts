@@ -49,8 +49,9 @@ for (const r of BREAD_RENAME) {
 /* ---------- 단종 빵 (2026-11-05 매니저 요청 · 사장님 전달) ----------
    마지막으로 만드는 날까지만 — 그 뒤 날짜의 계획 · 확정 · 추세 · 현장 표 · 매니저 앱 · 두 계획 견주기에서 뺌
    (이미 만든 계획 · 확정에 있어도 asPlan · asOrder 가 뺌, 다음 계획부터는 하루 목표로 다른 빵이 채움)
-   - 초코바게트: 11-05(목)까지 · 감계무량샌드위치: 11-08(일)까지 */
-export const DISCONTINUED: Readonly<Record<string, string>> = { 초코바게트: "2026-11-05", 감계무량샌드위치: "2026-11-08" };
+   - 초코바게트: 11-05(목)까지 · 감계무량샌드위치: 11-08(일)까지
+   - 초코파삭 (2026-11-26 사장님 "이제 판매하지 않아" — 11-16 부터 판매 0): 지난 발표 · 적중률 기록이 바뀌지 않게 11-26(목)까지로 → 11-27 부터 뺌 */
+export const DISCONTINUED: Readonly<Record<string, string>> = { 초코바게트: "2026-11-05", 감계무량샌드위치: "2026-11-08", 초코파삭: "2026-11-26" };
 const GONE = new Map(Object.entries(DISCONTINUED).map(([n, last]) => [breadKey(n), last]));
 /** 그날 단종된 빵인지 (마지막으로 만드는 날 다음 날부터) */
 export function isDiscontinued(name: string, date: string): boolean {
