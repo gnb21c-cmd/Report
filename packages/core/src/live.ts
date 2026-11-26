@@ -279,6 +279,13 @@ export const MORNING_BY_GROUPWARE_FROM = "2026-11-28";
 /** 그날 아침 수집을 그룹웨어 서버가 맡는지 */
 export const morningByGroupware = (day: string): boolean => day >= MORNING_BY_GROUPWARE_FROM;
 
+/** 마감 전(15분마다) 수집 · 근무자 화면 숫자(키친 · 재방문 이벤트) · 현장 생산실패 옮기기 · A [신규 다시 확인]도 그룹웨어 서버가 맡는 첫날 (2026-11-27 사장님)
+ *  그룹웨어 서버가 같은 계산으로 받아 이 클라우드(live/{오늘} · floor · orders.fail · config/naverResult)에 같은 표시로 올림 → 이날부터 매장 PC 는 하는 일이 없음
+ *  (하루 수집 · 신규 다시 확인 예약은 건너뜀, 매장 PC 하루 수집은 시작해도 바로 끝 · 다음 차례를 맡기지 않음 — 그룹웨어가 안 된 날은 손으로 '매장 포스 컴퓨터로'를 켜고 시작) */
+export const LIVE_BY_GROUPWARE_FROM = MORNING_BY_GROUPWARE_FROM;
+/** 그날 마감 전 수집을 그룹웨어 서버가 맡는지 */
+export const liveByGroupware = (day: string): boolean => day >= LIVE_BY_GROUPWARE_FROM;
+
 /** 아침에 시작시킬 일 (오늘 아직 한 번도 안 돈 것만 — liveLoop.ts) · POS 확정은 어제 날짜를 정해서 (손으로 시작하면 비운 날짜가 오늘이라)
  *  그룹웨어 서버가 맡는 날(MORNING_BY_GROUPWARE_FROM ~)은 없음
  *  자판기 · 네컷 · 주차도 아침 예약과 같은 지난 7일 ~ 어제 (2026-11-18 — 날짜 없이 시작시키면 '손으로' 범위 어제 ~ 오늘이라 오늘 새벽 매출이 오늘 칸에 들어감, extra.ts niceRange) */

@@ -28,6 +28,8 @@ jobs:
         with:
           script: |
             const kst = () => new Date(Date.now() + 9 * 3600e3);
+            // 2026-11-28 부터 마감 전 수집은 그룹웨어 서버가 맡음 — 다시 시작시키지 않음 (손으로 '매장 포스 컴퓨터로' 시작한 것도 사람이 봄)
+            if (kst().toISOString().slice(0, 10) >= "2026-11-28") return core.info("마감 전 수집은 그룹웨어 서버가 맡음 — 건너뜀");
             const hm = kst().getUTCHours() * 60 + kst().getUTCMinutes();
             if (hm < 8 * 60 || hm > 21 * 60 + 30) return core.info("하루 수집 시간(08:00 ~ 21:30)이 아님 — 건너뜀");
             const failed = context.payload.workflow_run.id;
