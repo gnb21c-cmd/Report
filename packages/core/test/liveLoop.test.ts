@@ -139,5 +139,8 @@ describe("스스로 이어 가기 (2026-10-27) — 깃허브 예약이 몇 시�
       { file: "naver-collect.yml", inputs: {} },
     ]);
     expect(morningJobs("2026-11-01")[1].inputs).toEqual({ date: "2026-10-31" });
+    // 2026-11-28 부터 아침 수집은 그룹웨어 서버가 맡음 — 하루 수집이 시작시키지 않음 (27일까지는 그대로)
+    expect(morningJobs("2026-11-27").map((j) => j.file)).toEqual(["extra-collect.yml", "pos-collect.yml", "naver-collect.yml"]);
+    expect(morningJobs("2026-11-28")).toEqual([]);
   });
 });

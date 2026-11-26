@@ -48,6 +48,11 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // 2026-11-28 부터 아침 수집은 그룹웨어 서버가 09:40 에 받아 이 클라우드에도 올림 (packages/core/src/live.ts MORNING_BY_GROUPWARE_FROM) — 예약은 건너뜀, 손으로 시작하면 돎
+            if (context.eventName === "schedule" && new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= "2026-11-28") {
+              core.info("아침 수집은 그룹웨어 서버가 맡음 — 예약은 건너뜀 (그룹웨어가 안 된 날은 손으로 시작)");
+              return core.setOutput("done", "1");
+            }
             if (context.eventName !== "schedule" || !["25 0 * * *", "0 1 * * *", "12 1 * * *"].includes(context.payload.schedule)) return core.setOutput("done", "");
             const day = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
             const r = await github.rest.actions.listWorkflowRuns({ ...context.repo, workflow_id: "naver-collect.yml", event: "schedule", status: "success", created: `>=${day}T00:00:00+09:00` });

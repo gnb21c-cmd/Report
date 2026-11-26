@@ -272,9 +272,18 @@ export function liveLoopMode(now: number, end: number): "night" | "day" {
   return now >= end || now < minutes(LIVE_MORNING_KICK) ? "night" : "day";
 }
 
+/** 아침 수집(OK포스 확정 · 나이스 자판기 · 네컷 · 주차 · 네이버 예약)을 그룹웨어 서버가 맡는 첫날 (2026-11-26 사장님)
+ *  그룹웨어 서버가 09:40 에 한 번 받아 그룹웨어와 이 보고 시스템 클라우드에 같이 올림 → 이날부터 POS PC · GitHub 의 아침 예약과
+ *  하루 수집의 '아침 수집 시작시키기'는 쉼 (손으로 시작하면 돎 — 그룹웨어 서버가 고장 난 날 대신). 마감 전(15분마다) 하루 수집은 그대로 */
+export const MORNING_BY_GROUPWARE_FROM = "2026-11-28";
+/** 그날 아침 수집을 그룹웨어 서버가 맡는지 */
+export const morningByGroupware = (day: string): boolean => day >= MORNING_BY_GROUPWARE_FROM;
+
 /** 아침에 시작시킬 일 (오늘 아직 한 번도 안 돈 것만 — liveLoop.ts) · POS 확정은 어제 날짜를 정해서 (손으로 시작하면 비운 날짜가 오늘이라)
+ *  그룹웨어 서버가 맡는 날(MORNING_BY_GROUPWARE_FROM ~)은 없음
  *  자판기 · 네컷 · 주차도 아침 예약과 같은 지난 7일 ~ 어제 (2026-11-18 — 날짜 없이 시작시키면 '손으로' 범위 어제 ~ 오늘이라 오늘 새벽 매출이 오늘 칸에 들어감, extra.ts niceRange) */
 export function morningJobs(today: string): { file: string; inputs: Record<string, string> }[] {
+  if (morningByGroupware(today)) return [];
   const r = niceRange(today, 9, "morning") as { from: string; to: string };
   return [
     { file: "extra-collect.yml", inputs: { date: r.from, to: r.to } },
