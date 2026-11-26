@@ -25,7 +25,7 @@ export const NIBS_LOGIN = "https://nibs.nicevan.co.kr/websquare/login.jsp";
 export const NIBS_MAIN = "https://nibs.nicevan.co.kr/websquare/index.jsp";
 
 /** 화면 구조를 알아볼 때 글자를 보여도 되는 낱말 (가맹점 · 회사 이름이 나오지 않게 정해 둔 것만) */
-const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "신용카드", "통합거래조회", "조회", "엑셀", "다운로드", "전체", "All", "선택", "정산 통계용", "가맹점", "합계", "비밀번호", "사유", "거래상세내역", "엑셀비밀번호", "다운로드사유선택", "주요업무", "로그아웃"];
+const SAFE_WORDS = ["로그인", "확인", "취소", "닫기", "거래조회", "신용카드", "통합거래조회", "조회", "엑셀", "다운로드", "전체", "All", "선택", "정산 통계용", "가맹점", "합계", "비밀번호", "사유", "거래상세내역", "엑셀비밀번호", "다운로드사유선택", "주요업무", "로그아웃", "인증번호 확인", "인증번호 전송", "이메일로 인증번호 받기", "알림톡으로 인증번호 받기", "인증번호"];
 
 /** 글자 · 단추(input value 포함) 이름으로 — 띄어쓰기 · 줄바꿈 무시 */
 const loose = (t: string) => new RegExp(`^\\s*${t.split("").filter((c) => c.trim()).map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*")}\\s*$`);
@@ -34,6 +34,10 @@ const loose = (t: string) => new RegExp(`^\\s*${t.split("").filter((c) => c.trim
 const LOGIN_STOP = /로그인 ?정보|일치하지|틀렸|틀립|잘못|오류|실패|잠금|잠겼|잠김|횟수|초과|만료|변경|인증|승인|차단|등록되지/;
 /** 나이스가 로그인을 받아 주지 않음 (아이디 · 비밀번호 틀림 · 잠김 등) — 같은 비밀번호로 다시 넣지 않게 (extra.ts) */
 export class NiceLoginRefused extends Error {}
+/** 2차 인증 창 (2026-11-25 ~ 나이스 로그인 2차 인증 — 알림톡 · 이메일 인증번호). LOGIN_STOP 의 '인증'보다 먼저 봄 — 거절이 아님 */
+const LOGIN_OTP = /인증\s*번호/;
+/** 2차 인증 — [인증번호 전송]을 누른 시각을 받아 메일함에서 꺼낸 번호를 돌려줌 (niceMail.ts) */
+export type NiceOtp = (sentAt: Date) => Promise<string>;
 /** 공개 기록용 — 아이디 · 메일 · '…님'(이름) · 숫자를 가림 */
 const hide = (t: string, id: string) =>
   (id ? t.split(id).join("(아이디)") : t)
@@ -202,7 +206,7 @@ export class Nibs {
       .join(" | ");
   }
 
-  async login(id: string, pw: string) {
+  async login(id: string, pw: string, otp?: NiceOtp) {
     const p = this.page;
     let res: Awaited<ReturnType<Page["goto"]>> = null;
     for (let i = 0; i < 3; i++) {
@@ -242,9 +246,12 @@ export class Nibs {
       const pop = await this.loginPopup(id);
       if (pop) {
         say(`[로그인 화면 위 창] ${pop}`);
-        if (LOGIN_STOP.test(pop)) throw new NiceLoginRefused(`로그인 안 됨 — 나이스 창: ${pop}`);
-        const ok = await this.visible((f) => byName(f, "확인"));
-        if (ok) await ok.click({ timeout: 5000 }).catch(() => {});
+        if (LOGIN_OTP.test(pop)) await this.secondStep(otp);
+        else if (LOGIN_STOP.test(pop)) throw new NiceLoginRefused(`로그인 안 됨 — 나이스 창: ${pop}`);
+        else {
+          const ok = await this.visible((f) => byName(f, "확인"));
+          if (ok) await ok.click({ timeout: 5000 }).catch(() => {});
+        }
       } else {
         const btn = await this.visible((f) => f.locator("button, a, input[type=button], input[type=submit], [role=button]").filter({ hasText: /^\s*로그인\s*$/ }));
         if (btn) await btn.click({ timeout: 10000 });
@@ -288,6 +295,72 @@ export class Nibs {
       return;
     }
     throw new Error("로그인 안 됨 — 아이디 · 비밀번호(NICE_ID · NICE_PW)를 확인해 주세요");
+  }
+
+  /** 보이는 것 가운데 마지막 (창 제목과 단추가 같은 글일 때 — 단추가 뒤에 있음) */
+  private async lastVisible(make: (f: Frame) => Locator, ms = 0): Promise<Locator | null> {
+    for (let t = 0; ; t += 500) {
+      let last: Locator | null = null;
+      for (const f of this.frames()) {
+        const all = make(f);
+        const n = await all.count().catch(() => 0);
+        for (let i = 0; i < n; i++) if (await all.nth(i).isVisible().catch(() => false)) last = all.nth(i);
+      }
+      if (last || t >= ms) return last;
+      await this.page.waitForTimeout(500);
+    }
+  }
+
+  /** 2차 인증 (2026-11-25 ~) — '이메일로 인증번호 받기' → [인증번호 전송] → 메일함에서 번호(otp) → 넣고 [인증번호 확인]
+      번호는 3분 안에 넣어야 함 · 못 받거나 틀리면 한 번만 새로 전송. 번호는 기록에 남기지 않음 */
+  private async secondStep(otp?: NiceOtp) {
+    // 메일함이 없으면 거절이 아니라 설정이 빠진 것 — 계정 잠김 표시를 남기지 않게 보통 오류로
+    if (!otp) throw new Error("나이스 2차 인증 창이 떴는데 인증번호 메일함(NICE_MAIL_HOST · NICE_MAIL_USER · NICE_MAIL_PW)이 없음");
+    const codeBox = () => this.lastVisible((f) => f.locator('input[placeholder*="인증번호"]'));
+    for (let round = 1; round <= 2; round++) {
+      const tab = await this.visible((f) => byName(f, "이메일로 인증번호 받기"), 10000);
+      if (!tab) throw new Error("2차 인증 창에서 '이메일로 인증번호 받기'를 못 찾음");
+      await tab.click({ timeout: 5000 });
+      await pause(700, 1300);
+      const send = await this.lastVisible((f) => byName(f, "인증번호 전송"), 5000);
+      if (!send) throw new Error("2차 인증 창에서 '인증번호 전송' 단추를 못 찾음");
+      const sentAt = new Date();
+      await send.click({ timeout: 5000 });
+      say(`2차 인증 — 이메일로 인증번호 전송 (${round}번째)`);
+      await this.page.waitForTimeout(1500);
+      // '전송했습니다' 같은 알림 → [확인] (단추 글이 '확인' 하나뿐인 것만 — '인증번호 확인'은 아님)
+      await this.closeAlerts(1000);
+      const okAlert = await this.visible((f) => byName(f, "확인"));
+      if (okAlert) await okAlert.click({ timeout: 3000 }).catch(() => {});
+      let code: string;
+      try {
+        code = await otp(sentAt);
+      } catch (e) {
+        if (round === 1 && !/들어가지 못함/.test(String((e as Error)?.message))) {
+          say(`인증번호 메일을 못 받음 (${mask(String((e as Error).message)).slice(0, 80)}) → 한 번 더 전송`);
+          continue;
+        }
+        throw e;
+      }
+      const box = await codeBox();
+      if (!box) throw new Error("2차 인증 창에서 인증번호 칸을 못 찾음");
+      await box.click({ timeout: 5000 });
+      await box.fill("");
+      await box.pressSequentially(code, { delay: 80 + Math.random() * 60 });
+      await pause(500, 900);
+      const confirm = await this.lastVisible((f) => byName(f, "인증번호 확인"), 5000);
+      if (!confirm) throw new Error("2차 인증 창에서 '인증번호 확인' 단추를 못 찾음");
+      await confirm.click({ timeout: 5000 });
+      say("2차 인증 — 인증번호 넣고 확인");
+      await this.page.waitForTimeout(3000);
+      // 창이 닫혔으면 끝 (로그인 시각 알림 [확인]은 아래 기다림이 누름)
+      if (!(await codeBox())) return;
+      const msg = await this.loginPopup("");
+      say(`2차 인증 창이 그대로 — ${msg || "글 없음"}`);
+      await this.closeAlerts(1500);
+      if (round === 2) throw new Error("2차 인증이 끝나지 않음 (인증번호가 맞지 않거나 시간이 지남)");
+    }
+    throw new Error("2차 인증 — 인증번호 메일을 두 번 다 못 받음");
   }
 
   /** 로그인 화면 위에 뜬 창의 글 — 떠 있는 창(나이스 화면 창 · 팝업 · 알림)이나 로그인 단추를 덮은 것. 없으면 "" (공개 기록용으로 가림) */

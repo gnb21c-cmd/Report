@@ -9,7 +9,10 @@
    - 나이스가 "로그인 정보를 확인하세요"(아이디 · 비밀번호 틀림 · 잠김 등)라고 하면 그 아이디 · 비밀번호의 표시(HMAC 앞 16자)를
      POS PC 도구 폴더(NICE_STATE_DIR)에 남기고, 다음 실행부터 같은 비밀번호로는 로그인하지 않음 — 계정이 잠기지 않게 (2026-10-25)
      GitHub Secrets 의 NICE_PW(또는 NICE_ID)를 바꾸면 다음 실행부터 다시 함 · 로그인이 되면 표시를 지움
-   공개 저장소라 기록(로그)에는 건수 · 일치 여부만 남김 (매출 숫자 · 가맹점 이름 없음)
+   - 2026-11-25 ~ 나이스 로그인 2차 인증(사장님 2026-11-26): 로그인 뒤 '이메일로 인증번호 받기' → 나이스가 가입 메일(다우 tax 메일함)로 보낸 번호를
+     niceMail.ts 가 그 메일함을 읽기 전용으로 열어 꺼내 넣음 (NICE_MAIL_HOST · NICE_MAIL_PORT · NICE_MAIL_USER · NICE_MAIL_PW).
+     메일함 값이 없으면 나이스에 들어가지 않음(쓸데없는 로그인 시도 막기). 25일에 2차 인증 창을 '거절'로 잘못 알아 남긴 표시는 판을 올려 무시함
+   공개 저장소라 기록(로그)에는 건수 · 일치 여부만 남김 (매출 숫자 · 가맹점 이름 · 인증번호 없음)
    ============================================================ */
 import { addDays, applyExtra, applyExtraItems, autoExtraKinds, dayRange, EXTRA_AUTO_BY, EXTRA_LABEL, EXTRA_TERMINALS, extraItemsOnly, extraUpdates, NICE_FROM, niceRange, parseNiceSheet, type ExtraKind, type ExtraPart, type NiceSheet } from "@report/core";
 // 비밀번호 걸린 엑셀 풀기 — 입력 화면(A)과 같은 것을 씀
@@ -19,6 +22,7 @@ import { createHmac } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Nibs, NiceLoginRefused } from "./nibs";
+import { mailBoxFromEnv, niceOtpFrom } from "./niceMail";
 import { mask, readRows, say } from "./okpos";
 
 const env = (k: string) => process.env[k] || "";
@@ -83,15 +87,23 @@ async function main() {
 
   // 나이스가 받아 주지 않은 아이디 · 비밀번호면 로그인하지 않음 (계정 잠김 막기) — 비밀번호 대신 HMAC 표시만 PC 에 남김
   const failFile = env("NICE_STATE_DIR") ? join(env("NICE_STATE_DIR"), "login-refused.txt") : "";
-  const mark = createHmac("sha256", env("REPORT_BOARD_KEY") || "nibs").update(`${env("NICE_ID")}\n${env("NICE_PW")}`).digest("hex").slice(0, 16);
+  // 표시 판 'otp-1' — 2026-11-25 에 2차 인증 창을 '거절'로 잘못 알아 남긴 예전 표시는 맞지 않게 (진짜 거절은 이 판으로 다시 남음)
+  const mark = createHmac("sha256", env("REPORT_BOARD_KEY") || "nibs").update(`otp-1\n${env("NICE_ID")}\n${env("NICE_PW")}`).digest("hex").slice(0, 16);
   if (failFile && existsSync(failFile) && readFileSync(failFile, "utf8").trim() === mark) {
     say("나이스가 '로그인 정보를 확인하세요'라고 했던 아이디 · 비밀번호 그대로라 로그인하지 않음 (계정 잠김 막기) — GitHub Secrets 의 NICE_PW 를 바꾸면 다음 실행부터 다시 함");
     process.exit(1);
   }
 
+  // 2차 인증 메일함 — 없으면 들어가지 않음 (2차 인증 창에서 멈추는 로그인을 날마다 되풀이하지 않게)
+  const box = mailBoxFromEnv(process.env);
+  if (!box) {
+    say("나이스 2차 인증 메일함(NICE_MAIL_HOST · NICE_MAIL_USER · NICE_MAIL_PW)이 아직 없어 로그인하지 않음 — GitHub Secrets 에 넣으면 다음 실행부터 받음 (docs/NICE_RUNNER.md)");
+    process.exit(1);
+  }
+
   const nb = await Nibs.open();
   const start = async () => {
-    await nb.login(env("NICE_ID"), env("NICE_PW"));
+    await nb.login(env("NICE_ID"), env("NICE_PW"), niceOtpFrom(box));
     await nb.openSearch();
   };
 
