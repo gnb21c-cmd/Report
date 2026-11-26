@@ -22,6 +22,7 @@
    환경: live.ts · naver.ts · survey.ts 와 같음 + GH_TOKEN(이 작업의 GitHub 열쇠 — 다른 일 보기 · 다시 시작 · 기록 올리기) · LOOP_END(끝 시각 HH:MM, 시험용)
          LIVE_LOG_DIR(이 PC 의 하루 수집 기록 폴더 — 없으면 기록 파일 · 올리기 안 함)
          LOOP_ONCE=1(한 번만 받고 끝 — 날짜를 정한 시험) · COLLECT_DRY=1(올리지 않음, 신규 다시 확인 요청은 맡지 않음)
+         LIVE_POS=1(2026-11-28 부터 — 그룹웨어 서버가 안 된 날 매장 포스 컴퓨터로 하루 수집, core live.ts liveByGroupware)
    공개 저장소라 기록에는 시각 · 성공/실패 · 개수만
    ============================================================ */
 import { spawn } from "node:child_process";
@@ -29,7 +30,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statS
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { addDays, asFailInbox, asOrder, asPlan, failSyncLines, floorCopy, checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOG_BRANCH, LIVE_LOOP_END, liveLogPath, logLines, logPrune, logPushDue, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
+import { addDays, asFailInbox, asOrder, asPlan, failSyncLines, floorCopy, checkWorkEvent, kstMinutes, LIVE_FROM, LIVE_LOG_BRANCH, LIVE_LOOP_END, liveLogPath, logLines, logPrune, logPushDue, LIVE_MORNING_KICK, LIVE_REARM_MIN, liveArmDue, liveHoldOver, liveLoopMode, liveLoopStep, liveSlotBy, liveByGroupware, morningJobs, naverAskTodo, parseDeskLive, workEventOf, type NaverAsk, type NaverAskResult, type WorkEventDoc } from "@report/core";
 import { fbLogin, readConfigJson, readDeskLive, readFailInbox, readFloorKey, readLive, readOrderDoc, readPlan, writeConfigJson, writeFloor, writeOrderIf, writeWork, type Fb } from "./firebase";
 import { mask, say } from "./okpos";
 
@@ -409,6 +410,13 @@ async function main() {
   if (!Number.isFinite(end)) throw new Error("끝 시각 모양이 이상함 (HH:MM)");
   // 지난 날 하루 수집 기록 중 아직 못 올린 것 (컴퓨터가 일찍 꺼졌거나 밤 대기 줄이 더 붙은 것)
   await pushOld();
+  // 2026-11-28 부터는 그룹웨어 서버가 마감 전 수집 · 근무자 화면 · 생산실패 · 신규 다시 확인을 맡음 → 바로 끝 · 다음 차례도 맡기지 않음
+  // (그룹웨어가 안 된 날은 손으로 '매장 포스 컴퓨터로'(LIVE_POS)를 켜고 시작하면 예전처럼 돎 · 날짜를 정한 한 번 받기는 그대로)
+  if (liveByGroupware(today()) && env("LIVE_POS") !== "1" && env("LOOP_ONCE") !== "1") {
+    say(`${today()} ${hm(now())} 마감 전 수집은 그룹웨어 서버가 맡음 (2026-11-28 부터) — 매장 PC 하루 수집은 쉼 · 다음 차례도 맡기지 않음`);
+    say("그룹웨어가 안 된 날은 '오늘 마감 전 영업정보'를 손으로 시작할 때 '매장 포스 컴퓨터로'를 켜 주세요");
+    return;
+  }
   // 끝 시각 뒤 · 아침 시작 전에 시작했으면 밤 대기 (스스로 이어 가기)
   if (chain && liveLoopMode(now(), end) === "night") return nightWait(end);
   const date = today();

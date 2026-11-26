@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kstMinutes, LIVE_EVERY_MIN, LIVE_LOOP_END, liveLoopStep, liveSlotBy, liveSlots, naverAskTodo, NAVER_ASK_MAX_H } from "../src";
+import { kstMinutes, liveByGroupware, LIVE_EVERY_MIN, LIVE_LOOP_END, liveLoopStep, liveSlotBy, liveSlots, naverAskTodo, NAVER_ASK_MAX_H } from "../src";
 
 const m = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 const END = m(LIVE_LOOP_END);
@@ -139,5 +139,16 @@ describe("스스로 이어 가기 (2026-10-27) — 깃허브 예약이 몇 시�
       { file: "naver-collect.yml", inputs: {} },
     ]);
     expect(morningJobs("2026-11-01")[1].inputs).toEqual({ date: "2026-10-31" });
+    // 2026-11-28 부터 아침 수집은 그룹웨어 서버가 맡음 — 하루 수집이 시작시키지 않음 (27일까지는 그대로)
+    expect(morningJobs("2026-11-27").map((j) => j.file)).toEqual(["extra-collect.yml", "pos-collect.yml", "naver-collect.yml"]);
+    expect(morningJobs("2026-11-28")).toEqual([]);
+  });
+});
+
+describe("2026-11-28 부터 마감 전 수집도 그룹웨어 서버가", () => {
+  it("27일까지는 매장 PC · 28일부터 그룹웨어", () => {
+    expect(liveByGroupware("2026-11-27")).toBe(false);
+    expect(liveByGroupware("2026-11-28")).toBe(true);
+    expect(liveByGroupware("2027-01-02")).toBe(true);
   });
 });

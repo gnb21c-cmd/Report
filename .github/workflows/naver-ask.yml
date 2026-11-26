@@ -2,6 +2,7 @@
 # POS 메인 PC 의 하루 수집(live-collect.yml, 09:30 ~ 22:50)이 돌고 있으면 그쪽이 1분마다 보고 먼저 맡음 → 여기서는 '이미 맡긴 요청'으로 끝남 (실행기가 하나라)
 # 요청은 정해진 계정만 남길 수 있음 (packages/core/src/naverAuto.ts NAVER_ASK_EMAIL · firebase/firestore.rules)
 # 결과는 수집이 config/naverResult 에 씀 → A 가 읽어 보여 줌. 공개 저장소라 기록에는 '요청 있음/없음'만
+# 2026-11-28 부터는 그룹웨어 서버가 1분마다 요청을 보고 네이버를 읽어 같은 결과를 씀 → 예약은 건너뜀 (손으로 시작하면 예전처럼 매장 PC)
 name: 네이버 신규 다시 확인 요청 보기
 on:
   schedule:
@@ -25,6 +26,8 @@ jobs:
           WEATHER_PASSWORD: ${{ secrets.WEATHER_PASSWORD }}
         with:
           script: |
+            // 2026-11-28 부터 A [신규 다시 확인] 요청은 그룹웨어 서버가 1분마다 보고 함 (packages/core/src/live.ts LIVE_BY_GROUPWARE_FROM)
+            if (context.eventName === "schedule" && new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= "2026-11-28") return core.info("신규 다시 확인은 그룹웨어 서버가 맡음 — 건너뜀");
             const e = process.env;
             const j = async (url, init) => {
               const r = await fetch(url, init);

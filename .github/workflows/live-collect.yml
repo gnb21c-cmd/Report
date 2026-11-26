@@ -23,6 +23,8 @@
 #   하루 수집이 실패로 끝나면 '하루 수집 다시 시작'(live-rescue.yml)이 2분 뒤 다시 시작시킴 (2026-11-19 — 켜진 직후 GitHub 연결 실패 · 예약이 몇 시간 늦음)
 # GitHub 클라우드에서는 돌리지 않음 (사용자 지시 — POS 에서만). POS PC 가 꺼져 있으면 켜질 때까지 기다렸다가 돎(그날 영수증이 없으면 올리지 않음)
 # + 칸마다 통합데스크 설문 보고 파일(report-outbox, 20:00) → settings/surveys (보고 앱 첫 화면 '설문조사') — 같은 PC 일 때만. 통합데스크는 키즈 POS 라 클라우드 설문 보고함(surveyInbox)에 바로 씀 (docs/SURVEY.md)
+# 2026-11-28 부터 (사장님 2026-11-27): 마감 전 수집 · 근무자 화면 · 생산실패 · 신규 다시 확인은 그룹웨어 서버가 맡아 이 클라우드에도 같은 모양으로 올림
+#   → 예약은 건너뛰고, 하루 수집은 시작해도 바로 끝(다음 차례도 맡기지 않음). 그룹웨어가 안 된 날은 손으로 시작할 때 '매장 포스 컴퓨터로'를 켬
 # 공개 저장소라 기록에는 줄 수 · 일치 여부 · 시각만 (매출 숫자 · 매장 이름 없음)
 name: 오늘 마감 전 영업정보
 on:
@@ -55,6 +57,10 @@ on:
         description: "시험: 네이버를 직접 읽지 않고 통합데스크 키즈 실시간 현황으로"
         type: boolean
         default: false
+      pos:
+        description: "매장 포스 컴퓨터로 하루 수집 (2026-11-28 부터는 그룹웨어 서버가 함 — 그룹웨어가 안 된 날만 켜기)"
+        type: boolean
+        default: false
 jobs:
   # 예약으로 시작했을 때: 하루 수집이 이미 돌고 있거나(시작을 기다리는 것 포함) · 하루 수집 시간이 아니면 건너뜀
   # 손으로 시작 · 비켜 준 뒤 다시 시작은 그대로 (겹치면 아래 concurrency 로 앞의 것이 끝난 뒤에)
@@ -70,6 +76,11 @@ jobs:
         with:
           script: |
             if (context.eventName !== "schedule") return core.setOutput("go", "1");
+            // 2026-11-28 부터 마감 전 수집은 그룹웨어 서버가 맡음 (packages/core/src/live.ts LIVE_BY_GROUPWARE_FROM) — 그룹웨어가 안 된 날은 손으로 '매장 포스 컴퓨터로'
+            if (new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= "2026-11-28") {
+              core.info("마감 전 수집은 그룹웨어 서버가 맡음 — 예약은 건너뜀 (그룹웨어가 안 된 날은 손으로 '매장 포스 컴퓨터로' 켜고 시작)");
+              return core.setOutput("go", "");
+            }
             const hm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16);
             if (hm >= "21:50" || hm < "09:00") {
               core.info("하루 수집 시간이 아님 — 건너뜀");
@@ -136,6 +147,7 @@ jobs:
           LOOP_END: ${{ inputs.end }}
           COLLECT_DRY: ${{ (github.event_name == 'push' || inputs.dry) && '1' || '' }}
           LIVE_FORCE_DESK: ${{ inputs.desk && '1' || '' }}
+          LIVE_POS: ${{ inputs.pos && '1' || '' }}
           GH_TOKEN: ${{ github.token }}
           # 네이버 예약현황 (오늘) · A [신규 다시 확인] — 로그인 상태는 아침 네이버 수집과 같은 곳 (POS 메인 PC 도구 폴더)
           NAVER_STATE_DIR: ${{ runner.tool_cache }}\naver-login
