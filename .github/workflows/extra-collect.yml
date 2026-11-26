@@ -4,6 +4,7 @@
 # 아침 09:10 지난 7일 ~ 어제 (POS 메인 PC는 늦어도 9시 10분에 켜짐 · 밤늦은 결제까지 · 빠진 날 채움) — packages/core/src/extra.ts niceRange
 # PC가 아직 안 켜졌으면 실행이 GitHub 에서 기다렸다가 켜지면 돎
 # 필요한 값: Secrets NICE_ID · NICE_PW · REPORT_BOARD_KEY · WEATHER_EMAIL · WEATHER_PASSWORD, Variables FIREBASE_API_KEY · FIREBASE_PROJECT_ID
+# 2차 인증(2026-11-25 ~): Secrets NICE_MAIL_HOST · NICE_MAIL_USER · NICE_MAIL_PW (+ 993 이 아니면 NICE_MAIL_PORT) — 나이스 인증번호가 오는 다우 tax 메일함 (읽기 전용으로 번호만 봄)
 # 엑셀 비밀번호는 실행마다 새로 만들어 쓰고 버림 · 공개 저장소라 기록에는 건수 · 일치 여부만 남김 (매출 숫자 · 가맹점 이름 없음)
 name: 자판기 · 네컷 · 주차 자동 수집
 on:
@@ -14,7 +15,7 @@ on:
     - cron: "20 0 * * *" # 00:20 UTC = 09:20 한국
   # 작업 브랜치에 올리면 실행기 PC에서 아침 방식(지난 7일 ~ 어제)으로 확인만 (올리지 않음)
   push:
-    branches: ["feature/nice-collect"]
+    branches: ["feature/nice-collect", "feature/nice-otp"]
     paths: ["apps/collector/**", "packages/core/src/extra.ts", ".github/workflows/extra-collect.yml"]
   workflow_dispatch:
     inputs:
@@ -95,6 +96,11 @@ jobs:
           NICE_PROBE: ${{ (github.event_name == 'push' || inputs.probe) && '1' || '' }}
           NICE_ID: ${{ secrets.NICE_ID }}
           NICE_PW: ${{ secrets.NICE_PW }}
+          # 2차 인증번호가 오는 메일함 (다우 tax — 읽기 전용, 읽음 표시를 바꾸지 않음)
+          NICE_MAIL_HOST: ${{ secrets.NICE_MAIL_HOST }}
+          NICE_MAIL_PORT: ${{ secrets.NICE_MAIL_PORT }}
+          NICE_MAIL_USER: ${{ secrets.NICE_MAIL_USER }}
+          NICE_MAIL_PW: ${{ secrets.NICE_MAIL_PW }}
           # 나이스가 받아 주지 않은 아이디 · 비밀번호 표시(HMAC) — 같은 비밀번호로 다시 로그인하지 않게 (계정 잠김 막기 · POS PC 도구 폴더)
           NICE_STATE_DIR: ${{ runner.tool_cache }}\nice-login
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
