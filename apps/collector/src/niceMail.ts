@@ -49,6 +49,31 @@ export function pickNiceCode(mails: OtpMail[], sentAt: Date, slackMs = 60_000): 
   return null;
 }
 
+/** 메일함에 못 들어간 까닭 → 알아듣기 쉬운 글 + 짧은 원인 (2026-11-27 — 비밀번호가 틀려도 메일 라이브러리 글이 'Command failed' 라
+ *  '주소 · 포트를 확인'으로 잘못 알렸음). 비밀번호 · 메일 주소 · 긴 숫자는 남기지 않음 (공개 저장소 기록) */
+export function mailFailReason(e: unknown): string {
+  const x = (e || {}) as { message?: string; code?: string; authenticationFailed?: boolean; serverResponseCode?: string; responseText?: string };
+  const raw = [x.serverResponseCode, x.code, x.responseText, x.message].filter(Boolean).join(" ");
+  const why = x.authenticationFailed || /AUTHENTICATIONFAILED|AUTHORIZATIONFAILED|auth|login|credential|password|인증|비밀번호|계정/i.test(raw)
+    ? "아이디 · 비밀번호(또는 메일 프로그램 접속 허용)를 확인해 주세요"
+    : /ENOTFOUND|EAI_AGAIN/i.test(raw)
+      ? "메일 서버 주소를 확인해 주세요"
+      : /ECONNREFUSED|ETIMEDOUT|ECONNRESET|EHOSTUNREACH|ENETUNREACH|timeout|timed out/i.test(raw)
+        ? "메일 서버에 연결되지 않음 — 주소 · 포트(993) 또는 이 컴퓨터의 인터넷을 확인해 주세요"
+        : /certificate|TLS|SSL|self.signed/i.test(raw)
+          ? "메일 서버 보안 연결(인증서) 문제 — 포트 993 이 맞는지 확인해 주세요"
+          : "메일 서버 주소 · 포트를 확인해 주세요";
+  const code = String(x.serverResponseCode || x.code || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 30);
+  const text = String(x.responseText || (x.authenticationFailed || code ? "" : x.message) || "")
+    .replace(/\S+@\S+/g, "…")
+    .replace(/\d{4,}/g, "#")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  const detail = [code, text].filter(Boolean).join(" ");
+  return `인증번호 메일함에 들어가지 못함 — ${why}${detail ? ` (${detail})` : ""}`;
+}
+
 /** 메일함 읽기 — 받은편지함을 읽기 전용으로 열어 오늘 · 어제 나이스 메일만 (연결은 한 번, 볼 때마다 다시 찾음) */
 export function imapReader(box: MailBox) {
   let client: ImapFlow | null = null;
@@ -57,12 +82,13 @@ export function imapReader(box: MailBox) {
     client = new ImapFlow({ host: box.host, port: box.port, secure: box.port === 993, auth: { user: box.user, pass: box.pass }, logger: false, socketTimeout: 60_000 });
     try {
       await client.connect();
+      await client.mailboxOpen("INBOX", { readOnly: true });
     } catch (e) {
+      const c = client;
       client = null;
-      const why = /auth|login|credential/i.test(String((e as Error)?.message)) ? "아이디 · 비밀번호(또는 메일 프로그램 접속 허용)를 확인해 주세요" : "메일 서버 주소 · 포트를 확인해 주세요";
-      throw new Error(`인증번호 메일함에 들어가지 못함 — ${why}`);
+      await c?.logout().catch(() => {});
+      throw new Error(mailFailReason(e));
     }
-    await client.mailboxOpen("INBOX", { readOnly: true });
     return client;
   };
   return {

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { chromium } from "playwright";
-import { mailBoxFromEnv, niceCodeOf, NICE_OTP_SENDER, pickNiceCode, waitNiceCode, type OtpMail } from "../src/niceMail";
+import { mailBoxFromEnv, mailFailReason, niceCodeOf, NICE_OTP_SENDER, pickNiceCode, waitNiceCode, type OtpMail } from "../src/niceMail";
 import { Nibs, NiceLoginRefused, NIBS_LOGIN, NIBS_MAIN } from "../src/nibs";
 
 const T0 = new Date("2026-11-26T00:10:00Z");
@@ -48,6 +48,18 @@ describe("인증번호 꺼내기", () => {
       ),
     ).rejects.toThrow(/들어가지 못함/);
     expect(tries).toBe(1);
+  });
+  it("메일함에 못 들어간 까닭 — 비밀번호 거절('Command failed')도 비밀번호로 · 주소 · 연결 · 인증서는 따로 · 값은 안 남김 (2026-11-27)", () => {
+    // 메일 라이브러리(imapflow)는 LOGIN 거절을 'Command failed' + authenticationFailed 로 던짐 — 예전엔 '주소 · 포트'로 잘못 알림
+    const refused = Object.assign(new Error("Command failed"), { authenticationFailed: true, serverResponseCode: "AUTHENTICATIONFAILED", responseText: "[AUTHENTICATIONFAILED] Invalid credentials tax@example.com 12345678" });
+    const m = mailFailReason(refused);
+    expect(m).toMatch(/아이디 · 비밀번호/);
+    expect(m).toContain("AUTHENTICATIONFAILED");
+    expect(m).not.toMatch(/example\.com|12345678/);
+    expect(mailFailReason(Object.assign(new Error("getaddrinfo ENOTFOUND imap.example.com"), { code: "ENOTFOUND" }))).toMatch(/메일 서버 주소를 확인.*\(ENOTFOUND\)$/);
+    expect(mailFailReason(Object.assign(new Error("connect ETIMEDOUT 1.2.3.4:993"), { code: "ETIMEDOUT" }))).toMatch(/연결되지 않음.*\(ETIMEDOUT\)$/);
+    expect(mailFailReason(new Error("self-signed certificate in certificate chain"))).toMatch(/인증서/);
+    expect(mailFailReason(new Error("뭔가 다른 오류"))).toMatch(/주소 · 포트를 확인해 주세요 \(뭔가 다른 오류\)$/);
   });
   it("메일함 값 — 셋 다 있어야 · 포트 기본 993", () => {
     expect(mailBoxFromEnv({})).toBeNull();
