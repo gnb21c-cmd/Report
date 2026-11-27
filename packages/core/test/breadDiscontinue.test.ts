@@ -18,8 +18,10 @@ const planOf = (date: string): PlanDoc => ({ v: 2, date, final: { ...st, total: 
 const L = (qty: number) => ({ qty, by: "매니저", at: "t" });
 
 describe("단종 빵 — 마지막으로 만드는 날까지만", () => {
-  it("초코바게트 11-05 · 감계무량샌드위치 11-08 까지 (띄어쓰기 상관없음)", () => {
-    expect(DISCONTINUED).toEqual({ 초코바게트: "2026-11-05", 감계무량샌드위치: "2026-11-08" });
+  it("초코바게트 11-05 · 감계무량샌드위치 11-08 · 초코파삭 11-26 까지 (띄어쓰기 상관없음)", () => {
+    expect(DISCONTINUED).toEqual({ 초코바게트: "2026-11-05", 감계무량샌드위치: "2026-11-08", 초코파삭: "2026-11-26" });
+    // 2026-11-26 사장님: 초코파삭은 이제 안 팖 (11-16 부터 판매 0) — 지난 발표 · 적중률 기록은 그대로 두고 11-27 부터 뺌
+    expect(["2026-11-26", "2026-11-27"].map((d) => isDiscontinued("초코 파삭", d))).toEqual([false, true]);
     expect(["2026-11-05", "2026-11-06"].map((d) => isDiscontinued("초코바게트", d))).toEqual([false, true]);
     expect(["2026-11-08", "2026-11-09"].map((d) => isDiscontinued("감계무량 샌드위치", d))).toEqual([false, true]);
     expect(isDiscontinued("소금빵", "2026-12-01")).toBe(false);
